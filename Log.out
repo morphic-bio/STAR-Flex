@@ -1,0 +1,61 @@
+STAR version=2.7.11b
+STAR compilation time,server,dir=2025-12-06T10:48:50+00:00 :/mnt/pikachu/STAR-Flex/source
+STAR git: On branch master ; commit 5e9f6a4a01b212f0b524128285d09dbc72d02572 ; diff files: README_flex.md 
+##### Command Line:
+/mnt/pikachu/STAR-Flex/source/STAR --runThreadN 24 --outTmpDir /storage/production/tmp/SC2300771 --genomeDir /storage/flex_filtered_reference/star_index --soloType CB_UMI_Simple --soloCBlen 16 --soloUMIlen 12 --soloUMIstart 17 --soloCBstart 1 --soloBarcodeReadLength 0 --soloCBwhitelist /storage/scRNAseq_output/whitelists/737K-fixed-rna-profiling.txt --flex yes --soloFlexExpectedCellsPerTag 3000 --soloSampleWhitelist /storage/SC2300771_filtered_2M/sample_whitelist.tsv --soloProbeList /storage/flex_filtered_reference/filtered_reference/probe_list.txt --soloSampleProbes /mnt/pikachu/JAX_scRNAseq01_processed/probe-barcodes-fixed-rna-profiling-rna.txt --soloSampleProbeOffset 68 --soloFlexAllowedTags /storage/SC2300771_filtered_2M/sample_whitelist.tsv --soloFlexOutputPrefix /storage/production/SC2300771/per_sample --limitIObufferSize 50000000 50000000 --outSJtype None --outBAMcompression 6 --soloMultiMappers Rescue --alignIntronMax 500000 --outFilterMismatchNmax 6 --outFilterMismatchNoverReadLmax 1.0 --outFilterMatchNmin 25 --outSAMunmapped None --outFilterMatchNminOverLread 0 --outFilterMultimapNmax 10000 --outFilterMultimapScoreRange 4 --outSAMmultNmax 10000 --winAnchorMultimapNmax 200 --outSAMprimaryFlag AllBestScore --outFilterScoreMin 0 --outFilterScoreMinOverLread 0 --outSAMattributes NH HI AS nM NM GX GN --soloCBmatchWLtype 1MM_multi_Nbase_pseudocounts --soloUMIfiltering MultiGeneUMI_CR --soloUMIdedup 1MM_CR --soloCellFilter None --clipAdapterType CellRanger4 --soloFeatures Gene --alignEndsType Local --soloStrand Unstranded --chimSegmentMin 1000000 --soloSampleSearchNearby no --outSAMtype BAM Unsorted --readFilesCommand zcat --readFilesIn
+##### Initial USER parameters from Command Line:
+outTmpDir                         /storage/production/tmp/SC2300771
+###### All USER parameters from Command Line:
+runThreadN                    24     ~RE-DEFINED
+outTmpDir                     /storage/production/tmp/SC2300771     ~RE-DEFINED
+genomeDir                     /storage/flex_filtered_reference/star_index     ~RE-DEFINED
+soloType                      CB_UMI_Simple     ~RE-DEFINED
+soloCBlen                     16     ~RE-DEFINED
+soloUMIlen                    12     ~RE-DEFINED
+soloUMIstart                  17     ~RE-DEFINED
+soloCBstart                   1     ~RE-DEFINED
+soloBarcodeReadLength         0     ~RE-DEFINED
+soloCBwhitelist               /storage/scRNAseq_output/whitelists/737K-fixed-rna-profiling.txt        ~RE-DEFINED
+flex                          yes     ~RE-DEFINED
+soloFlexExpectedCellsPerTag   3000     ~RE-DEFINED
+soloSampleWhitelist           /storage/SC2300771_filtered_2M/sample_whitelist.tsv     ~RE-DEFINED
+soloProbeList                 /storage/flex_filtered_reference/filtered_reference/probe_list.txt     ~RE-DEFINED
+soloSampleProbes              /mnt/pikachu/JAX_scRNAseq01_processed/probe-barcodes-fixed-rna-profiling-rna.txt     ~RE-DEFINED
+soloSampleProbeOffset         68     ~RE-DEFINED
+soloFlexAllowedTags           /storage/SC2300771_filtered_2M/sample_whitelist.tsv     ~RE-DEFINED
+soloFlexOutputPrefix          /storage/production/SC2300771/per_sample     ~RE-DEFINED
+limitIObufferSize             50000000   50000000        ~RE-DEFINED
+outSJtype                     None        ~RE-DEFINED
+outBAMcompression             6     ~RE-DEFINED
+soloMultiMappers              Rescue        ~RE-DEFINED
+alignIntronMax                500000     ~RE-DEFINED
+outFilterMismatchNmax         6     ~RE-DEFINED
+outFilterMismatchNoverReadLmax1     ~RE-DEFINED
+outFilterMatchNmin            25     ~RE-DEFINED
+outSAMunmapped                None        ~RE-DEFINED
+outFilterMatchNminOverLread   0     ~RE-DEFINED
+outFilterMultimapNmax         10000     ~RE-DEFINED
+outFilterMultimapScoreRange   4     ~RE-DEFINED
+outSAMmultNmax                10000     ~RE-DEFINED
+winAnchorMultimapNmax         200     ~RE-DEFINED
+outSAMprimaryFlag             AllBestScore     ~RE-DEFINED
+outFilterScoreMin             0     ~RE-DEFINED
+outFilterScoreMinOverLread    0     ~RE-DEFINED
+outSAMattributes              NH   HI   AS   nM   NM   GX   GN        ~RE-DEFINED
+soloCBmatchWLtype             1MM_multi_Nbase_pseudocounts     ~RE-DEFINED
+soloUMIfiltering              MultiGeneUMI_CR        ~RE-DEFINED
+soloUMIdedup                  1MM_CR        ~RE-DEFINED
+soloCellFilter                None        ~RE-DEFINED
+clipAdapterType               CellRanger4        ~RE-DEFINED
+soloFeatures                  Gene        ~RE-DEFINED
+alignEndsType                 Local     ~RE-DEFINED
+soloStrand                    Unstranded     ~RE-DEFINED
+chimSegmentMin                1000000     ~RE-DEFINED
+soloSampleSearchNearby        no     ~RE-DEFINED
+outSAMtype                    BAM   Unsorted        ~RE-DEFINED
+readFilesCommand              zcat        ~RE-DEFINED
+
+EXITING: FATAL INPUT ERROR: empty value for parameter "readFilesIn" in input "Command-Line"
+SOLUTION: use non-empty value for this parameter
+
+Dec 06 10:49:41 ...... FATAL ERROR, exiting
