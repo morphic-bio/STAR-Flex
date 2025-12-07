@@ -733,10 +733,6 @@ uint32 outputReadCB(fstream *streamOut, const uint64 iRead, const int32 featureT
                     if (probeIdxTable) {
                         std::string ensgId = chrName.substr(0, std::min<size_t>(15, chrName.size()));
                         probeIdx = probeIdxTable->geneIndex15(ensgId);
-                        if (probeIdx == 0) {
-                            fprintf(stderr, "[PROBE-LOOKUP] probe align chr=%s ensg=%s -> idx=0\n",
-                                    chrName.c_str(), ensgId.c_str());
-                        }
                     }
                     if (probeIdx != 0) {
                         cv.geneIdx15 = probeIdx;
