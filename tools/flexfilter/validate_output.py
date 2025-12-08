@@ -128,13 +128,18 @@ def validate_output(output_dir: Path, gold_dir: Path = None, expected_samples: l
         print(f"ERROR: Output directory not found: {output_dir}")
         return False
     
-    # Auto-detect samples if not specified
+    # Auto-detect samples if not specified: any dir that contains Gene/filtered
     if expected_samples is None:
-        expected_samples = [d.name for d in output_dir.iterdir() 
-                          if d.is_dir() and d.name.startswith("BC")]
+        detected = []
+        for d in output_dir.iterdir():
+            if not d.is_dir():
+                continue
+            if (d / "Gene" / "filtered").exists():
+                detected.append(d.name)
+        expected_samples = sorted(detected)
     
     if not expected_samples:
-        print("ERROR: No sample directories found (expected BC* directories)")
+        print("ERROR: No sample directories found (expected subdirs with Gene/filtered)")
         return False
     
     print(f"Samples to validate: {expected_samples}")
@@ -160,8 +165,7 @@ def validate_output(output_dir: Path, gold_dir: Path = None, expected_samples: l
             all_passed = False
             continue
         
-        # Extract expected tag from sample name (e.g., BC004 -> need to look at barcodes)
-        # For now, just validate format without tag suffix check
+        # Tag suffix check is optional; if sample names are arbitrary we skip it by default
         expected_tag = None
         
         # Validate barcodes
@@ -204,7 +208,7 @@ def main():
     parser = argparse.ArgumentParser(description="Validate FlexFilter output")
     parser.add_argument("output_dir", type=Path, help="FlexFilter output directory")
     parser.add_argument("--gold-dir", type=Path, help="Gold standard directory for comparison")
-    parser.add_argument("--samples", nargs="+", help="Expected sample names (e.g., BC004 BC006)")
+    parser.add_argument("--samples", nargs="+", help="Expected sample names (e.g., SampleA SampleB)")
     
     args = parser.parse_args()
     

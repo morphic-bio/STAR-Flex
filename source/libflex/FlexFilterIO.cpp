@@ -129,14 +129,20 @@ bool loadSampleWhitelist(
             trimString(label);
             trimString(tag);
             
-            if (!label.empty() && !tag.empty()) {
+            if (!tag.empty()) {
                 // Limit tag to first 8bp
                 if (tag.size() > 8) {
                     tag = tag.substr(0, 8);
                 }
+                if (label.empty()) {
+                    // Fall back to auto-name when the label column is blank
+                    label = "TAG_" + tag;
+                    whitelist.tagOnlyCount++;
+                } else {
+                    whitelist.labeledCount++;
+                }
                 tempLabels.push_back(label);
                 tempTags.push_back(tag);
-                whitelist.labeledCount++;
                 continue;
             }
         }
@@ -162,21 +168,9 @@ bool loadSampleWhitelist(
         return false;
     }
     
-    // Sort by sample label (lexicographic) for deterministic order
-    std::vector<size_t> indices(tempLabels.size());
-    for (size_t i = 0; i < indices.size(); i++) {
-        indices[i] = i;
-    }
-    std::sort(indices.begin(), indices.end(), [&](size_t a, size_t b) {
-        return tempLabels[a] < tempLabels[b];
-    });
-    
-    whitelist.sampleLabels.reserve(indices.size());
-    whitelist.sampleTags.reserve(indices.size());
-    for (size_t i : indices) {
-        whitelist.sampleLabels.push_back(tempLabels[i]);
-        whitelist.sampleTags.push_back(tempTags[i]);
-    }
+    // Preserve input order from the whitelist file to keep stable sample ordering
+    whitelist.sampleLabels = std::move(tempLabels);
+    whitelist.sampleTags = std::move(tempTags);
     
     // Log counts
     std::cout << "Loaded " << whitelist.sampleLabels.size() << " samples ("

@@ -97,9 +97,9 @@ output/
 │   ├── barcodes.tsv
 │   ├── features.tsv
 │   └── matrix.mtx
-└── per_sample/                  # Per-sample filtered MEX
-    ├── BC001/Gene/filtered/
-    ├── BC002/Gene/filtered/
+└── per_sample/                  # Per-sample filtered MEX (labels from whitelist)
+    ├── SampleA/Gene/filtered/
+    ├── SampleB/Gene/filtered/
     └── flexfilter_summary.tsv   # Cell calling statistics
 ```
 
@@ -182,13 +182,13 @@ AAACCCAAGAAACACTACGTACGT  # CB16 (AAACCCAAGAAACACT) + TAG8 (ACGTACGT)
 
 ```
 output_prefix/
-├── BC001/Gene/filtered/
+├── SampleA/Gene/filtered/
 │   ├── matrix.mtx
 │   ├── barcodes.tsv
 │   ├── features.tsv
 │   └── EmptyDrops/
 │       └── emptydrops_results.tsv
-├── BC002/Gene/filtered/
+├── SampleB/Gene/filtered/
 │   └── ...
 └── flexfilter_summary.tsv
 ```
@@ -217,6 +217,7 @@ Sample_A	ACGTACGT
 Sample_B	TGCATGCA
 Sample_C	GGCCGGCC
 ```
+Labels in the first column are used verbatim for per-sample directories, and the order in the whitelist is preserved.
 
 ### Testing
 

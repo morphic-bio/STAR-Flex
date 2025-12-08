@@ -9,9 +9,8 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 FIXTURE_DIR="$REPO_ROOT/tests/gold_standard"
 OUTPUT_DIR="$SCRIPT_DIR/test_output"
 
-# Note: Sample names are auto-derived from the input data
-# The tool assigns sequential names (BC001, BC002, ...) based on tag sequences
-# This may differ from gold standard sample names
+# Note: Sample names come from the sample whitelist if provided; otherwise they
+# are auto-derived from tag sequences (BC001, BC002, ...). Do not assume BC###.
 
 echo "=== FlexFilter Smoke Test ==="
 echo "Repo root: $REPO_ROOT"
@@ -69,11 +68,11 @@ echo "=== Verifying Output ==="
 
 PASS=true
 
-# Auto-detect produced sample directories (BC*)
-PRODUCED_SAMPLES=($(find "$OUTPUT_DIR" -maxdepth 1 -type d -name "BC*" -printf "%f\n" | sort))
+# Auto-detect produced sample directories (any immediate subdirectory)
+PRODUCED_SAMPLES=($(find "$OUTPUT_DIR" -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | sort))
 
 if [ ${#PRODUCED_SAMPLES[@]} -eq 0 ]; then
-    echo "FAIL: No sample directories (BC*) found in output"
+    echo "FAIL: No sample directories found in output"
     PASS=false
 else
     echo "Found ${#PRODUCED_SAMPLES[@]} sample directories: ${PRODUCED_SAMPLES[*]}"

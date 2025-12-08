@@ -101,10 +101,10 @@ This is used to allocate expected cells per tag (proportional to UMI counts).
 
 Output directory prefix for per-sample MEX outputs.
 
-**Output structure**:
+**Output structure** (sample labels are taken verbatim from the whitelist when provided; otherwise auto-derived; whitelist order is preserved):
 ```
 <output-prefix>/
-  BC001/
+  SampleA/
     Gene/
       filtered/
         matrix.mtx
@@ -115,7 +115,7 @@ Output directory prefix for per-sample MEX outputs.
           ordmag_result.tsv
         EmptyDrops/
           emptydrops_result.tsv
-  BC002/
+  SampleB/
     ...
   filter_summary.json  (aggregate)
 ```
@@ -237,12 +237,12 @@ Contains aggregate statistics across all tags/samples.
 ls -R <output-prefix>/
 ```
 
-Expected: Per-sample directories with MEX files
+Expected: Per-sample directories with MEX files; directory names match whitelist labels (or auto-derived labels if no whitelist is supplied).
 
 ### Verify Barcode Counts
 
 ```bash
-wc -l <output-prefix>/BC001/Gene/filtered/barcodes.tsv
+wc -l <output-prefix>/<sample_label>/Gene/filtered/barcodes.tsv
 ```
 
 Should match the number of passing cells for that sample.
@@ -277,21 +277,21 @@ STAR ... (your params) \
   --output-prefix /storage/output/flexfilter
 ```
 
-**Output**: Per-sample MEX in `/storage/output/flexfilter/BC*/`
+**Output**: Per-sample MEX in `/storage/output/flexfilter/<sample_label>/`
 
 ### 3. Load into Seurat/Scanpy
 
 ```r
-# R/Seurat
+# R/Seurat (sample label preserved)
 library(Seurat)
-bc001 <- Read10X("/storage/output/flexfilter/BC001/Gene/filtered/")
-seurat_obj <- CreateSeuratObject(bc001, ...)
+sample_a <- Read10X("/storage/output/flexfilter/SampleA/Gene/filtered/")
+seurat_obj <- CreateSeuratObject(sample_a, ...)
 ```
 
 ```python
 # Python/Scanpy
 import scanpy as sc
-adata = sc.read_10x_mtx("/storage/output/flexfilter/BC001/Gene/filtered/")
+adata = sc.read_10x_mtx("/storage/output/flexfilter/SampleA/Gene/filtered/")
 ```
 
 ---
