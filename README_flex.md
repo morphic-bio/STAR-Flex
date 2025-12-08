@@ -129,34 +129,106 @@ See [scripts/README.md](scripts/README.md) for detailed usage and additional opt
 A standalone tool `run_flexfilter_mex` is available for offline MEX processing. This allows re-running the OrdMag/EmptyDrops cell calling pipeline on existing composite MEX files without re-running STAR alignment.
 
 **Use cases:**
-- Parameter tuning (adjust expected cells, thresholds)
+- Parameter tuning (adjust expected cells, EmptyDrops thresholds)
 - Reprocessing with different filtering settings
-- Integration with non-STAR pipelines
+- Integration with non-STAR pipelines (any tool producing composite CB+TAG MEX)
+- Batch reprocessing of archived STAR outputs
 
-**Building (optional, not built by default):**
+### Building
+
+The tool is optional and not built by the default `make STAR` target:
 
 ```bash
 cd source
 make flexfilter
 ```
 
-**Usage:**
+This produces `tools/flexfilter/run_flexfilter_mex`.
+
+### Input Requirements
+
+The tool expects a composite MEX directory containing:
+- `matrix.mtx` - Matrix Market sparse matrix (or `InlineHashDedup_matrix.mtx`)
+- `barcodes.tsv` - Composite barcodes in CB16+TAG8 format (24 characters)
+- `features.tsv` - Gene IDs (tab-separated)
+
+The composite barcode format concatenates the 16bp cell barcode with the 8bp sample tag:
+```
+AAACCCAAGAAACACTACGTACGT  # CB16 (AAACCCAAGAAACACT) + TAG8 (ACGTACGT)
+```
+
+### Basic Usage
 
 ```bash
 ./tools/flexfilter/run_flexfilter_mex \
-  --mex-dir /path/to/composite_mex \
+  --mex-dir /path/to/Solo.out/Gene/raw \
   --total-expected 12000 \
-  --output-prefix /path/to/output
+  --output-prefix /path/to/filtered_output
 ```
 
-**Testing:**
+### Key Parameters
+
+| Parameter | Description |
+|-----------|-------------|
+| `--mex-dir` | Path to composite MEX directory (required) |
+| `--total-expected` | Total expected cells across all samples (required) |
+| `--output-prefix` | Output directory prefix (required) |
+| `--sample-whitelist` | TSV file mapping sample names to tag sequences |
+| `--ed-lower-bound` | Lower UMI bound for EmptyDrops (default: 500) |
+| `--ed-fdr` | FDR threshold for EmptyDrops (default: 0.01) |
+| `--disable-occupancy` | Skip occupancy post-filter (for testing) |
+
+### Output Structure
+
+```
+output_prefix/
+├── BC001/Gene/filtered/
+│   ├── matrix.mtx
+│   ├── barcodes.tsv
+│   ├── features.tsv
+│   └── EmptyDrops/
+│       └── emptydrops_results.tsv
+├── BC002/Gene/filtered/
+│   └── ...
+└── flexfilter_summary.tsv
+```
+
+### Example Workflow: Reprocess with Different Expected Cells
+
+```bash
+# Original STAR run produced Solo.out/Gene/raw/
+# Reprocess with higher cell expectation
+./tools/flexfilter/run_flexfilter_mex \
+  --mex-dir /storage/run1/Solo.out/Gene/raw \
+  --total-expected 20000 \
+  --output-prefix /storage/run1/refiltered_20k
+
+# Or with explicit sample whitelist
+./tools/flexfilter/run_flexfilter_mex \
+  --mex-dir /storage/run1/Solo.out/Gene/raw \
+  --sample-whitelist samples.tsv \
+  --total-expected 15000 \
+  --output-prefix /storage/run1/refiltered_explicit
+```
+
+Sample whitelist format (`samples.tsv`):
+```
+Sample_A	ACGTACGT
+Sample_B	TGCATGCA
+Sample_C	GGCCGGCC
+```
+
+### Testing
 
 ```bash
 # Requires tests/gold_standard/ fixtures
 ./tools/flexfilter/test_smoke.sh
+
+# Validate output format
+./tools/flexfilter/validate_output.py /path/to/output
 ```
 
-See [tools/flexfilter/README.md](tools/flexfilter/README.md) for full CLI documentation.
+See [tools/flexfilter/README.md](tools/flexfilter/README.md) for complete CLI reference and advanced options.
 
 ## Building STAR-Flex
 
