@@ -124,6 +124,40 @@ The flex pipeline requires a hybrid reference genome that includes pseudo-chromo
 
 See [scripts/README.md](scripts/README.md) for detailed usage and additional options.
 
+## Standalone FlexFilter Tool
+
+A standalone tool `run_flexfilter_mex` is available for offline MEX processing. This allows re-running the OrdMag/EmptyDrops cell calling pipeline on existing composite MEX files without re-running STAR alignment.
+
+**Use cases:**
+- Parameter tuning (adjust expected cells, thresholds)
+- Reprocessing with different filtering settings
+- Integration with non-STAR pipelines
+
+**Building (optional, not built by default):**
+
+```bash
+cd source
+make flexfilter
+```
+
+**Usage:**
+
+```bash
+./tools/flexfilter/run_flexfilter_mex \
+  --mex-dir /path/to/composite_mex \
+  --total-expected 12000 \
+  --output-prefix /path/to/output
+```
+
+**Testing:**
+
+```bash
+# Requires tests/gold_standard/ fixtures
+./tools/flexfilter/test_smoke.sh
+```
+
+See [tools/flexfilter/README.md](tools/flexfilter/README.md) for full CLI documentation.
+
 ## Building STAR-Flex
 
 Standard STAR build process:
@@ -166,6 +200,13 @@ source/
 ├── SoloFeature_flexfilter.cpp  # FlexFilter integration
 ├── SoloFeature_writeMexFromInlineHashDedup.cpp
 └── UmiCodec.h                  # UMI encoding/decoding helpers
+
+tools/flexfilter/               # Standalone FlexFilter CLI
+├── run_flexfilter_mex.cpp      # Main CLI wrapper
+├── Makefile                    # Build configuration
+├── README.md                   # CLI documentation
+├── test_smoke.sh               # Smoke test script
+└── validate_output.py          # Output validation script
 ```
 
 ## Compatibility

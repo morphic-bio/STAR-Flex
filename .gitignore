@@ -19,6 +19,11 @@ extras/doc-latex/*.toc
 
 # Don't track the STAR binary once it has being built
 source/STAR
+
+# FlexFilter standalone tool
+tools/flexfilter/run_flexfilter_mex
+tools/flexfilter/*.o
+tools/flexfilter/test_output/
 .DS_Store
 *.xcworkspacedata
 *.pbxproj

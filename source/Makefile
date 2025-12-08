@@ -124,6 +124,12 @@ SOURCES := $(wildcard *.cpp) $(wildcard *.c)
 
 all: cleanCompileInfo STAR$(SFX)
 
+# Standalone FlexFilter MEX tool (optional, not built by default)
+# Requires STAR to be built first (needs libflex.a and MexWriter.o)
+.PHONY: flexfilter
+flexfilter: STAR$(SFX)
+	$(MAKE) -C ../tools/flexfilter
+
 # Convenience target to rebuild only the MEX writer components
 .PHONY: MexWriterObjs
 MexWriterObjs: MexWriter.o MexWriterUtil.o
