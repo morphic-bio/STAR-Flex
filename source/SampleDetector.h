@@ -49,7 +49,9 @@ public:
 
     // Global canonical lookup (1-based index) populated during whitelist load
     static std::string canonicalForIndexStatic(uint32_t sampleIdx);
+    static std::string labelForIndexStatic(uint32_t sampleIdx);
     static void setCanonicalTable(const std::vector<std::string>& canon);
+    static void setLabelTable(const std::vector<std::string>& labels);
 
 private:
     const ParametersSolo &p_;
@@ -66,6 +68,7 @@ private:
     static std::array<uint16_t, 32> tokenToSampleIdx_;
     static std::mutex tokenLUTMutex_;
     static std::vector<std::string> canonicalByIdx_;
+    static std::vector<std::string> labelsByIdx_;
 
     static inline bool isACGT8(const std::string &s) {
         if (s.size()!=8) return false;

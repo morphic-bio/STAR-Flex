@@ -11,6 +11,7 @@ std::vector<std::string> gCanonicalTags;
 std::array<uint16_t, 32> SampleDetector::tokenToSampleIdx_ = {};
 std::mutex SampleDetector::tokenLUTMutex_;
 std::vector<std::string> SampleDetector::canonicalByIdx_;
+std::vector<std::string> SampleDetector::labelsByIdx_;
 
 SampleDetector::SampleDetector(const ParametersSolo &p) : p_(p) {}
 
@@ -80,8 +81,9 @@ bool SampleDetector::loadWhitelist(const std::string &path) {
     size_t nSamples = indexToCanonical_.size();
     sampleCodes_.assign(nSamples * 8, 0);
     variantCountsPerSample_.assign(nSamples, 0);
-    // Populate global canonical tables (1-based)
+    // Populate global canonical and label tables (1-based)
     canonicalByIdx_ = indexToCanonical_;
+    labelsByIdx_ = indexToLabel_;
     gCanonicalTags.assign(nSamples + 1, std::string()); // index 0 unused
     for (size_t i = 0; i < indexToCanonical_.size(); ++i) {
         gCanonicalTags[i + 1] = indexToCanonical_[i];
@@ -154,6 +156,18 @@ std::string SampleDetector::canonicalForIndexStatic(uint32_t sampleIdx) {
 
 void SampleDetector::setCanonicalTable(const std::vector<std::string>& canon) {
     canonicalByIdx_ = canon;
+}
+
+std::string SampleDetector::labelForIndexStatic(uint32_t sampleIdx) {
+    if (sampleIdx == 0) return std::string();
+    if (sampleIdx <= labelsByIdx_.size()) {
+        return labelsByIdx_[sampleIdx-1];
+    }
+    return std::string();
+}
+
+void SampleDetector::setLabelTable(const std::vector<std::string>& labels) {
+    labelsByIdx_ = labels;
 }
 
 uint32_t SampleDetector::detectSampleIndex(const uint8_t *seqData, int32_t readLength, bool reverseStrand) const {

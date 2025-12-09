@@ -48,3 +48,7 @@ plans/*
 
 #bam
 *.bam
+#test outputs
+test_*/
+chr21_probe*/
+bin/*

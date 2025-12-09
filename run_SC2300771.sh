@@ -17,14 +17,13 @@ mkdir -p "$OUTPUT_DIR"
 /mnt/pikachu/STAR-Flex/source/STAR \
   --runThreadN 24 \
   --outTmpDir "$TMP_DIR" \
-  --genomeDir /storage/flex-genome-filtered-110-44/filtered_reference/star_index_filtered \
+  --genomeDir /storage/flex-index-44 \
   --soloType CB_UMI_Simple \
   --soloCBlen 16 --soloUMIlen 12 --soloUMIstart 17 --soloCBstart 1 --soloBarcodeReadLength 0 \
   --soloCBwhitelist /storage/scRNAseq_output/whitelists/737K-fixed-rna-profiling.txt \
   --flex yes \
   --soloFlexExpectedCellsPerTag 3000 \
   --soloSampleWhitelist /storage/SC2300771_whitelist.tsv \
-  --soloProbeList /storage/flex_filtered_reference/filtered_reference/probe_list.txt \
   --soloSampleProbes /mnt/pikachu/JAX_scRNAseq01_processed/probe-barcodes-fixed-rna-profiling-rna.txt \
   --soloSampleProbeOffset 68 \
   --soloFlexOutputPrefix "$OUTPUT_DIR/per_sample" \

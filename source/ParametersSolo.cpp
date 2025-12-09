@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <algorithm>
 #include <memory>
+#include <fstream>
 
 ParametersSolo::~ParametersSolo() {
 }
@@ -126,12 +127,29 @@ void ParametersSolo::initialize(Parameters *pPin)
         if (mapqThreshold > 255) mapqThreshold = 255;
         if (nmMax < -1) nmMax = -1;
         if (mmRateMax < 0.0) mmRateMax = 0.0;
-        if (keysCompat == KeysCR) {
-            if (probeListPath.empty() || probeListPath=="-") {
-                ostringstream errOut;
-                errOut << "EXITING because of fatal PARAMETERS error: --soloKeysCompat cr requires --soloProbeList\n";
-                exitWithError(errOut.str(), std::cerr, pP->inOut->logMain, EXIT_CODE_PARAMETER, *pP);
-            }
+
+    }
+    
+    //////////////////////////////////////////////////////////////////////////////////////////////////////
+    /////////////////////////////// Auto-detect probe_gene_list.txt from genome index
+    // This runs unconditionally for all modes (raw and cr) when --soloProbeList is not provided
+    if (probeListPath.empty() || probeListPath=="-") {
+        string defaultProbeList = pP->pGe.gDir + "/probe_gene_list.txt";
+        ifstream testFile(defaultProbeList);
+        if (testFile.good()) {
+            probeListPath = defaultProbeList;
+            pP->inOut->logMain << "Using probe list from genome index: " << probeListPath << "\n";
+        }
+    }
+    
+    // CR mode requires probe list (after auto-detection attempt)
+    if (keysCompat == KeysCR) {
+        if (probeListPath.empty() || probeListPath=="-") {
+            ostringstream errOut;
+            errOut << "EXITING because of fatal PARAMETERS error: --soloKeysCompat cr requires --soloProbeList\n";
+            errOut << "SOLUTION: provide --soloProbeList path/to/probe_list.txt OR build genome index with --flexGeneProbeSet\n";
+            exitWithError(errOut.str(), std::cerr, pP->inOut->logMain, EXIT_CODE_PARAMETER, *pP);
+
         }
     }
     

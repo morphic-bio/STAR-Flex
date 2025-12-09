@@ -64,6 +64,13 @@ genomeTransformOutput       None
 genomeChrSetMitochondrial   chrM M MT
     string(s):              names of the mitochondrial chromosomes. Presently only used for STARsolo statistics output/
 
+### Flex Gene Probe Parameters - for building hybrid reference with probe pseudo-chromosomes
+flexGeneProbeSet            -
+    string:                 path to 50bp gene probe CSV file (e.g., Chromium_Human_Transcriptome_Probe_Set.csv)
+                            When provided during genomeGenerate, filters probes to match GTF genes and creates hybrid reference
+flexGeneProbeLength         50
+    int>0:                  expected probe sequence length in bases. Fails if any probe has different length.
+
 ### Genome Indexing Parameters - only used with --runMode genomeGenerate
 genomeChrBinNbits           18
     int: =log2(chrBin), where chrBin is the size of the bins for genome storage: each chromosome will occupy an integer number of bins. For a genome with large number of contigs, it is recommended to scale this parameter as min(18, log2[max(GenomeLength/NumberOfReferences,ReadLength)]).
@@ -937,6 +944,7 @@ soloKeysCompat              raw
 
 soloProbeList               -
     string:                 path to probe_list.txt used to derive 1-based gene indices (15-bit cap)
+                            If not provided, will auto-detect probe_gene_list.txt from genome index directory
 
 soloSampleWhitelist         -
     string:                 optional path to sample whitelist TSV (enables sample detection)

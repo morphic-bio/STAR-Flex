@@ -12,7 +12,7 @@ CXXFLAGSextra ?=
 CXX ?= g++
 
 # pre-defined flags
-LDFLAGS_shared := -pthread -Lhtslib -Bstatic -lhts -Bdynamic -lz
+LDFLAGS_shared := -pthread -Lhtslib -Bstatic -lhts -Bdynamic -lz -lssl -lcrypto
 LDFLAGS_static := -static -static-libgcc -pthread -Lhtslib -lhts -lz
 LDFLAGS_Mac :=-pthread -lz htslib/libhts.a
 LDFLAGS_Mac_static :=-pthread -lz -static-libgcc htslib/libhts.a
@@ -115,7 +115,8 @@ OBJECTS = systemFunctions.o funPrimaryAlignMark.o \
 	ProbeListIndex.o \
 	SampleDetector.o \
 	SoloBamParsing.o \
-	ZGZXTags.o
+	ZGZXTags.o \
+	FlexProbeIndex.o
 
 SOURCES := $(wildcard *.cpp) $(wildcard *.c)
 
@@ -137,6 +138,10 @@ MexWriterObjs: MexWriter.o MexWriterUtil.o
 test_packed_readinfo:
 	$(CXX) -std=c++11 -I./ $(CPPFLAGS) $(CXXFLAGS) ../test/PackedReadInfo_test.cpp PackedReadInfo.cpp -o ../test/pri_test
 	../test/pri_test
+
+.PHONY: test_flex_probe_index
+test_flex_probe_index: FlexProbeIndex.o
+	$(CXX) -std=c++11 -I./ $(CPPFLAGS) $(CXXFLAGS) ../test/test_flex_probe_index.cpp FlexProbeIndex.o -lssl -lcrypto -o ../test/test_flex_probe_index
 
 .PHONY: test_SoloReadInfoBaseline
 # NOTE: This target links against most STAR objects (excluding STAR.o) which is heavy for a tiny harness.

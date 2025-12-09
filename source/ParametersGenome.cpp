@@ -55,5 +55,8 @@ void ParametersGenome::initialize(Parameters *pPin)
         errOut << "EXITING because of FATAL INPUT ERROR: --genomeLoad=" << gLoad << "\n" <<flush;
         errOut << "SOLUTION: use one of the allowed values for --genomeLoad : NoSharedMemory,LoadAndKeep,LoadAndRemove,LoadAndExit,Remove.\n" <<flush;
         exitWithError(errOut.str(),std::cerr, pP->inOut->logMain, EXIT_CODE_PARAMETER, *pP);
-    };    
+    };
+    
+    // Initialize flex gene probe settings
+    flexGeneProbe.enabled = (flexGeneProbe.csvFile != "-" && !flexGeneProbe.csvFile.empty());
 };

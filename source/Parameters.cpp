@@ -53,6 +53,10 @@ Parameters::Parameters() {//initalize parameters info
     parArray.push_back(new ParameterInfoVector <string> (-1, -1, "genomeTransformOutput", &pGe.transform.output));
     parArray.push_back(new ParameterInfoVector <string> (-1, -1, "genomeChrSetMitochondrial", &pGe.chrSet.mitoStrings));
 
+    // Flex gene probe parameters (50bp gene probes for Flex workflow)
+    parArray.push_back(new ParameterInfoScalar <string> (-1, -1, "flexGeneProbeSet", &pGe.flexGeneProbe.csvFile));
+    parArray.push_back(new ParameterInfoScalar <uint32> (-1, -1, "flexGeneProbeLength", &pGe.flexGeneProbe.enforceLength));
+
     //read
     parArray.push_back(new ParameterInfoVector <string> (-1, -1, "readFilesType", &readFilesType));
     parArray.push_back(new ParameterInfoVector <string> (-1, -1, "readFilesIn", &readFilesIn));

@@ -175,17 +175,16 @@ static std::string formatSampleTag(uint8_t detectedToken, const ParametersSolo& 
         return std::string(); // Invalid token
     }
     
-    // Get canonical sequence (8-mer) as label fallback
-    std::string canonical = SampleDetector::canonicalForIndexStatic(sampleIdx);
+    // Get user-provided label first (supports arbitrary labels)
+    std::string label = SampleDetector::labelForIndexStatic(sampleIdx);
     
-    // Try to construct label: if we have a canonical sequence, use it; otherwise use BC format
-    std::string label;
-    if (!canonical.empty()) {
-        // For now, use canonical as label. In future, could look up actual BC### label
-        // but that requires instance access which we don't have statically
-        label = canonical;
-    } else {
-        // Fallback: use BC format with sample index
+    // If no user label, fall back to canonical sequence (8-mer)
+    if (label.empty()) {
+        label = SampleDetector::canonicalForIndexStatic(sampleIdx);
+    }
+    
+    // Final fallback: BC format with sample index
+    if (label.empty()) {
         char buf[32];
         snprintf(buf, sizeof(buf), "BC%u", sampleIdx);
         label = buf;

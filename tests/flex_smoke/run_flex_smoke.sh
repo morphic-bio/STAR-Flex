@@ -45,17 +45,18 @@ pass "STAR binary exists"
 # Test 2: STAR accepts --flexEnable flag
 echo ""
 echo "=== Test 2: STAR accepts --flexEnable flag ==="
-if "$SOURCE_DIR/STAR" --version 2>&1 | grep -q "STAR"; then
+# Accept numeric version output as success
+if "$SOURCE_DIR/STAR" --version >/dev/null 2>&1; then
     pass "STAR --version works"
 else
     fail "STAR --version failed"
 fi
 
-# Test --flexEnable is recognized (should not error on unrecognized parameter)
-if "$SOURCE_DIR/STAR" --genomeDir /nonexistent --flexEnable yes 2>&1 | grep -qi "fatal.*flexEnable"; then
-    fail "--flexEnable flag not recognized"
+# Test --flex (flex pipeline toggle) is recognized (should not error on unrecognized parameter)
+if "$SOURCE_DIR/STAR" --genomeDir /nonexistent --flex yes 2>&1 | grep -qi "unrecognized parameter name.*flex"; then
+    fail "--flex flag not recognized"
 else
-    pass "--flexEnable flag is recognized (no fatal error about unknown parameter)"
+    pass "--flex flag is recognized (no fatal error about unknown parameter)"
 fi
 
 # Test sample detection flags are recognized
@@ -69,7 +70,7 @@ fi
 echo ""
 echo "=== Test 3: Default behavior verification ==="
 # Just verify STAR doesn't crash on normal parameter parsing
-if "$SOURCE_DIR/STAR" --version 2>&1 | grep -q "STAR"; then
+if "$SOURCE_DIR/STAR" --version >/dev/null 2>&1; then
     pass "Default behavior intact"
 else
     fail "Default behavior broken"

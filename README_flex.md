@@ -65,7 +65,7 @@ STAR \
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--soloSampleWhitelist` | - | Path to sample tag whitelist TSV |
-| `--soloProbeList` | - | Path to probe gene list |
+| `--soloProbeList` | auto | Path to probe gene list (auto-detects from genome index if not specified) |
 | `--soloSampleProbes` | - | Path to 10x sample probe barcodes |
 | `--soloSampleProbeOffset` | 0 | Offset in read for sample probe sequence |
 | `--soloSampleSearchNearby` | `yes` | Search nearby positions for sample tag |
@@ -107,22 +107,88 @@ output/
 
 The flex pipeline requires a hybrid reference genome that includes pseudo-chromosomes for probe sequences. Scripts are provided in `scripts/` to build these references:
 
-```bash
-# Build filtered hybrid reference (recommended)
-./scripts/build_filtered_reference.sh \
-  --probe-set probes.csv \
-  --base-fasta /path/to/genome.fa \
-  --base-gtf /path/to/genes.gtf \
-  --work-dir work
+### Integrated Index Generation (Recommended)
 
-# Build STAR index
-./scripts/make_filtered_star_index.sh \
-  --filtered-reference work/filtered_reference \
-  --output-dir work/star_index \
-  --threads 24
+```bash
+STAR --runMode genomeGenerate \
+  --genomeDir /path/to/flex_index \
+  --genomeFastaFiles /path/to/genome.fa \
+  --sjdbGTFfile /path/to/genes.gtf \
+  --sjdbOverhang 100 \
+  --flexGeneProbeSet /path/to/Chromium_Human_Transcriptome_Probe_Set_v2.0.0_GRCh38-2024-A.csv \
+  --runThreadN 8
 ```
 
-See [scripts/README.md](scripts/README.md) for detailed usage and additional options.
+#### Required Inputs
+
+| Input | Description |
+|-------|-------------|
+| `--genomeFastaFiles` | Base genome FASTA file |
+| `--sjdbGTFfile` | Gene annotation GTF file (can be gzipped) |
+| `--flexGeneProbeSet` | 10x Flex probe CSV file (50bp gene probes) |
+
+#### Flex Index Parameters
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--flexGeneProbeSet` | - | Path to 50bp gene probe CSV file |
+| `--flexGeneProbeLength` | 50 | Expected probe length (fails if mismatch) |
+
+#### Output Structure
+
+```
+flex_index/
+├── probe_gene_list.txt           # Unique gene IDs with probes (auto-detected for --soloProbeList)
+├── flex_probe_artifacts/         # Probe processing artifacts
+│   ├── filtered_probe_set.csv    # Probes matching GTF genes
+│   ├── probes_only.fa            # Probe-only FASTA
+│   ├── probes_only.gtf           # Probe-only GTF entries
+│   ├── genome.filtered.fa        # Hybrid FASTA (used for indexing)
+│   ├── genes.filtered.gtf        # Hybrid GTF (used for indexing)
+│   ├── probe_genes_exons.bed     # Probe coordinates
+│   ├── probe_list.txt            # Unique gene IDs
+│   └── metadata/
+│       └── reference_manifest.json
+├── Genome                        # Standard STAR index files
+├── SA
+├── SAindex
+└── ... (other STAR index files)
+```
+
+#### Probe Filtering Rules
+
+The integrated preprocessor applies these filters:
+1. **50bp A/C/G/T only** - Fails if any probe has invalid length or characters
+2. **Skip DEPRECATED** - Excludes probes marked as deprecated
+3. **Gene match** - Keeps only probes whose gene_id exists in the target GTF
+4. **Deterministic ordering** - Stable sort by gene_id then probe_id
+
+### Alternative: Shell Scripts
+
+For custom workflows or debugging, standalone shell scripts are available:
+
+```bash
+# Filter probes and build hybrid reference
+./scripts/filter_probes_to_gtf.sh \
+  --probe-set /path/to/probes.csv \
+  --gtf /path/to/genes.gtf.gz \
+  --base-fasta /path/to/genome.fa \
+  --output-dir ./probe_artifacts
+```
+
+The legacy `build_filtered_reference.sh` and `make_filtered_star_index.sh` scripts are also available. See [scripts/README.md](scripts/README.md) for details.
+
+### Using the Flex Index
+
+After building, use the index with the probe gene list:
+
+```bash
+STAR \
+  --genomeDir /path/to/flex_index \
+  --flex yes \
+  ... # other flex parameters
+  # --soloProbeList is auto-detected from probe_gene_list.txt in the index directory
+```
 
 ## Standalone FlexFilter Tool
 

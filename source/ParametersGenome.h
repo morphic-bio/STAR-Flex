@@ -52,6 +52,12 @@ public:
         unordered_set<uint64> mito;
     } chrSet;
 
+    // Flex gene probe parameters (50bp gene probes, distinct from 8bp sample tags)
+    struct {
+        string csvFile;           // Path to 50bp gene probe CSV
+        uint32 enforceLength;     // Expected probe length (default: 50)
+        bool enabled;             // Whether flex gene probe processing is enabled
+    } flexGeneProbe;
     
     void initialize(Parameters *Pin);
 
