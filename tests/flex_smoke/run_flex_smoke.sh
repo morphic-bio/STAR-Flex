@@ -42,9 +42,9 @@ if [[ ! -f "$SOURCE_DIR/STAR" ]]; then
 fi
 pass "STAR binary exists"
 
-# Test 2: STAR accepts --flexEnable flag
+# Test 2: STAR accepts --flex flag
 echo ""
-echo "=== Test 2: STAR accepts --flexEnable flag ==="
+echo "=== Test 2: STAR accepts --flex flag ==="
 # Accept numeric version output as success
 if "$SOURCE_DIR/STAR" --version >/dev/null 2>&1; then
     pass "STAR --version works"
@@ -66,7 +66,7 @@ else
     pass "--soloSampleProbeOffset flag is recognized"
 fi
 
-# Test 3: Default behavior (flexEnable=no should be default)
+# Test 3: Default behavior (flex off should be default)
 echo ""
 echo "=== Test 3: Default behavior verification ==="
 # Just verify STAR doesn't crash on normal parameter parsing
@@ -87,7 +87,7 @@ if [[ -d "$FIXTURE_DIR/genome" ]] && [[ -d "$FIXTURE_DIR/SC2300771" ]]; then
     mkdir -p "$OUT_DIR/flex_off" "$OUT_DIR/flex_on"
     
     # Test 4a: Run with flex disabled (default)
-    echo "Running STAR with flexEnable=no (default)..."
+    echo "Running STAR with flex disabled (default)..."
     if "$SOURCE_DIR/STAR" \
         --genomeDir "$FIXTURE_DIR/genome" \
         --readFilesIn "$FIXTURE_DIR/SC2300771/reads_R2.fastq" "$FIXTURE_DIR/SC2300771/reads_R1.fastq" \
@@ -100,7 +100,7 @@ if [[ -d "$FIXTURE_DIR/genome" ]] && [[ -d "$FIXTURE_DIR/SC2300771" ]]; then
         --runThreadN 1 \
         --outSAMtype BAM Unsorted \
         --soloOutFileNames Solo.out/ Gene/raw/ 2>&1; then
-        pass "STAR ran successfully with flexEnable=no"
+        pass "STAR ran successfully with flex off"
         
         # Check that standard Solo output exists
         if [[ -d "$OUT_DIR/flex_off/Solo.out" ]]; then
@@ -109,17 +109,17 @@ if [[ -d "$FIXTURE_DIR/genome" ]] && [[ -d "$FIXTURE_DIR/SC2300771" ]]; then
             fail "Solo.out directory missing"
         fi
     else
-        fail "STAR failed with flexEnable=no"
+        fail "STAR failed with flex off"
     fi
     
     # Test 4b: Run with flex enabled
     echo ""
-    echo "Running STAR with flexEnable=yes..."
+    echo "Running STAR with flex enabled..."
     if "$SOURCE_DIR/STAR" \
         --genomeDir "$FIXTURE_DIR/genome" \
         --readFilesIn "$FIXTURE_DIR/SC2300771/reads_R2.fastq" "$FIXTURE_DIR/SC2300771/reads_R1.fastq" \
         --outFileNamePrefix "$OUT_DIR/flex_on/" \
-        --flexEnable yes \
+        --flex yes \
         --soloType CB_UMI_Simple \
         --soloCBwhitelist "$FIXTURE_DIR/737K-august-2016.txt" \
         --soloCBlen 16 \
@@ -128,7 +128,7 @@ if [[ -d "$FIXTURE_DIR/genome" ]] && [[ -d "$FIXTURE_DIR/SC2300771" ]]; then
         --runThreadN 1 \
         --outSAMtype BAM Unsorted \
         --soloOutFileNames Solo.out/ Gene/raw/ 2>&1; then
-        pass "STAR ran successfully with flexEnable=yes"
+        pass "STAR ran successfully with flex enabled"
         
         # Check for flex pipeline log message
         if grep -q "Flex pipeline enabled" "$OUT_DIR/flex_on/Log.out" 2>/dev/null; then
@@ -137,7 +137,7 @@ if [[ -d "$FIXTURE_DIR/genome" ]] && [[ -d "$FIXTURE_DIR/SC2300771" ]]; then
             info "Flex pipeline enabled message not found in log (may not write until alignment completes)"
         fi
     else
-        fail "STAR failed with flexEnable=yes"
+        fail "STAR failed with flex enabled"
     fi
     
     # Test 4c: Verify no regression (both runs should complete without crash)
@@ -157,7 +157,7 @@ echo "=== All smoke tests passed ==="
 echo ""
 echo "Summary:"
 echo "  - STAR builds successfully with flex integration"
-echo "  - --flexEnable flag is recognized"
+echo "  - --flex flag is recognized"
 echo "  - Sample detection flags are recognized"
 echo "  - Default behavior (flex off) works correctly"
 if [[ -d "$FIXTURE_DIR/genome" ]]; then
