@@ -1,0 +1,75 @@
+==========================================
+Y/NoY Split Regression Tests
+==========================================
+STAR-Flex Binary: /mnt/pikachu/STAR-Flex/tests/../source/STAR
+STAR Solo Binary: /usr/local/bin/STAR
+2.7.11a
+
+>>> Test 1: Bulk RNA-Seq Baseline Regression
+  Running STAR-Flex baseline (unsorted)...
+Dec 12 11:08:21 ..... started STAR run
+Dec 12 11:08:34 ..... started mapping
+Dec 12 11:08:44 ..... finished mapping
+Dec 12 11:08:45 ..... finished successfully
+  Running STAR Solo baseline (unsorted)...
+Dec 12 11:08:45 ..... started STAR run
+Dec 12 11:08:57 ..... started mapping
+Dec 12 11:09:07 ..... finished mapping
+Dec 12 11:09:08 ..... finished successfully
+  Running STAR-Flex baseline (sorted)...
+Dec 12 11:09:08 ..... started STAR run
+Dec 12 11:09:21 ..... started mapping
+Dec 12 11:09:29 ..... finished mapping
+Dec 12 11:09:30 ..... started sorting BAM
+Dec 12 11:09:31 ..... finished successfully
+  Running STAR Solo baseline (sorted)...
+Dec 12 11:09:31 ..... started STAR run
+Dec 12 11:09:44 ..... started mapping
+Dec 12 11:09:53 ..... finished mapping
+Dec 12 11:09:53 ..... started sorting BAM
+Dec 12 11:09:55 ..... finished successfully
+  Comparing results...
+
+  Unsorted Comparison:
+    STAR-Flex total: 270089
+    STAR Solo total: 270089
+    STAR-Flex chrY: 570
+    STAR Solo chrY: 570
+
+  Sorted Comparison:
+    STAR-Flex total: 270089
+    STAR Solo total: 270089
+    STAR-Flex chrY: 570
+    STAR Solo chrY: 570
+    ✓ Unsorted total reads match
+    ✓ Unsorted chrY reads match
+    ✓ Sorted total reads match
+    ✓ Sorted chrY reads match
+
+>>> Test 2: Flex Regression (compare to previous artifacts)
+  Found previous Flex test artifacts at /tmp/ychrom_flex_test
+  Running current Flex test...
+  Comparing previous vs current Flex outputs...
+    Previous Y reads: 499
+    Current Y reads: 499
+    Previous noY reads: 150790
+    Current noY reads: 150790
+    ✓ Y read counts match
+    ✓ noY read counts match
+  Comparing idxstats...
+    ✓ Y idxstats match
+    ✓ noY idxstats match
+
+==========================================
+Regression Test Summary
+==========================================
+Bulk RNA-seq checks passed: 4
+Bulk RNA-seq checks failed: 0
+Flex regression checks passed: 4
+Flex regression checks failed: 0
+Total passed: 8
+Total failed: 0
+
+Report written to: /mnt/pikachu/STAR-Flex/tests/TEST_REPORT_Y_SPLIT_REGRESSION.md
+
+✓ All regression checks passed!

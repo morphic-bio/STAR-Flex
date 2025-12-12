@@ -4,6 +4,7 @@
 #include "BAMbinSortUnmapped.h"
 #include "ErrorWarning.h"
 #include "bam_cat.h"
+#include <sys/stat.h>
 
 void bamSortByCoordinate (Parameters &P, ReadAlignChunk **RAchunk, Genome &genome, Solo &solo) {
     if (P.outBAMcoord) {//sort BAM if needed
@@ -33,16 +34,54 @@ void bamSortByCoordinate (Parameters &P, ReadAlignChunk **RAchunk, Genome &genom
             exitWithError(errOut.str(), std::cerr, P.inOut->logMain, EXIT_CODE_PARAMETER, P);
         } else if(maxMem==0 && unmappedReadsN==0) {//both mapped and unmapped reads are absent
             P.inOut->logMain << "WARNING: nothing to sort - no output alignments" <<endl;
-            BGZF *bgzfOut;
-            bgzfOut=bgzf_open(P.outBAMfileCoordName.c_str(),("w"+to_string((long long) P.outBAMcompression)).c_str());
-            if (bgzfOut==NULL) {
-                ostringstream errOut;
-                errOut <<"EXITING because of fatal ERROR: could not open output bam file: " << P.outBAMfileCoordName << "\n";
-                errOut <<"SOLUTION: check that the disk is not full, increase the max number of open files with Linux command ulimit -n before running STAR";
-                exitWithError(errOut.str(), std::cerr, P.inOut->logMain, EXIT_CODE_PARAMETER, P);
-            };
-            outBAMwriteHeader(bgzfOut,P.samHeaderSortedCoord,genome.chrNameAll,genome.chrLengthAll);
-            bgzf_close(bgzfOut);
+            if (P.emitNoYBAMyes) {
+                // Create empty Y/noY BAM files with headers
+                BGZF *bgzfOut_Y = bgzf_open(P.outBAMfileYName.c_str(),("w"+to_string((long long) P.outBAMcompression)).c_str());
+                if (bgzfOut_Y==NULL) {
+                    ostringstream errOut;
+                    errOut <<"EXITING because of fatal ERROR: could not open output Y bam file: " << P.outBAMfileYName << "\n";
+                    errOut <<"SOLUTION: check that the disk is not full, increase the max number of open files with Linux command ulimit -n before running STAR";
+                    exitWithError(errOut.str(), std::cerr, P.inOut->logMain, EXIT_CODE_PARAMETER, P);
+                };
+                outBAMwriteHeader(bgzfOut_Y,P.samHeaderSortedCoord,genome.chrNameAll,genome.chrLengthAll);
+                bgzf_close(bgzfOut_Y);
+                
+                BGZF *bgzfOut_noY = bgzf_open(P.outBAMfileNoYName.c_str(),("w"+to_string((long long) P.outBAMcompression)).c_str());
+                if (bgzfOut_noY==NULL) {
+                    ostringstream errOut;
+                    errOut <<"EXITING because of fatal ERROR: could not open output noY bam file: " << P.outBAMfileNoYName << "\n";
+                    errOut <<"SOLUTION: check that the disk is not full, increase the max number of open files with Linux command ulimit -n before running STAR";
+                    exitWithError(errOut.str(), std::cerr, P.inOut->logMain, EXIT_CODE_PARAMETER, P);
+                };
+                outBAMwriteHeader(bgzfOut_noY,P.samHeaderSortedCoord,genome.chrNameAll,genome.chrLengthAll);
+                bgzf_close(bgzfOut_noY);
+                
+                // Create primary BAM if keepBAM is enabled
+                if (P.keepBAMyes) {
+                    BGZF *bgzfOut;
+                    bgzfOut=bgzf_open(P.outBAMfileCoordName.c_str(),("w"+to_string((long long) P.outBAMcompression)).c_str());
+                    if (bgzfOut==NULL) {
+                        ostringstream errOut;
+                        errOut <<"EXITING because of fatal ERROR: could not open output bam file: " << P.outBAMfileCoordName << "\n";
+                        errOut <<"SOLUTION: check that the disk is not full, increase the max number of open files with Linux command ulimit -n before running STAR";
+                        exitWithError(errOut.str(), std::cerr, P.inOut->logMain, EXIT_CODE_PARAMETER, P);
+                    };
+                    outBAMwriteHeader(bgzfOut,P.samHeaderSortedCoord,genome.chrNameAll,genome.chrLengthAll);
+                    bgzf_close(bgzfOut);
+                }
+            } else {
+                // Normal mode: create primary BAM
+                BGZF *bgzfOut;
+                bgzfOut=bgzf_open(P.outBAMfileCoordName.c_str(),("w"+to_string((long long) P.outBAMcompression)).c_str());
+                if (bgzfOut==NULL) {
+                    ostringstream errOut;
+                    errOut <<"EXITING because of fatal ERROR: could not open output bam file: " << P.outBAMfileCoordName << "\n";
+                    errOut <<"SOLUTION: check that the disk is not full, increase the max number of open files with Linux command ulimit -n before running STAR";
+                    exitWithError(errOut.str(), std::cerr, P.inOut->logMain, EXIT_CODE_PARAMETER, P);
+                };
+                outBAMwriteHeader(bgzfOut,P.samHeaderSortedCoord,genome.chrNameAll,genome.chrLengthAll);
+                bgzf_close(bgzfOut);
+            }
         } else {//sort
             uint totalMem=0;
             #pragma omp parallel num_threads(P.outBAMsortingThreadNactual)
@@ -78,20 +117,73 @@ void bamSortByCoordinate (Parameters &P, ReadAlignChunk **RAchunk, Genome &genom
             };
 
             //concatenate all BAM files, using bam_cat
-            char **bamBinNames = new char* [nBins];
-            vector <string> bamBinNamesV;
-            for (uint32 ibin=0; ibin<nBins; ibin++) {
-
-                bamBinNamesV.push_back(P.outBAMsortTmpDir+"/b"+std::to_string((uint) ibin));
-                struct stat buffer;
-                if (stat (bamBinNamesV.back().c_str(), &buffer) != 0) {//check if file exists
-                    bamBinNamesV.pop_back();
+            if (P.emitNoYBAMyes) {
+                // Concatenate Y and noY bin files separately
+                vector <string> bamBinNamesV_Y, bamBinNamesV_noY;
+                for (uint32 ibin=0; ibin<nBins; ibin++) {
+                    string yFile = P.outBAMsortTmpDir+"/b"+std::to_string((uint) ibin)+"_Y";
+                    string noYFile = P.outBAMsortTmpDir+"/b"+std::to_string((uint) ibin)+"_noY";
+                    struct stat buffer;
+                    if (stat(yFile.c_str(), &buffer) == 0) {
+                        bamBinNamesV_Y.push_back(yFile);
+                    }
+                    if (stat(noYFile.c_str(), &buffer) == 0) {
+                        bamBinNamesV_noY.push_back(noYFile);
+                    }
                 };
-            };
-            for (uint32 ibin=0; ibin<bamBinNamesV.size(); ibin++) {
+                
+                if (!bamBinNamesV_Y.empty()) {
+                    char **bamBinNames_Y = new char* [bamBinNamesV_Y.size()];
+                    for (uint32 ibin=0; ibin<bamBinNamesV_Y.size(); ibin++) {
+                        bamBinNames_Y[ibin] = (char*) bamBinNamesV_Y.at(ibin).c_str();
+                    };
+                    bam_cat(bamBinNamesV_Y.size(), bamBinNames_Y, 0, P.outBAMfileYName.c_str());
+                    delete [] bamBinNames_Y;
+                }
+                
+                if (!bamBinNamesV_noY.empty()) {
+                    char **bamBinNames_noY = new char* [bamBinNamesV_noY.size()];
+                    for (uint32 ibin=0; ibin<bamBinNamesV_noY.size(); ibin++) {
+                        bamBinNames_noY[ibin] = (char*) bamBinNamesV_noY.at(ibin).c_str();
+                    };
+                    bam_cat(bamBinNamesV_noY.size(), bamBinNames_noY, 0, P.outBAMfileNoYName.c_str());
+                    delete [] bamBinNames_noY;
+                }
+                
+                // Concatenate primary BAM if keepBAM is enabled
+                if (P.keepBAMyes) {
+                    char **bamBinNames = new char* [nBins];
+                    vector <string> bamBinNamesV;
+                    for (uint32 ibin=0; ibin<nBins; ibin++) {
+                        bamBinNamesV.push_back(P.outBAMsortTmpDir+"/b"+std::to_string((uint) ibin));
+                        struct stat buffer;
+                        if (stat (bamBinNamesV.back().c_str(), &buffer) != 0) {//check if file exists
+                            bamBinNamesV.pop_back();
+                        };
+                    };
+                    for (uint32 ibin=0; ibin<bamBinNamesV.size(); ibin++) {
+                        bamBinNames[ibin] = (char*) bamBinNamesV.at(ibin).c_str();
+                    };
+                    bam_cat(bamBinNamesV.size(), bamBinNames, 0, P.outBAMfileCoordName.c_str());
+                    delete [] bamBinNames;
+                }
+            } else {
+                // Normal mode: concatenate primary BAM
+                char **bamBinNames = new char* [nBins];
+                vector <string> bamBinNamesV;
+                for (uint32 ibin=0; ibin<nBins; ibin++) {
+                    bamBinNamesV.push_back(P.outBAMsortTmpDir+"/b"+std::to_string((uint) ibin));
+                    struct stat buffer;
+                    if (stat (bamBinNamesV.back().c_str(), &buffer) != 0) {//check if file exists
+                        bamBinNamesV.pop_back();
+                    };
+                };
+                for (uint32 ibin=0; ibin<bamBinNamesV.size(); ibin++) {
                     bamBinNames[ibin] = (char*) bamBinNamesV.at(ibin).c_str();
-            };
-            bam_cat(bamBinNamesV.size(), bamBinNames, 0, P.outBAMfileCoordName.c_str());
+                };
+                bam_cat(bamBinNamesV.size(), bamBinNames, 0, P.outBAMfileCoordName.c_str());
+                delete [] bamBinNames;
+            }
         };
     };    
 };

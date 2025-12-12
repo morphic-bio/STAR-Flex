@@ -105,9 +105,10 @@ void ChimericAlign::chimericBAMoutput(Transcript *al1, Transcript *al2, ReadAlig
             RA->outBAMunsorted->unsortedOneAlign(RA->outBAMoneAlign[ii], RA->outBAMoneAlignNbytes[ii], ii>0 ? 0 : bamBytesTotal, RA->iReadAll, sampleByte,
                                                   (mateIdx==0 ? RA->extractedCbIdxPlus1_ : 0u),
                                                   (mateIdx==0 ? RA->extractedUmi24_ : 0u),
-                                                  (mateIdx==0 && RA->extractedCbIdxPlus1_ == 0 ? RA->extractedCbSeq_ : std::string()));
+                                                  (mateIdx==0 && RA->extractedCbIdxPlus1_ == 0 ? RA->extractedCbSeq_ : std::string()),
+                                                  RA->hasYAlignment_);
         };
-        if (P.outBAMcoord)    RA->outBAMcoord->coordOneAlign(RA->outBAMoneAlign[ii], RA->outBAMoneAlignNbytes[ii], (RA->iReadAll<<32) );
+        if (P.outBAMcoord)    RA->outBAMcoord->coordOneAlign(RA->outBAMoneAlign[ii], RA->outBAMoneAlignNbytes[ii], (RA->iReadAll<<32), RA->hasYAlignment_);
     };
 
 };

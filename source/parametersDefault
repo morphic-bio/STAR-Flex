@@ -424,6 +424,20 @@ outBAMsortingThreadN    0
 outBAMsortingBinsN      50
     int: >0:  number of genome bins for coordinate-sorting
 
+emitNoYBAM              no
+    string:                 yes|no - split BAM output by Y-chromosome alignments
+                            When enabled, emits _noY.bam and _Y.bam files
+                            Primary BAM is suppressed by default (use --keepBAM to retain)
+
+keepBAM                 no
+    string:                 yes|no - when emitNoYBAM is enabled, also emit primary BAM
+
+noYOutput               -
+    string:                 override path for _noY.bam output
+
+YOutput                 -
+    string:                 override path for _Y.bam output
+
 ### BAM processing
 bamRemoveDuplicatesType  -
     string: mark duplicates in the BAM file, for now only works with (i) sorted BAM fed with inputBAMfile, and (ii) for paired-end alignments only

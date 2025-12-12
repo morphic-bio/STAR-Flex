@@ -1,54 +1,7 @@
-*.o
-run_production.sh
-*log
-Depend.list
-
-.project
-.kdev4/
-source.kdev4
-
-
-# Don't track intermediary files from building the manual
-extras/doc-latex/*.aux
-extras/doc-latex/*.fdb_latexmk
-extras/doc-latex/*.fls
-extras/doc-latex/*.log
-extras/doc-latex/*.out
-extras/doc-latex/*.gz
-extras/doc-latex/*.toc
-
-# Don't track the STAR binary once it has being built
-source/STAR
-
-# FlexFilter standalone tool
-tools/flexfilter/run_flexfilter_mex
-tools/flexfilter/*.o
-tools/flexfilter/test_output/
-.DS_Store
-*.xcworkspacedata
-*.pbxproj
-*.plist
-*.xcuserstate
-
-#Reference files
-reference/*
+.cursor
 .specstory
-
-# Editor and IDE files
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-# Cursor-specific
-.cursorindexingignore
-
-#plan
-plans/*
-
-#bam
-*.bam
-#test outputs
-test_*/
-chr21_probe*/
-bin/*
+plans
+reference
+*_log
+tests/ychrom_test
+*._log

@@ -6,6 +6,8 @@ InOutStreams::InOutStreams() {
     outSAM=NULL;
     outBAMfileUnsorted=NULL;
     outQuantBAMfile=NULL;
+    outBAMfileY=NULL;
+    outBAMfileNoY=NULL;
 };
 
 InOutStreams::~InOutStreams() {
