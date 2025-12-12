@@ -131,6 +131,12 @@ all: cleanCompileInfo STAR$(SFX)
 flexfilter: STAR$(SFX)
 	$(MAKE) -C ../tools/flexfilter
 
+# Standalone remove_y_reads FASTQ splitter tool (optional, not built by default)
+# Requires htslib to be built first
+.PHONY: remove_y_reads
+remove_y_reads: htslib/libhts.a
+	$(MAKE) -C ../tools/remove_y_reads
+
 # Convenience target to rebuild only the MEX writer components
 .PHONY: MexWriterObjs
 MexWriterObjs: MexWriter.o MexWriterUtil.o

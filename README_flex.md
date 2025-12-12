@@ -359,6 +359,109 @@ Labels in the first column are used verbatim for per-sample directories, and the
 
 See [tools/flexfilter/README.md](tools/flexfilter/README.md) for complete CLI reference and advanced options.
 
+## remove_y_reads - FASTQ Splitter
+
+A standalone C tool that splits FASTQ files based on a Y-only BAM produced by STAR's `--emitNoYBAM` feature. Given the `_Y.bam` output from STAR's Y-chromosome split, this tool partitions original FASTQ files into Y/noY sets while preserving read order.
+
+**Use cases:**
+- Split FASTQ files after STAR alignment with Y/noY BAM output
+- Prepare separate inputs for sex-specific analyses
+- Filter out Y-chromosome reads from FASTQ files
+- Downstream analysis requiring separate Y/non-Y FASTQs
+
+**Key features:**
+- Uses htslib for BAM reading and kseq.h for robust FASTQ parsing
+- Dual-hash collision protection (FNV-1a + djb2) for read name lookup
+- File-level threading with semaphore-bounded concurrency
+- Preserves original read order in outputs
+- Handles gzipped and uncompressed FASTQs
+
+### Building
+
+The tool is optional and not built by the default `make STAR` target:
+
+```bash
+cd source
+make remove_y_reads
+```
+
+This produces `tools/remove_y_reads/remove_y_reads`.
+
+Alternatively, build directly:
+
+```bash
+cd tools/remove_y_reads
+make
+```
+
+### Basic Usage
+
+```bash
+./tools/remove_y_reads/remove_y_reads \
+    -y Aligned.sortedByCoord.out_Y.bam \
+    --threads 4 \
+    --gzip-level 6 \
+    -o output_dir \
+    sample_R1.fastq.gz sample_R2.fastq.gz
+```
+
+**Output:** For each input FASTQ, produces `<stem>_Y.fastq.gz` and `<stem>_noY.fastq.gz`.
+
+### Key Parameters
+
+| Flag | Description |
+|------|-------------|
+| `-y, --ybam` | Y-only BAM file (required) |
+| `-o, --outdir` | Output directory (default: alongside input) |
+| `-t, --threads` | Number of parallel workers (default: 1) |
+| `-z, --gzip-level` | Compression level 1-9 (default: 6) |
+| `-h, --help` | Show help message |
+
+### Features
+
+- **Read order preservation**: Outputs maintain the same read order as input FASTQs
+- **Name normalization**: Automatically handles FASTQ name formats (strips `@`, `/1`, `/2`, comments)
+- **Collision detection**: Uses hash + length to guard against rare hash collisions
+- **Multi-threaded**: Process multiple FASTQ files in parallel (file-level parallelism)
+- **Gzip support**: Handles both compressed and uncompressed FASTQ files
+- **Dynamic parsing**: Uses kseq.h for robust parsing of arbitrarily long reads
+
+### Example Workflow
+
+```bash
+# Step 1: Run STAR with Y/noY split
+STAR \
+  --genomeDir /path/to/reference \
+  --readFilesIn R1.fastq.gz R2.fastq.gz \
+  --readFilesCommand zcat \
+  --outSAMtype BAM SortedByCoordinate \
+  --emitNoYBAM yes \
+  --outFileNamePrefix output/
+
+# Step 2: Split original FASTQs based on Y BAM
+./tools/remove_y_reads/remove_y_reads \
+    -y output/Aligned.sortedByCoord.out_Y.bam \
+    --threads 4 \
+    -o output/fastq_split \
+    R1.fastq.gz R2.fastq.gz
+
+# Result: output/fastq_split/R1_Y.fastq.gz, R1_noY.fastq.gz, etc.
+```
+
+### Testing
+
+```bash
+# Basic self-contained test
+./tests/run_remove_y_reads_test.sh
+
+# Comprehensive test (single-threaded, multithreaded, multiple files)
+./tests/run_y_removal_comprehensive_test.sh
+```
+
+Test report generated at `tests/TEST_REPORT_REMOVE_Y_FASTQ.md`.
+
+For detailed technical documentation, see [docs/Y_CHROMOSOME_BAM_SPLIT.md](docs/Y_CHROMOSOME_BAM_SPLIT.md).
+
 ## Building STAR-Flex
 
 Standard STAR build process:
@@ -408,6 +511,10 @@ tools/flexfilter/               # Standalone FlexFilter CLI
 ├── README.md                   # CLI documentation
 ├── test_smoke.sh               # Smoke test script
 └── validate_output.py          # Output validation script
+
+tools/remove_y_reads/           # Standalone FASTQ Y-splitter CLI
+├── remove_y_reads.c            # Main implementation (C + htslib)
+└── Makefile                    # Build configuration
 ```
 
 ## Compatibility
