@@ -104,5 +104,11 @@ void samHeaders(Parameters &P, Genome &genomeOut, Transcriptome &transcriptomeMa
     };
     if (P.outBAMunsorted && P.inOut->outBAMfileUnsorted != NULL){
         outBAMwriteHeader(P.inOut->outBAMfileUnsorted,P.samHeader,genomeOut.chrNameAll,genomeOut.chrLengthAll);
+        
+        // Write headers to Y/noY BAMs if Y-split is enabled
+        if (P.emitNoYBAMyes && P.inOut->outBAMfileY != NULL && P.inOut->outBAMfileNoY != NULL) {
+            outBAMwriteHeader(P.inOut->outBAMfileY,P.samHeader,genomeOut.chrNameAll,genomeOut.chrLengthAll);
+            outBAMwriteHeader(P.inOut->outBAMfileNoY,P.samHeader,genomeOut.chrNameAll,genomeOut.chrLengthAll);
+        }
     };
 };

@@ -37,9 +37,10 @@ void BAMbinSortUnmapped(uint32 iBin, uint nThreads, string dirBAMsort, Parameter
         bamInStream[it].read(bamIn[it],sizeof(int32));//read BAM record size
         if (bamInStream[it].good()) {
             bamSize[it]=((*(uint32*)bamIn[it])+sizeof(int32));//true record size +=4 (4 bytes for uint-iRead)
-            bamInStream[it].read(bamIn[it]+sizeof(int32),bamSize.at(it)-sizeof(int32)+sizeof(uint64));//read the rest of the record, including last uint = iRead
-            uint64 iRead=*(uint*)(bamIn[it]+bamSize.at(it));
-            iRead = iRead >> 32; //iRead is recorded in top 32bits
+            bamInStream[it].read(bamIn[it]+sizeof(int32),bamSize.at(it)-sizeof(int32)+sizeof(uint64));//read the rest of the record, including last uint64 = iReadWithY
+            uint64 iReadWithY=*(uint64*)(bamIn[it]+bamSize.at(it));
+            uint64 iRead = iReadWithY >> 32; //iRead is recorded in top 32bits (mask out Y-bit)
+            iRead = iRead & 0x7FFFFFFF; // mask out Y-bit if present
             startPos[iRead]=it;//startPos[iRead]=it : record the order of the files to output
         } else {//nothing to do here, file is empty, do not record it
         };
@@ -63,9 +64,10 @@ void BAMbinSortUnmapped(uint32 iBin, uint nThreads, string dirBAMsort, Parameter
             bamInStream[it].read(bamIn[it],sizeof(int32));//read record size
             if (bamInStream[it].good()) {
                  bamSize[it]=((*(uint32*)bamIn[it])+sizeof(int32));
-                 bamInStream[it].read(bamIn[it]+sizeof(int32),bamSize.at(it)-sizeof(int32)+sizeof(uint));//read the rest of the record, including 
-                 uint64 iRead=*(uint*)(bamIn[it]+bamSize.at(it));
-                 iRead = iRead >> 32; //iRead is recorded in top 32bits
+                 bamInStream[it].read(bamIn[it]+sizeof(int32),bamSize.at(it)-sizeof(int32)+sizeof(uint64));//read the rest of the record, including uint64 iReadWithY
+                 uint64 iReadWithY=*(uint64*)(bamIn[it]+bamSize.at(it));
+                 uint64 iRead = iReadWithY >> 32; //iRead is recorded in top 32bits (mask out Y-bit)
+                 iRead = iRead & 0x7FFFFFFF; // mask out Y-bit if present
                  if (iRead>startNext) {//this read from this chunk is > than a read from another chunk
                      startPos[iRead]=it;
                      break;

@@ -42,6 +42,51 @@ STAR \
   --outFileNamePrefix output/
 ```
 
+### Example: Y-Chromosome BAM Split
+
+To split BAM output into Y and noY files:
+
+```bash
+STAR \
+  --genomeDir /path/to/flex_reference \
+  --readFilesIn R2.fastq.gz R1.fastq.gz \
+  --readFilesCommand zcat \
+  --soloType CB_UMI_Simple \
+  --soloCBwhitelist /path/to/737K-fixed-rna-profiling.txt \
+  --flex yes \
+  --soloFlexExpectedCellsPerTag 3000 \
+  --soloSampleWhitelist sample_whitelist.tsv \
+  --soloProbeList probe_list.txt \
+  --soloSampleProbes probe-barcodes-fixed-rna-profiling-rna.txt \
+  --soloSampleProbeOffset 68 \
+  --soloFlexOutputPrefix output/per_sample \
+  --soloMultiMappers Rescue \
+  --soloCBmatchWLtype 1MM_multi_Nbase_pseudocounts \
+  --soloUMIfiltering MultiGeneUMI_CR \
+  --soloUMIdedup 1MM_CR \
+  --soloFeatures Gene \
+  --outSAMtype BAM SortedByCoordinate \
+  --emitNoYBAM yes \
+  --outFileNamePrefix output/
+```
+
+This produces:
+- `output/Aligned.sortedByCoord.out_Y.bam` - Reads with any Y-chromosome alignment
+- `output/Aligned.sortedByCoord.out_noY.bam` - Reads with no Y-chromosome alignments
+- Primary BAM (`output/Aligned.sortedByCoord.out.bam`) is suppressed by default
+
+To keep the primary BAM alongside the split files:
+
+```bash
+STAR \
+  ... \
+  --emitNoYBAM yes \
+  --keepBAM yes \
+  --outFileNamePrefix output/
+```
+
+**Note**: The Y/noY split works for both single-cell RNA-seq (Flex mode) and bulk RNA-seq modes. In single-cell mode, R1/R2 are not traditional paired-end mates, so routing is based on each read's own alignments. In bulk paired-end mode, if either mate has a Y-chromosome alignment, both mates route to `_Y.bam`.
+
 ## Required Inputs
 
 | Input | Description |
@@ -59,6 +104,15 @@ STAR \
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--flex` | `no` | Enable flex pipeline (`yes`/`no`) |
+
+### Y-Chromosome BAM Split
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--emitNoYBAM` | `no` | Enable Y-chromosome BAM splitting (`yes`/`no`). When enabled, emits two additional BAM files: `<out>_noY.bam` (reads with no Y-chromosome alignments) and `<out>_Y.bam` (reads with any Y-chromosome alignment). Primary BAM is suppressed by default unless `--keepBAM yes` is specified. |
+| `--keepBAM` | `no` | Keep primary BAM output when `--emitNoYBAM yes` is enabled (`yes`/`no`) |
+| `--noYOutput` | - | Optional: override default path for noY BAM output (default: `<out>_noY.bam`) |
+| `--YOutput` | - | Optional: override default path for Y BAM output (default: `<out>_Y.bam`) |
 
 ### Sample Detection
 
@@ -97,11 +151,19 @@ output/
 │   ├── barcodes.tsv
 │   ├── features.tsv
 │   └── matrix.mtx
-└── per_sample/                  # Per-sample filtered MEX (labels from whitelist)
-    ├── SampleA/Gene/filtered/
-    ├── SampleB/Gene/filtered/
-    └── flexfilter_summary.tsv   # Cell calling statistics
+├── per_sample/                  # Per-sample filtered MEX (labels from whitelist)
+│   ├── SampleA/Gene/filtered/
+│   ├── SampleB/Gene/filtered/
+│   └── flexfilter_summary.tsv   # Cell calling statistics
+├── Aligned.sortedByCoord.out_Y.bam      # Y-chromosome reads (if --emitNoYBAM yes)
+└── Aligned.sortedByCoord.out_noY.bam    # Non-Y reads (if --emitNoYBAM yes)
 ```
+
+When `--emitNoYBAM yes` is enabled:
+- `_Y.bam`: Contains all reads where any alignment (primary, secondary, or supplementary) touches a Y-chromosome contig
+- `_noY.bam`: Contains all reads with no Y-chromosome alignments
+- Primary BAM (`Aligned.sortedByCoord.out.bam` or `Aligned.out.bam`) is suppressed by default unless `--keepBAM yes` is specified
+- Works with both `BAM Unsorted` and `BAM SortedByCoordinate` output types
 
 ## Building References
 
@@ -353,3 +415,35 @@ tools/flexfilter/               # Standalone FlexFilter CLI
 - Baseline: STAR 2.7.11b
 - When `--flex no` (default), behavior is identical to upstream STAR
 - Upstream `README.md` and `CHANGES.md` are not modified
+
+## Code Statistics
+
+STAR-Flex adds approximately **16,000 lines of C++ code** on top of upstream STAR 2.7.11b.
+
+### Summary (excluding third-party libraries)
+
+| Repository | Files | Lines |
+|------------|-------|-------|
+| Upstream STAR | 248 | 27,785 |
+| STAR-Flex | 306 | 43,849 |
+| **Difference** | **+58** | **+16,064** |
+
+### Breakdown of New Code
+
+| Category | Lines | Files |
+|----------|-------|-------|
+| New files in source/ | 5,797 | 39 |
+| Modifications to existing files | +4,439 | 25 |
+| source/libflex/ (Flex filtering library) | 4,899 | 16 |
+| source/solo/ (CB correction) | 933 | 4 |
+| **Total (Our Code)** | **~16,000** | |
+
+### Third-party Libraries (included in repo)
+
+| Library | Lines | Files | Notes |
+|---------|-------|-------|-------|
+| PCG random (pcg_*.hpp) | 3,623 | 3 | New in STAR-Flex |
+| klib/khash.h | 617 | 1 | New in STAR-Flex |
+| SimpleGoodTuring | 300 | 1 | Present in upstream |
+
+*Line counts include only compiled source files (.cpp, .h, .hpp) in source/. Excludes htslib, opal, reference data, scripts, and test fixtures.*

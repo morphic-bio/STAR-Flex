@@ -1,0 +1,4 @@
+chr1	.	gene	1	120	.	+	.	gene_id "GENE1";
+chr1	.	exon	1	120	.	+	.	gene_id "GENE1"; transcript_id "T1";
+chrY	.	gene	1	120	.	+	.	gene_id "GENE2";
+chrY	.	exon	1	120	.	+	.	gene_id "GENE2"; transcript_id "T2";

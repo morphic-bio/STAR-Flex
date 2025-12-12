@@ -148,6 +148,7 @@ void ReadAlign::resetN () {//reset resets the counters to 0 for a new read
     extractedCbIdxPlus1_ = 0;    // Reset extracted CB for new read
     extractedUmi24_ = 0;          // Reset extracted UMI for new read
     extractedCbSeq_.clear();      // Reset CB sequence for new read
+    hasYAlignment_ = false;       // Reset Y-alignment flag for new read
 
     for (uint ii=0; ii<P.readNmates; ii++) {//not readNends: this is alignment
         maxScoreMate[ii]=0;

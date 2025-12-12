@@ -1,0 +1,156 @@
+STAR version=2.7.11b
+STAR compilation time,server,dir=2025-12-12T09:24:57+00:00 :/mnt/pikachu/STAR-Flex/source
+STAR git: On branch ychr ; commit 2e6ec51fa338cc23d3d3fb13eb89d203c670dbd6 ; diff files: Log.out source/BAMbinSortByCoordinate.cpp source/BAMbinSortUnmapped.cpp source/BAMoutput.cpp source/BAMoutput.h source/ChimericAlign_chimericBAMoutput.cpp source/Genome.cpp source/Genome.h source/InOutStreams.cpp source/InOutStreams.h source/Parameters.cpp source/Parameters.h source/ReadAlign.cpp source/ReadAlign.h source/ReadAlign_outputAlignments.cpp source/STAR.cpp source/bamSortByCoordinate.cpp source/libflex/libflex.a source/parametersDefault source/parametersDefault.xxd source/samHeaders.cpp 
+##### Command Line:
+/mnt/pikachu/STAR-Flex/tests/../source/STAR --runThreadN 2 --genomeDir /mnt/pikachu/STAR-Flex/tests/ychrom_test/ref/star_index --readFilesIn /mnt/pikachu/STAR-Flex/tests/ychrom_test/fastq/R1.fastq /mnt/pikachu/STAR-Flex/tests/ychrom_test/fastq/R2.fastq --outSAMtype BAM SortedByCoordinate --emitNoYBAM yes --outFileNamePrefix /mnt/pikachu/STAR-Flex/tests/ychrom_test/output/ --outTmpDir /mnt/pikachu/STAR-Flex/tests/ychrom_test/tmp --alignIntronMax 1 --alignMatesGapMax 1000
+##### Initial USER parameters from Command Line:
+outFileNamePrefix                 /mnt/pikachu/STAR-Flex/tests/ychrom_test/output/
+outTmpDir                         /mnt/pikachu/STAR-Flex/tests/ychrom_test/tmp
+###### All USER parameters from Command Line:
+runThreadN                    2     ~RE-DEFINED
+genomeDir                     /mnt/pikachu/STAR-Flex/tests/ychrom_test/ref/star_index     ~RE-DEFINED
+readFilesIn                   /mnt/pikachu/STAR-Flex/tests/ychrom_test/fastq/R1.fastq   /mnt/pikachu/STAR-Flex/tests/ychrom_test/fastq/R2.fastq        ~RE-DEFINED
+outSAMtype                    BAM   SortedByCoordinate        ~RE-DEFINED
+emitNoYBAM                    yes     ~RE-DEFINED
+outFileNamePrefix             /mnt/pikachu/STAR-Flex/tests/ychrom_test/output/     ~RE-DEFINED
+outTmpDir                     /mnt/pikachu/STAR-Flex/tests/ychrom_test/tmp     ~RE-DEFINED
+alignIntronMax                1     ~RE-DEFINED
+alignMatesGapMax              1000     ~RE-DEFINED
+##### Finished reading parameters from all sources
+
+##### Final user re-defined parameters-----------------:
+runThreadN                        2
+genomeDir                         /mnt/pikachu/STAR-Flex/tests/ychrom_test/ref/star_index
+readFilesIn                       /mnt/pikachu/STAR-Flex/tests/ychrom_test/fastq/R1.fastq   /mnt/pikachu/STAR-Flex/tests/ychrom_test/fastq/R2.fastq   
+outFileNamePrefix                 /mnt/pikachu/STAR-Flex/tests/ychrom_test/output/
+outTmpDir                         /mnt/pikachu/STAR-Flex/tests/ychrom_test/tmp
+outSAMtype                        BAM   SortedByCoordinate   
+emitNoYBAM                        yes
+alignIntronMax                    1
+alignMatesGapMax                  1000
+
+-------------------------------
+##### Final effective command line:
+/mnt/pikachu/STAR-Flex/tests/../source/STAR   --runThreadN 2   --genomeDir /mnt/pikachu/STAR-Flex/tests/ychrom_test/ref/star_index   --readFilesIn /mnt/pikachu/STAR-Flex/tests/ychrom_test/fastq/R1.fastq   /mnt/pikachu/STAR-Flex/tests/ychrom_test/fastq/R2.fastq      --outFileNamePrefix /mnt/pikachu/STAR-Flex/tests/ychrom_test/output/   --outTmpDir /mnt/pikachu/STAR-Flex/tests/ychrom_test/tmp   --outSAMtype BAM   SortedByCoordinate      --emitNoYBAM yes   --alignIntronMax 1   --alignMatesGapMax 1000
+----------------------------------------
+
+Number of fastq files for each mate = 1
+ParametersSolo: --soloCellFilterType CellRanger2.2 filtering parameters:  3000 0.99 10
+WARNING: --limitBAMsortRAM=0, will use genome size as RAM limit for BAM sorting
+Finished loading and checking parameters
+Reading genome generation parameters:
+### /mnt/pikachu/STAR-Flex/tests/../source/STAR   --runMode genomeGenerate      --genomeDir /mnt/pikachu/STAR-Flex/tests/ychrom_test/ref/star_index   --genomeFastaFiles /mnt/pikachu/STAR-Flex/tests/ychrom_test/ref/chr1.fa   /mnt/pikachu/STAR-Flex/tests/ychrom_test/ref/chrY.fa      --genomeSAindexNbases 4   --sjdbGTFfile /mnt/pikachu/STAR-Flex/tests/ychrom_test/ref/genes.gtf   --sjdbOverhang 19
+### GstrandBit=32
+versionGenome                 2.7.4a     ~RE-DEFINED
+genomeType                    Full     ~RE-DEFINED
+genomeFastaFiles              /mnt/pikachu/STAR-Flex/tests/ychrom_test/ref/chr1.fa   /mnt/pikachu/STAR-Flex/tests/ychrom_test/ref/chrY.fa        ~RE-DEFINED
+genomeSAindexNbases           4     ~RE-DEFINED
+genomeChrBinNbits             18     ~RE-DEFINED
+genomeSAsparseD               1     ~RE-DEFINED
+genomeTransformType           None     ~RE-DEFINED
+genomeTransformVCF            -     ~RE-DEFINED
+sjdbOverhang                  19     ~RE-DEFINED
+sjdbFileChrStartEnd           -        ~RE-DEFINED
+sjdbGTFfile                   /mnt/pikachu/STAR-Flex/tests/ychrom_test/ref/genes.gtf     ~RE-DEFINED
+sjdbGTFchrPrefix              -     ~RE-DEFINED
+sjdbGTFfeatureExon            exon     ~RE-DEFINED
+sjdbGTFtagExonParentTranscripttranscript_id     ~RE-DEFINED
+sjdbGTFtagExonParentGene      gene_id     ~RE-DEFINED
+sjdbInsertSave                Basic     ~RE-DEFINED
+genomeFileSizes               524288   2643        ~RE-DEFINED
+Genome version is compatible with current STAR
+Number of real (reference) chromosomes= 2
+1	chr1	160	0
+2	chrY	160	262144
+Y-chromosome contigs detected: chrY (total: 1)
+--sjdbOverhang = 19 taken from the generated genome
+Started loading the genome: Fri Dec 12 09:32:52 2025
+
+Genome: size given as a parameter = 524288
+SA: size given as a parameter = 2643
+SAindex: size given as a parameter = 1
+Read from SAindex: pGe.gSAindexNbases=4  nSAi=340
+nGenome=524288;  nSAbyte=2643
+GstrandBit=32   SA number of indices=640
+Shared memory is not used for genomes. Allocated a private copy of the genome.
+Genome file size: 524288 bytes; state: good=1 eof=0 fail=0 bad=0
+Loading Genome ... done! state: good=1 eof=0 fail=0 bad=0; loaded 524288 bytes
+SA file size: 2643 bytes; state: good=1 eof=0 fail=0 bad=0
+Loading SA ... done! state: good=1 eof=0 fail=0 bad=0; loaded 2643 bytes
+Loading SAindex ... done: 1539 bytes
+Finished loading the genome: Fri Dec 12 09:32:52 2025
+
+To accommodate alignIntronMax=1 redefined winBinNbits=8
+To accommodate alignIntronMax=1 and alignMatesGapMax=1000, redefined winFlankNbins=4 and winAnchorDistNbins=8
+Created thread # 1
+Thread #0 end of input stream, nextChar=-1
+CbCorrector NOT used: cbCorrector=null, cbSeq.empty()=1, cbSeq=(empty)
+ReadAlign::outputAlignments: extractedCbIdxPlus1_=0, extractedUmi24_=0x0, cbMatch=0, umiSeq.length()=0
+ReadAlign::outputAlignments: SKIP detection - sampleDetReady_=0, readNmates=Match=0, umiSeq.len2, readLengthOriginal[0]=50
+CbCorrector NOT used: cbCorrector=null, cbSeq.empty()=1, cbSeq=(empty)
+ReadAlign::outputAlignments: extractedCbIdxPlus1_=0, extractedUmi24_=0x0, cbMatch=0, umiSeq.length()=0
+ReadAlign::outputAlignments: SKIP detection - sampleDetReady_=0, readNmates=2, readLengthOriginal[0]=50
+CbCorrector NOT used: cbCorrector=null, cbSeq.empty()=1, cbSeq=(empty)
+ReadAlign::outputAlignments: extractedCbIdxPlus1_=0, extractedUmi24_=0x0, cbMatch=0, umiSeq.length()=0
+ReadAlign::outputAlignments: SKIP detection - sampleDetReady_=0, readNmates=2, readLengthOriginal[0]=50
+BAM sorting: 0 mapped reads
+BAM sorting bins genomic start loci:
+1	23896	3504746215
+2	23896	3504746215
+3	23896	3504746215
+4	23896	3504746215
+5	23896	3504746215
+6	23896	3504746215
+7	23896	3504746215
+8	23896	3504746215
+9	23896	3504746215
+10	23896	3504746215
+11	23896	3504746215
+12	23896	3504746215
+13	23896	3504746215
+14	23896	3504746215
+15	23896	3504746215
+16	23896	3504746215
+17	23896	3504746215
+18	23896	3504746215
+19	23896	3504746215
+20	23896	3504746215
+21	23896	3504746215
+22	23896	3504746215
+23	23896	3504746215
+24	23896	3504746215
+25	23896	3504746215
+26	23896	3504746215
+27	23896	3504746215
+28	23896	3504746215
+29	23896	3504746215
+30	23896	3504746215
+31	23896	3504746215
+32	23896	3504746215
+33	23896	3504746215
+34	23896	3504746215
+35	23896	3504746215
+36	23896	3504746215
+37	23896	3504746215
+38	23896	3504746215
+39	23896	3504746215
+40	23896	3504746215
+41	23896	3504746215
+42	23896	3504746215
+43	23896	3504746215
+44	23896	3504746215
+45	23896	3504746215
+46	23896	3504746215
+47	23896	3504746215
+48	23896	3504746215
+Completed: thread #0
+Joined thread # 1
+Dec 12 09:32:52 ..... finished mapping
+RAM after mapping:
+VmPeak:	  458504 kB; VmSize:	  392968 kB; VmHWM:	  210688 kB; VmRSS:	  210688 kB; 
+RAM after freeing genome index memory:
+VmPeak:	  458504 kB; VmSize:	  392452 kB; VmHWM:	  210688 kB; VmRSS:	  210268 kB; 
+Dec 12 09:32:52 ..... started sorting BAM
+Max memory needed for sorting = 0
+WARNING: nothing to sort - no output alignments
+ALL DONE!

@@ -124,6 +124,17 @@ BAMoutput::BAMoutput (BGZF *bgzfBAMin, Parameters &Pin) : P(Pin){//allocate BAM 
     sampleDet_ = nullptr;
     sampleDetReady_ = false;
     
+    // Initialize Y-chromosome split handles
+    if (P.emitNoYBAMyes) {
+        bgzfBAM_Y = P.inOut->outBAMfileY;
+        bgzfBAM_noY = P.inOut->outBAMfileNoY;
+        suppressPrimary_ = !P.keepBAMyes;  // suppress primary unless --keepBAM
+    } else {
+        bgzfBAM_Y = nullptr;
+        bgzfBAM_noY = nullptr;
+        suppressPrimary_ = false;
+    }
+    
     if (!P.pSolo.sampleWhitelistPath.empty() && P.pSolo.sampleWhitelistPath != "-" &&
         !P.pSolo.sampleProbesPath.empty() && P.pSolo.sampleProbesPath != "-") {
         sampleDet_ = new SampleDetector(P.pSolo);
@@ -173,7 +184,7 @@ BAMoutput::~BAMoutput() {
 }
 
 void BAMoutput::unsortedOneAlign (char *bamIn, uint bamSize, uint bamSize2, uint64_t iReadAll, uint8_t sampleByte,
-                                  uint32_t cbIdxPlus1, uint32_t umi24, const std::string &cbSeq) {
+                                  uint32_t cbIdxPlus1, uint32_t umi24, const std::string &cbSeq, bool hasY) {
     if (bamSize==0) return; //no output, could happen if one of the mates is not mapped
 
     if (binBytes1+bamSize2 > bamArraySize) {//write out this buffer
@@ -355,6 +366,7 @@ void BAMoutput::unsortedOneAlign (char *bamIn, uint bamSize, uint bamSize2, uint
     // Bit 5: Reserved for future use
     
     meta.dropFlags = flags;
+    meta.hasY = hasY;  // Store Y flag for routing
     
     pendingSoloMeta_.push_back(meta);
     
@@ -385,8 +397,33 @@ void BAMoutput::flushPendingToLedgerAndDisk() {
     
     // Note: SoloTagLedger append removed - ledger not used in inline flex path
     
-    // Write BAM buffer to BGZF stream
-    bgzf_write(bgzfBAM, bamArray, binBytes1);
+    // Write BAM buffer to BGZF stream(s)
+    if (P.emitNoYBAMyes && bgzfBAM_Y != nullptr && bgzfBAM_noY != nullptr) {
+        // Y-split mode: route records individually based on hasY flag
+        uint64_t offset = 0;
+        size_t metaIdx = 0;
+        while (offset < binBytes1 && metaIdx < pendingSoloMeta_.size()) {
+            // Extract BAM record size (first 4 bytes)
+            if (offset + 4 > binBytes1) break;
+            uint32_t recSize = *((uint32_t*)(bamArray + offset));
+            if (offset + recSize + 4 > binBytes1) break;  // Safety check
+            
+            // Route to appropriate handle based on hasY flag
+            BGZF *targetHandle = pendingSoloMeta_[metaIdx].hasY ? bgzfBAM_Y : bgzfBAM_noY;
+            bgzf_write(targetHandle, bamArray + offset, recSize + 4);
+            
+            // Also write to primary if not suppressed
+            if (!suppressPrimary_ && bgzfBAM != nullptr) {
+                bgzf_write(bgzfBAM, bamArray + offset, recSize + 4);
+            }
+            
+            offset += recSize + 4;
+            metaIdx++;
+        }
+    } else {
+        // Normal mode: write entire buffer to primary BAM
+        bgzf_write(bgzfBAM, bamArray, binBytes1);
+    }
     
     if (g_threadChunks.threadBool) pthread_mutex_unlock(&g_threadChunks.mutexOutSAM);
     
@@ -422,7 +459,7 @@ void BAMoutput::unsortedFlush () {//flush all alignments
 #endif
 };
 
-void BAMoutput::coordOneAlign (char *bamIn, uint bamSize, uint iRead) {
+void BAMoutput::coordOneAlign (char *bamIn, uint bamSize, uint iRead, bool hasY) {
 
     uint32 *bamIn32;
     uint alignG;
@@ -442,23 +479,29 @@ void BAMoutput::coordOneAlign (char *bamIn, uint bamSize, uint iRead) {
     };
 
     //write buffer is filled
-    if (binBytes[iBin]+bamSize+sizeof(uint) > ( (iBin>0 || nBins>1) ? binSize : binSize1) ) {//write out this buffer
+    if (binBytes[iBin]+bamSize+sizeof(uint64) > ( (iBin>0 || nBins>1) ? binSize : binSize1) ) {//write out this buffer
         if ( nBins>1 || iBin==(P.outBAMcoordNbins-1) ) {//normal writing, bins have already been determined
             binStream[iBin]->write(binStart[iBin],binBytes[iBin]);
             binBytes[iBin]=0;//rewind the buffer
         } else {//the first chunk of reads was written in one bin, need to determine bin sizes, and re-distribute reads into bins
             coordBins();
-            coordOneAlign (bamIn, bamSize, iRead);//record the current align into the new bins
+            coordOneAlign (bamIn, bamSize, iRead, hasY);//record the current align into the new bins
             return;
         };
     };
 
+    // Encode Y flag in bit 63 of iRead (convert to uint64)
+    uint64 iReadWithY = static_cast<uint64>(iRead);
+    if (hasY) {
+        iReadWithY |= (1ULL << 63);  // set Y bit
+    }
+
     //record this alignment in its bin
     memcpy(binStart[iBin]+binBytes[iBin], bamIn, bamSize);
     binBytes[iBin] += bamSize;
-    memcpy(binStart[iBin]+binBytes[iBin], &iRead, sizeof(uint));
-    binBytes[iBin] += sizeof(uint);
-    binTotalBytes[iBin] += bamSize+sizeof(uint);
+    memcpy(binStart[iBin]+binBytes[iBin], &iReadWithY, sizeof(uint64));
+    binBytes[iBin] += sizeof(uint64);
+    binTotalBytes[iBin] += bamSize+sizeof(uint64);
     binTotalN[iBin] += 1;
     return;
 };
@@ -470,13 +513,13 @@ void BAMoutput::coordBins() {//define genomic starts for bins
     if (P.runThreadN>1) pthread_mutex_lock(&g_threadChunks.mutexBAMsortBins);
     if (P.outBAMsortingBinStart[0]!=0) {//it's set to 0 only after the bin sizes are determined
         //extract coordinates and sort
-        uint *startPos = new uint [binTotalN[0]+1];//array of aligns start positions
+        uint64 *startPos = new uint64 [binTotalN[0]+1];//array of aligns start positions
         for (uint ib=0,ia=0;ia<binTotalN[0];ia++) {
             uint32 *bamIn32=(uint32*) (binStart[0]+ib);
-            startPos[ia]  =( ((uint) bamIn32[1]) << 32) | ( (uint)bamIn32[2] );
-            ib+=bamIn32[0]+sizeof(uint32)+sizeof(uint);//note that size of the BAM record does not include the size record itself
+            startPos[ia]  =( ((uint64) bamIn32[1]) << 32) | ( (uint64)bamIn32[2] );
+            ib+=bamIn32[0]+sizeof(uint32)+sizeof(uint64);//note: iRead is now uint64 with Y-bit
         };
-        qsort((void*) startPos, binTotalN[0], sizeof(uint), funCompareUint1);
+        qsort((void*) startPos, binTotalN[0], sizeof(uint64), funCompareUint1);
 
         //determine genomic starts of the bins
         P.inOut->logMain << "BAM sorting: "<<binTotalN[0]<< " mapped reads\n";
@@ -484,7 +527,7 @@ void BAMoutput::coordBins() {//define genomic starts for bins
 
         P.outBAMsortingBinStart[0]=0;
         for (uint32 ib=1; ib<(nBins-1); ib++) {
-            P.outBAMsortingBinStart[ib]=startPos[binTotalN[0]/(nBins-1)*ib];
+            P.outBAMsortingBinStart[ib]=static_cast<uint64>(startPos[binTotalN[0]/(nBins-1)*ib]);
             P.inOut->logMain << ib <<"\t"<< (P.outBAMsortingBinStart[ib]>>32) << "\t" << ((P.outBAMsortingBinStart[ib]<<32)>>32) <<endl;
             //how to deal with equal boundaries???
         };
@@ -506,8 +549,11 @@ void BAMoutput::coordBins() {//define genomic starts for bins
     for (uint ib=0,ia=0;ia<binTotalNold;ia++) {
         uint32 *bamIn32=(uint32*) (binStartOld+ib);
         uint ib1=ib+bamIn32[0]+sizeof(uint32);//note that size of the BAM record does not include the size record itself
-        coordOneAlign (binStartOld+ib, (uint) (bamIn32[0]+sizeof(uint32)), *((uint*) (binStartOld+ib1)) );
-        ib=ib1+sizeof(uint);//iRead at the end of the BAM record
+        uint64 iReadWithY = *((uint64*) (binStartOld+ib1));  // Read as uint64 (includes Y-bit)
+        bool hasY = (iReadWithY >> 63) & 1;  // Extract Y-bit
+        uint iRead = static_cast<uint>(iReadWithY & 0x7FFFFFFF);  // Mask out Y-bit for original iRead
+        coordOneAlign (binStartOld+ib, (uint) (bamIn32[0]+sizeof(uint32)), iRead, hasY);
+        ib=ib1+sizeof(uint64);//iReadWithY at the end of the BAM record (now 8 bytes)
     };
     delete [] binStartOld;
     return;

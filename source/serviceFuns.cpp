@@ -131,6 +131,29 @@ inline int funCompareArraysShift (const void *a, const void *b) {
 
 };
 
+// Comparison function for sorting that ignores Y-bit (bit 63) in iRead field
+inline int funCompareArraysIgnoreYBit (const void *a, const void *b) {
+    uint64* va = (uint64*) a;
+    uint64* vb = (uint64*) b;
+    
+    // Compare coordinate (field 0)
+    if (va[0] > vb[0]) return 1;
+    if (va[0] < vb[0]) return -1;
+    
+    // Compare iRead ignoring Y-bit (mask out bit 63)
+    // iRead is stored in field 1, Y-bit is bit 63 of the full uint64
+    uint64 iReadA = va[1] & 0x7FFFFFFFFFFFFFFFULL;  // mask out Y-bit
+    uint64 iReadB = vb[1] & 0x7FFFFFFFFFFFFFFFULL;  // mask out Y-bit
+    if (iReadA > iReadB) return 1;
+    if (iReadA < iReadB) return -1;
+    
+    // Compare offset (field 2)
+    if (va[2] > vb[2]) return 1;
+    if (va[2] < vb[2]) return -1;
+    
+    return 0;
+};
+
 template <class Type>
 inline int funCompareTypeSecondFirst (const void *a, const void *b) {
     Type va= *( ((Type*) a) + 1 );

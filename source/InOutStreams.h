@@ -9,6 +9,7 @@ class InOutStreams {
     ostream *logStdOut, *outSAM;
     ofstream logStdOutFile, outSAMfile;
     BGZF *outBAMfileUnsorted, *outBAMfileCoord, *outQuantBAMfile;
+    BGZF *outBAMfileY, *outBAMfileNoY;  // Y-chromosome split BAM handles
     
     //solo tmp file for two-pass unsorted CB/UB injection
     ofstream outBAMfileUnsortedSoloTmp;
