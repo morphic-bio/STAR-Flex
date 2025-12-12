@@ -60,66 +60,6 @@ void ReadAlign::outputAlignments() {
             
             ReadAlign::alignedAnnotation();
         };
-        
-        // Y-chromosome alignment decision: check if any alignment touches Y
-        // Mode-aware logic:
-        // - Single-cell/Flex: R1/R2 are NOT mates, only check current read's alignments
-        // - Bulk paired-end: Check both read's alignments AND mate's alignments (via mtid in BAM output)
-        // - Bulk single-end: Only check read's own alignments
-        hasYAlignment_ = false;
-        if (P.emitNoYBAMyes) {
-            // Determine if we're in single-cell/Flex mode (no mates) vs bulk paired-end (has mates)
-            bool isSingleCellOrFlex = (P.pSolo.type != 0) || P.pSolo.flexMode;
-            bool hasMates = (P.readNmates == 2) && !isSingleCellOrFlex;
-            
-            // Use transformed genome alignments if available, otherwise use original
-            uint64 nTrCheck = nTr;
-            Transcript **trCheck = trMult;
-            if (P.pGe.transform.outSAM && (!P.twoPass.yes || P.twoPass.pass2)) {
-                nTrCheck = alignsGenOut.alN;
-                trCheck = alignsGenOut.alMult;
-            }
-            
-            if (unmapType < 0) {
-                // Mapped reads: check ALL transcripts (primary + secondary/supplementary)
-                // Each transcript's Chr represents where that alignment maps
-                // For single-cell/Flex: only current read's alignments (R1 or R2 processed separately)
-                // For bulk paired-end: alignments for both mates are in trMult, check all
-                for (uint iTr = 0; iTr < nTrCheck && !hasYAlignment_; iTr++) {
-                    if (trCheck[iTr] == nullptr) continue;
-                    // Check if this transcript aligns to Y chromosome
-                    if (mapGen.yTids.count(trCheck[iTr]->Chr)) {
-                        hasYAlignment_ = true;
-                        break;
-                    }
-                }
-                
-                // For bulk paired-end: also check mate's reference (mtid) if available
-                // Note: mtid is set during BAM writing, so we check it there if needed
-                // For now, checking all transcripts should cover both mates in paired-end mode
-            } else {
-                // Unmapped reads: check if mate is mapped to Y (only for bulk paired-end)
-                if (hasMates) {
-                    // Bulk paired-end: check all transcripts to see if mate maps to Y
-                    for (uint iTr = 0; iTr < nTrCheck && !hasYAlignment_; iTr++) {
-                        if (trCheck[iTr] == nullptr) continue;
-                        // Check if this transcript (for the mapped mate) is on Y
-                        if (mapGen.yTids.count(trCheck[iTr]->Chr)) {
-                            hasYAlignment_ = true;
-                            break;
-                        }
-                    }
-                    // Also check trBest as fallback (best alignment might be for the mate)
-                    if (!hasYAlignment_ && trBest != nullptr) {
-                        if (mapGen.yTids.count(trBest->Chr)) {
-                            hasYAlignment_ = true;
-                        }
-                    }
-                }
-                // For single-cell/Flex unmapped reads or single-end unmapped: 
-                // default hasYAlignment_ = false -> route to noY
-            }
-        }
 
         //the operations below are both for mapped and unmapped reads
         soloRead->readBar->getCBandUMI(Read0, Qual0, readLengthOriginal, readNameExtra[0], readFilesIndex, readName);
@@ -470,8 +410,7 @@ void ReadAlign::writeSAM(uint64 nTrOutSAM, Transcript **trOutSAM, Transcript *tr
                             (imate==0 ? detectedSampleByte_ : 0xFFu),
                             (imate==0 ? extractedCbIdxPlus1_ : 0u),
                             (imate==0 ? extractedUmi24_ : 0u),
-                            (imate==0 && extractedCbIdxPlus1_ == 0 ? extractedCbSeq_ : std::string()),
-                            hasYAlignment_);
+                            (imate==0 && extractedCbIdxPlus1_ == 0 ? extractedCbSeq_ : std::string()));
                     };
                     if (P.outSAMunmapped.keepPairs && P.readNmates>1 && ( !mateMapped1[0] || !mateMapped1[1] ) ) {//keep pairs && paired reads && one of the mates not mapped in this transcript //not readNends: this is alignment
                         alignBAM(*trOutSAM[iTr], 0, 0, mapGen.chrStart[trOutSAM[iTr]->Chr], (uint) -1, (uint) -1, 0, 4, mateMapped1, P.outSAMattrOrder, outBAMoneAlign, outBAMoneAlignNbytes);
@@ -482,15 +421,14 @@ void ReadAlign::writeSAM(uint64 nTrOutSAM, Transcript **trOutSAM, Transcript *tr
                                 (imate>0 || iTr>0) ? 0 : (outBAMoneAlignNbytes[0]+outBAMoneAlignNbytes[1])*2*nTrOutWrite,
                                 iReadAll,
                                 (imate==0 ? detectedSampleByte_ : 0xFFu),
-                                0u, 0u, std::string(), // CB/UMI not available for unmapped pairs
-                                hasYAlignment_);
+                                0u, 0u, std::string()); // CB/UMI not available for unmapped pairs
                         };
                     };
                 };
 
                 if (P.outBAMcoord) {//coordinate sorted
                     for (uint imate=0; imate<P.readNmates; imate++) {//output each mate //not readNends: this is alignment
-                        outBAMcoord->coordOneAlign(outBAMoneAlign[imate], outBAMoneAlignNbytes[imate], (iReadAll<<32) | (iTr<<8) | trOutSAM[iTr]->exons[0][EX_iFrag], hasYAlignment_);
+                        outBAMcoord->coordOneAlign(outBAMoneAlign[imate], outBAMoneAlignNbytes[imate], (iReadAll<<32) | (iTr<<8) | trOutSAM[iTr]->exons[0][EX_iFrag] );
                     };
                 };
             };
@@ -520,11 +458,10 @@ void ReadAlign::writeSAM(uint64 nTrOutSAM, Transcript **trOutSAM, Transcript *tr
                                                           imate>0 ? 0 : outBAMoneAlignNbytes[0]+outBAMoneAlignNbytes[1],
                                                           iReadAll,
                                                           (imate==0 ? detectedSampleByte_ : 0xFFu),
-                                                          0u, 0u, std::string(), // CB/UMI not available for unmapped pairs
-                                                          hasYAlignment_);
+                                                          0u, 0u, std::string()); // CB/UMI not available for unmapped pairs
                     };
                     if (P.outBAMcoord) {//KeepPairs option does not affect for sorted BAM since we do not want multiple entries for the same unmapped read
-                        outBAMcoord->coordOneAlign(outBAMoneAlign[imate], outBAMoneAlignNbytes[imate], iReadAll<<32, hasYAlignment_);
+                        outBAMcoord->coordOneAlign(outBAMoneAlign[imate], outBAMoneAlignNbytes[imate], iReadAll<<32);
                     };
                 };
             };
@@ -544,8 +481,7 @@ void ReadAlign::writeSAM(uint64 nTrOutSAM, Transcript **trOutSAM, Transcript *tr
                                                       (imate==0 ? detectedSampleByte_ : 0xFFu),
                                                       (imate==0 ? extractedCbIdxPlus1_ : 0u),
                                                       (imate==0 ? extractedUmi24_ : 0u),
-                                                      (imate==0 && extractedCbIdxPlus1_ == 0 ? extractedCbSeq_ : std::string()),
-                                                      hasYAlignment_);
+                                                      (imate==0 && extractedCbIdxPlus1_ == 0 ? extractedCbSeq_ : std::string()));
                 };
                 if (P.quant.trSAM.bamYes) {
                     outBAMquant->unsortedOneAlign(outBAMoneAlign[imate],
@@ -558,7 +494,7 @@ void ReadAlign::writeSAM(uint64 nTrOutSAM, Transcript **trOutSAM, Transcript *tr
                                                   (imate==0 && extractedCbIdxPlus1_ == 0 ? extractedCbSeq_ : std::string()));
                 };
                 if (P.outBAMcoord) {
-                    outBAMcoord->coordOneAlign(outBAMoneAlign[imate], outBAMoneAlignNbytes[imate], iReadAll<<32, hasYAlignment_);
+                    outBAMcoord->coordOneAlign(outBAMoneAlign[imate], outBAMoneAlignNbytes[imate], iReadAll<<32);
                 };
             };
         };

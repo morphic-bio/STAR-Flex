@@ -305,10 +305,6 @@ int main(int argInN, char *argIn[])
     {
         bgzf_flush(P.inOut->outBAMfileUnsorted);
         bgzf_close(P.inOut->outBAMfileUnsorted);
-        if (P.emitNoYBAMyes) {
-            if (P.inOut->outBAMfileY != NULL) bgzf_close(P.inOut->outBAMfileY);
-            if (P.inOut->outBAMfileNoY != NULL) bgzf_close(P.inOut->outBAMfileNoY);
-        }
     };
     if (P.inOut->outBAMfileUnsortedSoloTmp.is_open())
     {

@@ -1,0 +1,25 @@
+STAR version=2.7.11b
+STAR compilation time,server,dir=2025-12-09T21:00:15+00:00 :/mnt/pikachu/STAR-Flex/source
+STAR git: On branch master ; commit 69d8191b9575c818fd911f8f277d9aabd6156959 ; diff files: source/Log.out source/ParametersSolo.cpp source/libflex/libflex.a tests/flex_smoke/run_flex_smoke.sh 
+##### Command Line:
+/mnt/pikachu/STAR-Flex/source/STAR --genomeDir /nonexistent --soloSampleProbeOffset 68
+##### Initial USER parameters from Command Line:
+###### All USER parameters from Command Line:
+genomeDir                     /nonexistent     ~RE-DEFINED
+soloSampleProbeOffset         68     ~RE-DEFINED
+##### Finished reading parameters from all sources
+
+##### Final user re-defined parameters-----------------:
+genomeDir                         /nonexistent
+soloSampleProbeOffset             68
+
+-------------------------------
+##### Final effective command line:
+/mnt/pikachu/STAR-Flex/source/STAR   --genomeDir /nonexistent   --soloSampleProbeOffset 68
+----------------------------------------
+
+Number of fastq files for each mate = 1
+
+EXITING because of fatal input ERROR: could not open readFilesIn=Read1
+
+Dec 09 21:00:26 ...... FATAL ERROR, exiting

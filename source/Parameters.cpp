@@ -14,7 +14,6 @@
 //for mkfifo
 #include <sys/stat.h>
 #include <cstdlib>
-#include <algorithm>
 
 #define PAR_NAME_PRINT_WIDTH 30
 
@@ -119,10 +118,6 @@ Parameters::Parameters() {//initalize parameters info
     parArray.push_back(new ParameterInfoScalar <int>        (-1, -1, "outBAMcompression", &outBAMcompression));
     parArray.push_back(new ParameterInfoScalar <int>        (-1, -1, "outBAMsortingThreadN", &outBAMsortingThreadN));
     parArray.push_back(new ParameterInfoScalar <uint32>        (-1, -1, "outBAMsortingBinsN", &outBAMsortingBinsN));
-    parArray.push_back(new ParameterInfoScalar <string>     (-1, -1, "emitNoYBAM", &emitNoYBAM));
-    parArray.push_back(new ParameterInfoScalar <string>     (-1, -1, "keepBAM", &keepBAM));
-    parArray.push_back(new ParameterInfoScalar <string>     (-1, -1, "noYOutput", &noYOutput));
-    parArray.push_back(new ParameterInfoScalar <string>     (-1, -1, "YOutput", &YOutput));
     parArray.push_back(new ParameterInfoVector <string>     (-1, -1, "outSAMfilter", &outSAMfilter.mode));
     parArray.push_back(new ParameterInfoScalar <uint>     (-1, -1, "outSAMmultNmax", &outSAMmultNmax));
     parArray.push_back(new ParameterInfoScalar <uint>     (-1, -1, "outSAMattrIHstart", &outSAMattrIHstart));
@@ -750,86 +745,6 @@ void Parameters::inputParameters (int argInN, char* argIn[]) {//input parameters
                 outBAMsortTmpDir=outFileTmp+"/BAMsort/";
                 mkdir(outBAMsortTmpDir.c_str(),runDirPerm);
             };
-            
-            // Parse Y-chromosome BAM split parameters
-            {
-                string t = emitNoYBAM; std::transform(t.begin(), t.end(), t.begin(), ::tolower);
-                if (t == "yes") emitNoYBAMyes = true;
-                else if (t == "no" || t.empty()) emitNoYBAMyes = false;
-                else {
-                    ostringstream errOut;
-                    errOut << "EXITING because of fatal PARAMETERS error: unrecognized option in --emitNoYBAM=" << emitNoYBAM << "\n";
-                    errOut << "SOLUTION: use allowed option: yes OR no\n";
-                    exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
-                }
-            }
-            {
-                string t = keepBAM; std::transform(t.begin(), t.end(), t.begin(), ::tolower);
-                if (t == "yes") keepBAMyes = true;
-                else if (t == "no" || t.empty()) keepBAMyes = false;
-                else {
-                    ostringstream errOut;
-                    errOut << "EXITING because of fatal PARAMETERS error: unrecognized option in --keepBAM=" << keepBAM << "\n";
-                    errOut << "SOLUTION: use allowed option: yes OR no\n";
-                    exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
-                }
-            }
-            
-            // Derive Y/noY BAM output paths
-            if (emitNoYBAMyes) {
-                // Handle user-specified override paths
-                if (!noYOutput.empty() && noYOutput != "-") {
-                    outBAMfileNoYName = noYOutput;
-                } else if (!YOutput.empty() && YOutput != "-") {
-                    // If only YOutput specified, derive noY from it
-                    size_t pos = YOutput.find("_Y.bam");
-                    if (pos != string::npos) {
-                        outBAMfileNoYName = YOutput.substr(0, pos) + "_noY.bam";
-                    } else {
-                        outBAMfileNoYName = outFileNamePrefix + "Aligned.out_noY.bam";
-                    }
-                } else {
-                    // Default: derive from primary BAM name
-                    if (outBAMunsorted) {
-                        if (outBAMfileUnsortedName == "-" || outBAMfileUnsortedName == "/dev/stdout") {
-                            outBAMfileNoYName = "star_output_noY.bam";
-                            outBAMfileYName = "star_output_Y.bam";
-                        } else {
-                            size_t pos = outBAMfileUnsortedName.find(".bam");
-                            if (pos != string::npos) {
-                                outBAMfileNoYName = outBAMfileUnsortedName.substr(0, pos) + "_noY.bam";
-                                outBAMfileYName = outBAMfileUnsortedName.substr(0, pos) + "_Y.bam";
-                            } else {
-                                outBAMfileNoYName = outBAMfileUnsortedName + "_noY.bam";
-                                outBAMfileYName = outBAMfileUnsortedName + "_Y.bam";
-                            }
-                        }
-                    } else if (outBAMcoord) {
-                        if (outBAMfileCoordName == "-" || outBAMfileCoordName == "/dev/stdout") {
-                            outBAMfileNoYName = "star_output_noY.bam";
-                            outBAMfileYName = "star_output_Y.bam";
-                        } else {
-                            size_t pos = outBAMfileCoordName.find(".bam");
-                            if (pos != string::npos) {
-                                outBAMfileNoYName = outBAMfileCoordName.substr(0, pos) + "_noY.bam";
-                                outBAMfileYName = outBAMfileCoordName.substr(0, pos) + "_Y.bam";
-                            } else {
-                                outBAMfileNoYName = outBAMfileCoordName + "_noY.bam";
-                                outBAMfileYName = outBAMfileCoordName + "_Y.bam";
-                            }
-                        }
-                    } else {
-                        // Fallback if neither unsorted nor coord is set
-                        outBAMfileNoYName = outFileNamePrefix + "Aligned.out_noY.bam";
-                        outBAMfileYName = outFileNamePrefix + "Aligned.out_Y.bam";
-                    }
-                }
-                
-                // Handle YOutput override
-                if (!YOutput.empty() && YOutput != "-") {
-                    outBAMfileYName = YOutput;
-                }
-            }
         } else if (outSAMtype.at(0)=="SAM") {
             if (outSAMtype.size()>1)
             {
@@ -1182,28 +1097,6 @@ void Parameters::inputParameters (int argInN, char* argIn[]) {//input parameters
                 errOut << "EXITING because of fatal OUTPUT ERROR: could not create unsorted BAM file: " << outBAMfileUnsortedName << "\n";
                 errOut << "SOLUTION: check the path and permissions\n";
                 exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
-            }
-            
-            // Open Y/noY BAM handles if Y-split is enabled
-            if (emitNoYBAMyes) {
-                inOut->outBAMfileY = bgzf_open(outBAMfileYName.c_str(),("w"+to_string((long long) outBAMcompression)).c_str());
-                if (inOut->outBAMfileY == NULL) {
-                    ostringstream errOut;
-                    errOut << "EXITING because of fatal OUTPUT ERROR: could not create Y BAM file: " << outBAMfileYName << "\n";
-                    errOut << "SOLUTION: check the path and permissions\n";
-                    exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
-                }
-                inOut->outBAMfileNoY = bgzf_open(outBAMfileNoYName.c_str(),("w"+to_string((long long) outBAMcompression)).c_str());
-                if (inOut->outBAMfileNoY == NULL) {
-                    ostringstream errOut;
-                    errOut << "EXITING because of fatal OUTPUT ERROR: could not create noY BAM file: " << outBAMfileNoYName << "\n";
-                    errOut << "SOLUTION: check the path and permissions\n";
-                    exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
-                }
-                // Write headers to Y/noY BAMs (will be written by BAMoutput constructor)
-            } else {
-                inOut->outBAMfileY = nullptr;
-                inOut->outBAMfileNoY = nullptr;
             }
         }
     }

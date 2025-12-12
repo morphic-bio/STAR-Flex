@@ -11,7 +11,6 @@
 #include <cmath>
 #include <unistd.h>
 #include <sys/stat.h>
-#include <algorithm>
 
 Genome::Genome (Parameters &P, ParametersGenome &pGe): shmStart(NULL), P(P), pGe(pGe), sharedMemory(NULL)
 {
@@ -203,41 +202,6 @@ void Genome::chrInfoLoad() {//find chrStart,Length,nChr from Genome G
         uint64 ind1 = std::find(chrName.begin(), chrName.end(), cm) - chrName.begin();
         pGe.chrSet.mito.insert(ind1);
     };
-    
-    // Build Y-chromosome contig set
-    yTids.clear();
-    for (uint i = 0; i < nChrReal; i++) {
-        std::string name = chrName[i];
-        // Convert to lowercase for case-insensitive matching
-        std::string nameLower = name;
-        std::transform(nameLower.begin(), nameLower.end(), nameLower.begin(), ::tolower);
-        
-        // Strip optional "chr" or "chr_" prefix
-        std::string nameStripped = nameLower;
-        if (nameStripped.length() >= 3 && nameStripped.substr(0, 3) == "chr") {
-            if (nameStripped.length() >= 4 && nameStripped[3] == '_') {
-                nameStripped = nameStripped.substr(4);  // strip "chr_"
-            } else {
-                nameStripped = nameStripped.substr(3);   // strip "chr"
-            }
-        }
-        
-        // Match: exact "y" or starts with "y_" (includes chrY_random, chrY_alt, etc.)
-        if (nameStripped == "y" || (nameStripped.length() >= 2 && nameStripped.substr(0, 2) == "y_")) {
-            yTids.insert(i);
-        }
-    }
-    
-    if (yTids.empty()) {
-        P.inOut->logMain << "WARNING: No Y-chromosome contigs found in reference. "
-                         << "Y-chromosome BAM split will emit empty _Y.bam file.\n" << flush;
-    } else {
-        P.inOut->logMain << "Y-chromosome contigs detected: ";
-        for (auto tid : yTids) {
-            P.inOut->logMain << chrName[tid] << " ";
-        }
-        P.inOut->logMain << "(total: " << yTids.size() << ")\n" << flush;
-    }
 
 };
 

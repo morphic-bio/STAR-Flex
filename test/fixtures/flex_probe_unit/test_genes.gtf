@@ -1,0 +1,15 @@
+##description: Unit test GTF
+##provider: test
+chr1	test	gene	1000	2000	.	+	.	gene_id "GENE_A"; gene_name "GeneA";
+chr1	test	transcript	1000	2000	.	+	.	gene_id "GENE_A"; transcript_id "GENE_A.1";
+chr1	test	exon	1000	2000	.	+	.	gene_id "GENE_A"; transcript_id "GENE_A.1";
+chr1	test	gene	3000	4000	.	+	.	gene_id "GENE_B"; gene_name "GeneB";
+chr1	test	transcript	3000	4000	.	+	.	gene_id "GENE_B"; transcript_id "GENE_B.1";
+chr1	test	exon	3000	4000	.	+	.	gene_id "GENE_B"; transcript_id "GENE_B.1";
+chr2	test	gene	1000	2000	.	-	.	gene_id "GENE_C"; gene_name "GeneC";
+chr2	test	transcript	1000	2000	.	-	.	gene_id "GENE_C"; transcript_id "GENE_C.1";
+chr2	test	exon	1000	2000	.	-	.	gene_id "GENE_C"; transcript_id "GENE_C.1";
+chr2	test	gene	5000	6000	.	+	.	gene_id "GENE_D"; gene_name "GeneD";
+chr2	test	transcript	5000	6000	.	+	.	gene_id "GENE_D"; transcript_id "GENE_D.1";
+chr2	test	exon	5000	6000	.	+	.	gene_id "GENE_D"; transcript_id "GENE_D.1";
+

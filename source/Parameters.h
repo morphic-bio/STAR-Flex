@@ -177,14 +177,6 @@ class Parameters {
         uint32 outBAMcoordNbins;
         uint32 outBAMsortingBinsN;//user-defined number of bins for sorting
         string outBAMsortTmpDir;
-        
-        //Y-chromosome BAM split
-        string emitNoYBAM;  // raw CLI: yes|no - split BAM output by Y-chromosome alignments
-        bool emitNoYBAMyes;  // resolved: true if enabled
-        string keepBAM;      // raw CLI: yes|no - when emitNoYBAM is enabled, also emit primary BAM
-        bool keepBAMyes;    // resolved: true if enabled
-        string outBAMfileYName, outBAMfileNoYName;  // derived output paths for Y/noY BAMs
-        string noYOutput, YOutput;  // user-specified override paths
 
 //         string bamRemoveDuplicatesType;
 //         uint bamRemoveDuplicatesMate2basesN;

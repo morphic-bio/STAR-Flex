@@ -193,9 +193,6 @@ class ReadAlign {
         uiWA **WA; //aligments per window
 
         int unmapType; //marker for why a read is unmapped
-    public:
-        bool hasYAlignment_;  // true if any alignment for this read touches Y-chromosome
-    private:
 
         uint mapMarker; //alignment marker (typically, if there is something wrong)
         uint nA, nP, nWall, nUM[2]; //number of all alignments,  pieces, windows, U/M,

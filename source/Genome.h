@@ -37,7 +37,6 @@ public:
     uint genomeChrBinNbases, chrBinN, *chrBin;
     vector <string> chrName, chrNameAll;
     map <string,uint64> chrNameIndex;
-    std::unordered_set<int> yTids;  // tid indices for Y-chromosome contigs
 
     uint *genomeSAindexStart;//starts of the L-mer indices in the SAindex, 1<=L<=pGe.gSAindexNbases
 
