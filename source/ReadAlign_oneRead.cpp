@@ -4,6 +4,7 @@
 #include "SequenceFuns.h"
 #include "ErrorWarning.h"
 #include "GlobalVariables.h"
+#include "libtrim/trim.h"
 
 int ReadAlign::oneRead() {//process one read: load, map, write
 
@@ -23,6 +24,105 @@ int ReadAlign::oneRead() {//process one read: load, map, write
     if (readStatus[0]==-1) {//finished with the stream
         return -1;
     };    
+    
+    // Increment read counters BEFORE trimming (so dropped reads are counted)
+    statsRA.readN++;
+    statsRA.readBases += readLength[0] + (P.readNmates == 2 ? readLength[1] : 0);
+    
+    // Cutadapt-style trimming (if enabled)
+    if (P.trimCutadapt == "Yes") {
+        if (P.readNmates == 2) {
+        struct TrimParams params;
+        trim_params_init(&params);
+        params.quality_cutoff = P.trimCutadaptQuality;
+        params.min_length = P.trimCutadaptMinLength;
+        // Set adapters if custom (validate exactly 2 adapters)
+        if (P.trimCutadaptAdapter.size() == 2 && P.trimCutadaptAdapter[0] != "-" && P.trimCutadaptAdapter[1] != "-") {
+            params.adapter_r1 = P.trimCutadaptAdapter[0].c_str();
+            params.adapter_r2 = P.trimCutadaptAdapter[1].c_str();
+        } else if (P.trimCutadaptAdapter.size() > 0 && (P.trimCutadaptAdapter[0] != "-" || (P.trimCutadaptAdapter.size() > 1 && P.trimCutadaptAdapter[1] != "-"))) {
+            // Invalid adapter specification
+            ostringstream errOut;
+            errOut << "EXITING because of FATAL ERROR: --trimCutadaptAdapter requires exactly 2 adapter sequences (R1 and R2), separated by space\n";
+            errOut << "Provided: " << P.trimCutadaptAdapter.size() << " adapter(s)\n";
+            errOut << "SOLUTION: Provide both R1 and R2 adapters, or use '-' to use default TruSeq adapters\n";
+            exitWithError(errOut.str(), std::cerr, P.inOut->logMain, EXIT_CODE_PARAMETER, P);
+        }
+        
+        struct TrimResult result1, result2;
+        uint32_t len1 = (uint32_t)readLength[0];
+        uint32_t len2 = (uint32_t)readLength[1];
+        trim_pair(Read0[0], Qual0[0], &len1,
+                  Read0[1], Qual0[1], &len2,
+                  &params, &result1, &result2);
+        readLength[0] = len1;
+        readLength[1] = len2;
+        
+        // Accumulate stats using centralized helper (counting reads, not pairs)
+        struct TrimStats trimStats = {0, 0, 0, 0, 0};
+        trim_stats_add(&trimStats, &result1);  // R1
+        trim_stats_add(&trimStats, &result2);  // R2
+        
+        // Copy accumulated stats to STAR's Stats class
+        statsRA.trimReadsProcessed += trimStats.reads_processed;
+        statsRA.trimReadsTrimmed += trimStats.reads_trimmed;
+        statsRA.trimReadsTooShort += trimStats.reads_too_short;
+        statsRA.trimBasesQualityTrimmed += trimStats.bases_quality_trimmed;
+        statsRA.trimBasesAdapterTrimmed += trimStats.bases_adapter_trimmed;
+        
+        // Handle dropped reads
+        if (result1.dropped || result2.dropped) {
+            readFilter = 'Y';  // Fail QC - same as other filters
+            // Skip mapping for this pair (readN already incremented above)
+            return 0;
+        }
+        
+        // Update original lengths after trimming
+        readLengthOriginal[0] = readLength[0];
+        readLengthOriginal[1] = readLength[1];
+        
+        // Re-convert to numeric after trimming
+        convertNucleotidesToNumbers(Read0[0], Read1[0], readLength[0]);
+        convertNucleotidesToNumbers(Read0[1], Read1[1], readLength[1]);
+        } else if (P.readNmates == 1) {
+            // Single-end trimming
+            struct TrimParams params;
+            trim_params_init(&params);
+            params.quality_cutoff = P.trimCutadaptQuality;
+            params.min_length = P.trimCutadaptMinLength;
+            // Use R1 adapter for single-end
+            const char* adapter = TRUSEQ_ADAPTER_R1;
+            if (P.trimCutadaptAdapter.size() >= 1 && P.trimCutadaptAdapter[0] != "-") {
+                adapter = P.trimCutadaptAdapter[0].c_str();
+            }
+            
+            struct TrimResult result;
+            uint32_t len1 = (uint32_t)readLength[0];
+            result = trim_read(Read0[0], Qual0[0], len1, adapter, &params);
+            readLength[0] = result.new_length;
+            
+            // Accumulate stats using centralized helper
+            struct TrimStats trimStats = {0, 0, 0, 0, 0};
+            trim_stats_add(&trimStats, &result);
+            
+            // Copy accumulated stats to STAR's Stats class
+            statsRA.trimReadsProcessed += trimStats.reads_processed;
+            statsRA.trimReadsTrimmed += trimStats.reads_trimmed;
+            statsRA.trimReadsTooShort += trimStats.reads_too_short;
+            statsRA.trimBasesQualityTrimmed += trimStats.bases_quality_trimmed;
+            statsRA.trimBasesAdapterTrimmed += trimStats.bases_adapter_trimmed;
+            
+            // Handle dropped reads
+            if (result.dropped) {
+                readFilter = 'Y';
+                return 0;
+            }
+            
+            // Update length and re-convert
+            readLengthOriginal[0] = readLength[0];
+            convertNucleotidesToNumbers(Read0[0], Read1[0], readLength[0]);
+        }
+    }
     
     if (P.outFilterBySJoutStage != 2) {
         for (uint32 im=0; im<P.readNmates; im++) {//not readNends: the barcode quality will be calculated separately
@@ -70,9 +170,6 @@ int ReadAlign::oneRead() {//process one read: load, map, write
     for (uint ii=0;ii<Lread;ii++) {//reverse
         Read1[2][Lread-ii-1]=Read1[1][ii];
     };
-
-    statsRA.readN++;
-    statsRA.readBases += readLength[0]+readLength[1];
 
     //max number of mismatches allowed for this read
     outFilterMismatchNmaxTotal=min(P.outFilterMismatchNmax, (uint) (P.outFilterMismatchNoverReadLmax*(readLength[0]+readLength[1])));

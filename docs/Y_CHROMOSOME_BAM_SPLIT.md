@@ -2,11 +2,13 @@
 
 ## Overview
 
+**Note**: This feature was developed for **Morphic requirements for KOLF cell lines**. It is **not connected to the Flex pipeline** and is a general-purpose feature usable with any STAR workflow (bulk RNA-seq, single-cell, etc.).
+
 The Y-chromosome BAM split feature allows STAR to emit two additional BAM files during alignment:
 - `<out>_Y.bam`: Contains all alignments for reads with any Y-chromosome alignment
 - `<out>_noY.bam`: Contains all alignments for reads with no Y-chromosome alignments
 
-This feature is useful for sex-specific analyses and for separating male/female samples in mixed datasets.
+This feature is useful for sex-specific analyses, separating male/female samples in mixed datasets, and meeting Morphic's requirements for KOLF cell line processing.
 
 ## Architecture
 

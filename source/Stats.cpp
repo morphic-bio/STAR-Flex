@@ -7,6 +7,8 @@ void Stats::resetN() {//zero all counters
     mappedReadsU = 0; mappedReadsM = 0;
     unmappedOther = 0; unmappedShort = 0; unmappedMismatch = 0; unmappedMulti = 0; unmappedAll = 0;
     chimericAll = 0;
+    trimReadsProcessed = 0; trimReadsTrimmed = 0; trimReadsTooShort = 0;
+    trimBasesQualityTrimmed = 0; trimBasesAdapterTrimmed = 0;
     splicesNsjdb=0;
     for (uint ii=0; ii<SJ_MOTIF_SIZE; ii++) {
         splicesN[ii]=0;
@@ -25,6 +27,8 @@ void Stats::addStats(Stats &S) {//add S to Stats
     mappedReadsU += S.mappedReadsU; mappedReadsM += S.mappedReadsM;
     unmappedOther += S.unmappedOther; unmappedShort += S.unmappedShort; unmappedMismatch += S.unmappedMismatch; unmappedMulti += S.unmappedMulti; unmappedAll += S.unmappedAll;
     chimericAll += S.chimericAll;
+    trimReadsProcessed += S.trimReadsProcessed; trimReadsTrimmed += S.trimReadsTrimmed; trimReadsTooShort += S.trimReadsTooShort;
+    trimBasesQualityTrimmed += S.trimBasesQualityTrimmed; trimBasesAdapterTrimmed += S.trimBasesAdapterTrimmed;
 
     splicesNsjdb += S.splicesNsjdb;
     for (uint ii=0; ii<SJ_MOTIF_SIZE; ii++) {
@@ -113,6 +117,18 @@ void Stats::reportFinal(ofstream &streamOut) {
                <<setw(w1)<< "Uniquely mapped reads number |\t"                 << mappedReadsU <<"\n" \
                <<setw(w1)<< "Uniquely mapped reads % |\t"                      << (readN>0 ? double(mappedReadsU)/double(readN)*100 : 0) <<'%'<<"\n" \
                <<setw(w1)<< "Average mapped length |\t"                        << (mappedReadsU>0 ? double(mappedBases)/double(mappedReadsU) : 0) <<"\n";
+
+    // Add trimming stats if trimming was enabled
+    // Note: Stats count individual reads (not pairs), so paired-end data shows 2x the number of pairs
+    if (trimReadsProcessed > 0) {
+        streamOut << "\n" \
+                  <<setw(w1)<< "                        TRIMMING (cutadapt-style) |\n" \
+                  <<setw(w1)<< "              Reads processed for trimming |\t" << trimReadsProcessed << "\n" \
+                  <<setw(w1)<< "                             Reads trimmed |\t" << trimReadsTrimmed << "\n" \
+                  <<setw(w1)<< "     Reads dropped (below minimum length) |\t" << trimReadsTooShort << "\n" \
+                  <<setw(w1)<< "                    Bases quality-trimmed |\t" << trimBasesQualityTrimmed << "\n" \
+                  <<setw(w1)<< "                    Bases adapter-trimmed |\t" << trimBasesAdapterTrimmed << "\n";
+    }
 
     streamOut  <<setw(w1)<< "Number of splices: Total |\t"                     << splicesN[0]+splicesN[1]+splicesN[2]+splicesN[3]+splicesN[4]+splicesN[5]+splicesN[6]<< "\n" \
                <<setw(w1)<< "Number of splices: Annotated (sjdb) |\t"          << splicesNsjdb << "\n" \

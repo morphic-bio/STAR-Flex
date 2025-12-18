@@ -1,0 +1,2 @@
+# Placeholder to ensure directory is tracked in git
+# Actual fixture FASTQ files should be generated using Trim Galore as described in README.md

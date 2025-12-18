@@ -1,22 +1,43 @@
-# STAR-Flex: Inline Hash Pipeline for 10x Flex Samples
+# STAR-Flex: Extended Features for 10x Flex and Trimming
 
-This document describes the flex pipeline integration in this STAR fork.
+This document describes the STAR-Flex fork, which extends upstream STAR with additional features.
 
 ## Overview
 
-STAR-Flex extends STAR with an inline hash-based pipeline optimized for 10x Genomics Flex (Fixed RNA Profiling) samples using probes for transcript detection and RTL tags for multiplexing. We generate a hybrid reference with the regular genome and with synthetic chromosomes for each of the probes. This allows to use the STAR alignment routines to quantify probe alignment and use the genomic hits to confirm the match and detect off-probe noise. However, the rest of the workflow diverges from the standard STAR solo workflow, largely due to the presence of RTL tags for multiplexing samples. Because these are on the same mate as the probe and not the cell barcode, STAR's barcode and UMI correction, and UMI deduping routines could not be used. Furthermore, the noise characteristics of Flex are different that the native STAR's multimapping ad emptyDrops functions could not be used. A fast inline path was created to handle Flex processing after STAR alignment.
+STAR-Flex extends STAR with additional features:
 
-1. **Sample tag detection** during alignment identifies multiplexed sample barcodes
-2. **Inline hash capture** stores CB/UMI/gene tuples directly in memory
-3. **Cell Barcode (CB) correction** applies 1MM pseudocount-based correction (Cell Ranger compatible)
-4. **UMI correction** uses clique-based 1MM deduplication
-5. **Cell filtering** via OrdMag (simple EmptyDrops) or full EmptyDrops per sample
-6. **Tag occupancy filtering** via Monte Carlo estimation of the expected distribution of samples per cell barcode
-7. **MEX output** produces raw and per-sample filtered matrices
+1. **Cutadapt-style trimming** (`--trimCutadapt Yes`) for **bulk RNA-seq** with perfect parity to Trim Galore/cutadapt v5.1. This is a general-purpose trimming feature usable with any STAR workflow (bulk RNA-seq, single-cell, etc.). See [docs/trimming.md](docs/trimming.md) for details.
+
+2. **Inline hash-based pipeline for 10x Genomics Flex** (Fixed RNA Profiling) samples using probes for transcript detection and RTL tags for multiplexing. We generate a hybrid reference with the regular genome and with synthetic chromosomes for each of the probes. This allows to use the STAR alignment routines to quantify probe alignment and use the genomic hits to confirm the match and detect off-probe noise. However, the rest of the workflow diverges from the standard STAR solo workflow, largely due to the presence of RTL tags for multiplexing samples. Because these are on the same mate as the probe and not the cell barcode, STAR's barcode and UMI correction, and UMI deduping routines could not be used. Furthermore, the noise characteristics of Flex are different that the native STAR's multimapping ad emptyDrops functions could not be used. A fast inline path was created to handle Flex processing after STAR alignment.
+
+The Flex pipeline includes:
+- **Sample tag detection** during alignment identifies multiplexed sample barcodes
+- **Inline hash capture** stores CB/UMI/gene tuples directly in memory
+- **Cell Barcode (CB) correction** applies 1MM pseudocount-based correction (Cell Ranger compatible)
+- **UMI correction** uses clique-based 1MM deduplication
+- **Cell filtering** via OrdMag (simple EmptyDrops) or full EmptyDrops per sample
+- **Tag occupancy filtering** via Monte Carlo estimation of the expected distribution of samples per cell barcode
+- **MEX output** produces raw and per-sample filtered matrices
 
 When `--flex no` (default), STAR behavior is identical to upstream.
 
-For detailed technical documentation of the data flow and algorithms, see [docs/flex_methodology.md](docs/flex_methodology.md).
+## STAR-Flex Extras
+
+This fork adds several features beyond upstream STAR:
+
+### Bulk RNA-seq Features
+
+- **[Cutadapt-Style Trimming](docs/trimming.md)**: Perfect parity with Trim Galore/cutadapt v5.1 for quality and adapter trimming. Usable with any STAR workflow (bulk RNA-seq, single-cell, etc.).
+
+- **[Y-Chromosome BAM Split](docs/Y_CHROMOSOME_BAM_SPLIT.md)**: Split BAMs by Y-chromosome alignment. Developed for **Morphic requirements for KOLF cell lines** (not connected to Flex pipeline). Works with both bulk and single-cell workflows.
+
+### Flex-Specific Features
+
+- **[Flex Pipeline](docs/flex_methodology.md)**: Inline hash pipeline for 10x Genomics Flex (Fixed RNA Profiling) samples.
+
+For complete parameter reference, see [docs/flex_parameters.md](docs/flex_parameters.md) (STAR-Flex-only flags) and upstream `README.md` (all other parameters).
+
+For detailed technical documentation of the flex data flow and algorithms, see [docs/flex_methodology.md](docs/flex_methodology.md).
 
 ## Quick Start
 
@@ -85,7 +106,7 @@ STAR \
   --outFileNamePrefix output/
 ```
 
-**Note**: The Y/noY split works for both single-cell RNA-seq (Flex mode) and bulk RNA-seq modes. In single-cell mode, R1/R2 are not traditional paired-end mates, so routing is based on each read's own alignments. In bulk paired-end mode, if either mate has a Y-chromosome alignment, both mates route to `_Y.bam`.
+**Note**: The Y/noY split is a general-purpose feature developed for **Morphic requirements for KOLF cell lines** (not Flex-specific). It works with both single-cell RNA-seq (Flex mode) and bulk RNA-seq modes. In single-cell mode, R1/R2 are not traditional paired-end mates, so routing is based on each read's own alignments. In bulk paired-end mode, if either mate has a Y-chromosome alignment, both mates route to `_Y.bam`.
 
 ## Required Inputs
 

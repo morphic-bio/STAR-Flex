@@ -232,6 +232,25 @@ clip5pAfterAdapterNbases    0
     int(s): number of bases to clip from 5p of each mate after the adapter clipping, separated by space.
 #####UnderDevelopment_end
 
+### Cutadapt-style Trimming
+trimCutadapt                    -
+    string: enable cutadapt-style trimming
+            -    ... trimming disabled (default)
+            Yes  ... enable with Trim Galore defaults (Q20, length 20, TruSeq adapters)
+            NOTE: When enabled, existing clip* parameters are IGNORED for trimmed reads.
+                  ClipMate clipping is bypassed; use trimCutadapt* parameters instead.
+
+trimCutadaptQuality             20
+    int: quality threshold for 3' trimming (Phred scale, default 20)
+
+trimCutadaptMinLength           20
+    int: minimum read length after trimming; pairs with either mate shorter are dropped
+
+trimCutadaptAdapter             -
+    string(s): custom adapter sequences for R1 and R2 (space-separated)
+               - ... use default TruSeq adapters
+               AGATCGGAAGAGCACACGTCTGAACTCCAGTCA AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT
+
 ### Limits
 limitGenomeGenerateRAM               31000000000
     int>0: maximum available RAM (bytes) for genome generation

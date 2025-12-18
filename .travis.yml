@@ -15,3 +15,5 @@ before_script:
   - cd source
 script:
   - make STAR
+  # Run trimming parity tests to ensure cutadapt compatibility
+  - make test_trim_parity || (echo "Trim parity tests failed - check cutadapt version compatibility" && exit 1)

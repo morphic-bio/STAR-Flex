@@ -23,6 +23,13 @@ class Stats {
 
         uint chimericAll;
 
+        // Cutadapt-style trimming stats
+        uint64 trimReadsProcessed;
+        uint64 trimReadsTrimmed;
+        uint64 trimReadsTooShort;
+        uint64 trimBasesQualityTrimmed;
+        uint64 trimBasesAdapterTrimmed;
+
         time_t timeStart, timeStartMap, timeFinishMap, timeLastReport, timeFinish;
         
         Stats ();

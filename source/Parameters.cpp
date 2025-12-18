@@ -174,6 +174,12 @@ Parameters::Parameters() {//initalize parameters info
     parArray.push_back(new ParameterInfoVector <double> (-1, -1, "clip5pAdapterMMp", &pClip.in[0].adMMp));
     parArray.push_back(new ParameterInfoVector <double> (-1, -1, "clip3pAdapterMMp", &pClip.in[1].adMMp));
 
+    //cutadapt-style trimming
+    parArray.push_back(new ParameterInfoScalar <string> (-1, -1, "trimCutadapt", &trimCutadapt));
+    parArray.push_back(new ParameterInfoScalar <uint8> (-1, -1, "trimCutadaptQuality", &trimCutadaptQuality));
+    parArray.push_back(new ParameterInfoScalar <uint32> (-1, -1, "trimCutadaptMinLength", &trimCutadaptMinLength));
+    parArray.push_back(new ParameterInfoVector <string> (-1, -1, "trimCutadaptAdapter", &trimCutadaptAdapter));
+
     //binning, anchors, windows
     parArray.push_back(new ParameterInfoScalar <uint>   (-1, -1, "winBinNbits", &winBinNbits));
     parArray.push_back(new ParameterInfoScalar <uint>   (-1, -1, "winAnchorDistNbins", &winAnchorDistNbins));
@@ -1210,6 +1216,12 @@ void Parameters::inputParameters (int argInN, char* argIn[]) {//input parameters
     
     //clipping
     pClip.initialize(this);
+
+        // Warn if trimCutadapt is enabled (ClipMate will be bypassed)
+        if (trimCutadapt == "Yes") {
+            inOut->logMain << "WARNING: --trimCutadapt is enabled. Existing clip* parameters will be IGNORED.\n";
+            inOut->logMain << "         ClipMate clipping is bypassed; trimming uses trimCutadapt* parameters instead.\n";
+        }
 
     //alignEnds
     alignEndsType.ext[0][0]=false;

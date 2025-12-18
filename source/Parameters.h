@@ -93,6 +93,12 @@ class Parameters {
 
         ParametersClip pClip;
 
+        //cutadapt-style trimming
+        string trimCutadapt;
+        uint8 trimCutadaptQuality;
+        uint32 trimCutadaptMinLength;
+        vector <string> trimCutadaptAdapter;
+
         //align parameters
         uint alignSJoverhangMin,alignSJDBoverhangMin,alignSplicedMateMapLmin; //min SJ donor/acceptor length
         double alignSplicedMateMapLminOverLmate;

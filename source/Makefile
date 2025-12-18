@@ -238,6 +238,15 @@ test_gene_resolver: GeneResolver.o
 	$(CXX) $(CXXFLAGS) -I./ ../test/test_gene_resolver.cpp GeneResolver.o $(LDFLAGS_shared) -o ../test/test_gene_resolver
 	../test/test_gene_resolver
 
+.PHONY: test_trim_parity
+test_trim_parity: libtrim
+	$(MAKE) -C ../tools/trimvalidate test
+
+.PHONY: test_trim_e2e
+test_trim_e2e: STAR
+	@echo "Running end-to-end trimming parity test..."
+	@bash ../test/integration/trim/run_e2e_trim_parity.sh
+
 .PHONY: ctest
 ctest: test
 
@@ -261,6 +270,7 @@ solo/CbBayesianResolver.o : solo/CbBayesianResolver.cpp solo/CbBayesianResolver.
 clean:
 	'rm' -f *.o opal/opal.o solo/*.o STAR STARstatic STARlong Depend.list parametersDefault.xxd
 	$(MAKE) -C libflex clean
+	$(MAKE) -C libtrim clean
 
 .PHONY: CLEAN
 CLEAN: clean
@@ -306,10 +316,15 @@ parametersDefault.xxd: parametersDefault
 libflex:
 	$(MAKE) -C libflex libflex.a
 
+# Ensure libtrim is always rebuilt (sources may have changed)
+.PHONY: libtrim
+libtrim:
+	$(MAKE) -C libtrim libtrim.a
+
 STAR$(SFX) : CXXFLAGS := $(CXXFLAGSextra) $(CXXFLAGS_main) $(CXXFLAGS)
 STAR$(SFX) : LDFLAGS := $(LDFLAGSextra) $(LDFLAGS_shared) $(LDFLAGS) $(shell pkg-config --libs glib-2.0 2>/dev/null || echo "")
-STAR$(SFX) : Depend.list parametersDefault.xxd $(OBJECTS) libflex
-	$(CXX) -o STAR$(SFX) $(CXXFLAGS) $(OBJECTS) libflex/libflex.a $(LDFLAGS)
+STAR$(SFX) : Depend.list parametersDefault.xxd $(OBJECTS) libflex libtrim
+	$(CXX) -o STAR$(SFX) $(CXXFLAGS) $(OBJECTS) libflex/libflex.a libtrim/libtrim.a $(LDFLAGS)
 
 STARstatic$(SFX) : CXXFLAGS := $(CXXFLAGSextra) $(CXXFLAGS_main) $(CXXFLAGS)
 STARstatic$(SFX) : LDFLAGS := $(LDFLAGSextra) $(LDFLAGS_static) $(LDFLAGS)

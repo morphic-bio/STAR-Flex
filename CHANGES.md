@@ -3,6 +3,17 @@ STAR 2.7.11b --- 2024/01/24 ::: Minor in one parameter.
 * Replaced --quantTranscriptomeBan parameter with --quantTranscriptomeSAMoutput with more explicit naming of options. The default behavior is not affected.
 * New option: --quantTranscriptomeSAMoutput BanSingleEnd_ExtendSoftclip : prohibit single-end alignments, extend softclips, allow indels.
 
+STAR-Flex (cutadapt parity) --- 2025/12/18 ::: Perfect parity with cutadapt v5.1
+==================================================================================
+* **Adapter trimming**: Implemented exact port of cutadapt v5.1 semiglobal alignment algorithm
+  * Source: cutadapt v5.1 `_align.pyx`, `Aligner.locate()` method (verbatim port)
+  * Algorithm: Semiglobal DP with edit distance, scoring (MATCH=+1, MISMATCH=-1, INDEL=-2), origin tracking
+  * Flags: QUERY_START | QUERY_STOP | REFERENCE_END for 3' adapter matching
+  * Error threshold: `floor(aligned_adapter_length × max_error_rate)` where aligned_adapter_length is adapter portion matched
+  * **Parity status**: All 9 tests pass, 0 diff lines with Trim Galore/cutadapt output
+  * **Synchronization**: Code synchronized with cutadapt v5.1; if cutadapt upgraded, run `make test_trim_parity` to verify compatibility
+  * **CI**: Parity tests added to Travis CI to prevent regression
+
 STAR 2.7.11a --- 2023/08/15 ::: STARdiploid
 ===========================================
 * Implemented STARdiploid option --genomeTransformType Diploid that generates personal diploid genome. At the mapping step, --genomeTransformOutput options will transform the alignments into reference genome coordinates.

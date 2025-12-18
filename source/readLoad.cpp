@@ -47,19 +47,13 @@ int readLoad(istream& readInStream, Parameters& P, uint& Lread, uint& LreadOrigi
 
     LreadOriginal=Lread;
 
-    convertNucleotidesToNumbers(Seq,SeqNum,Lread);
-    
     if (readName[0]=='@') {//fastq format: read the '+' line
         readFileType=2;
         readInStream.get(clipOneMate[0].clippedInfo); //this is used if clipChunk is activated, only 5' for now
         readInStream.ignore(); //ignore one char: \n
     };
 
-    //cout << readName <<'\t' << (uint32) line3char << '\n';
-    
-    clipOneMate[0].clip(Lread, SeqNum); //5p clip
-    clipOneMate[1].clip(Lread, SeqNum); //3p clip
-
+    // Read quality EARLY (before clipping) - needed for cutadapt-style trimming
     if (readName[0]=='@') {//fastq format, read qualities
         readInStream.getline(Qual,DEF_readSeqLengthMax);//read qualities
         if ((uint) readInStream.gcount() != LreadOriginal+1) {//inconsistent read sequence and quality
@@ -89,6 +83,17 @@ int readLoad(istream& readInStream, Parameters& P, uint& Lread, uint& LreadOrigi
         ostringstream errOut;
         errOut <<"Unknown reads file format: header line does not start with @ or > : "<< readName<<"\n";
         exitWithError(errOut.str(),std::cerr, P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
+    };
+
+    // ClipMate clipping (skip if trimCutadapt is enabled)
+    if (P.trimCutadapt != "Yes") {
+        convertNucleotidesToNumbers(Seq,SeqNum,Lread);
+        clipOneMate[0].clip(Lread, SeqNum); //5p clip
+        clipOneMate[1].clip(Lread, SeqNum); //3p clip
+    } else {
+        // When trimCutadapt is enabled, trimming happens in oneRead() after both mates are loaded
+        // Just convert to numeric for now (will be re-converted after trimming if needed)
+        convertNucleotidesToNumbers(Seq,SeqNum,Lread);
     };
 
     //trim read name TODO this is needed only for one mate
