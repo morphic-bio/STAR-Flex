@@ -49,7 +49,7 @@ CXXFLAGS_SIMD ?= -mavx2
 # Include klib/khash (needed for inline hash build) from flex third_party
 # Include libflex headers for flexfilter integration
 # Include current directory for IncludeDefine.h and other source headers
-CXXFLAGS_common := -std=c++11 -fopenmp -I. -I../tools/flex_debug/flex/third_party -Ilibflex $(COMPTIMEPLACE) $(GIT_BRANCH_COMMIT_DIFF)
+CXXFLAGS_common := -std=c++11 -fopenmp -I. -I../tools/flex_debug/flex/third_party -Ilibflex -Ilibem $(COMPTIMEPLACE) $(GIT_BRANCH_COMMIT_DIFF)
 CXXFLAGS_main := -O3 $(CXXFLAGS_common)
 CXXFLAGS_gdb := -O0 -g3 $(CXXFLAGS_common)
 
@@ -87,7 +87,7 @@ OBJECTS = systemFunctions.o funPrimaryAlignMark.o \
 	SpliceGraph_findSuperTr.o sjAlignSplit.o \
 	GTF.o GTF_transcriptGeneSJ.o GTF_superTranscript.o SuperTranscriptome.o \
 	ReadAlign_outputAlignments.o ReadAlign_resolveAmbiguousCBs.o \
-	ReadAlign.o STAR.o \
+	ReadAlign.o STAR.o TranscriptQuantEC.o TranscriptQuantOutput.o \
 	SharedMemory.o PackedArray.o SuffixArrayFuns.o Parameters.o Parameters_samAttributes.o InOutStreams.o SequenceFuns.o Genome.o ParametersGenome.o Stats.o \
 	Transcript.o Transcript_alignScore.o Transcript_generateCigarP.o Chain.o \
 	Transcript_variationAdjust.o Variation.o ReadAlign_waspMap.o \
@@ -271,6 +271,7 @@ clean:
 	'rm' -f *.o opal/opal.o solo/*.o STAR STARstatic STARlong Depend.list parametersDefault.xxd
 	$(MAKE) -C libflex clean
 	$(MAKE) -C libtrim clean
+	$(MAKE) -C libem clean
 
 .PHONY: CLEAN
 CLEAN: clean
@@ -321,10 +322,15 @@ libflex:
 libtrim:
 	$(MAKE) -C libtrim libtrim.a
 
+# Ensure libem is always rebuilt (sources may have changed)
+.PHONY: libem
+libem:
+	$(MAKE) -C libem libem.a
+
 STAR$(SFX) : CXXFLAGS := $(CXXFLAGSextra) $(CXXFLAGS_main) $(CXXFLAGS)
 STAR$(SFX) : LDFLAGS := $(LDFLAGSextra) $(LDFLAGS_shared) $(LDFLAGS) $(shell pkg-config --libs glib-2.0 2>/dev/null || echo "")
-STAR$(SFX) : Depend.list parametersDefault.xxd $(OBJECTS) libflex libtrim
-	$(CXX) -o STAR$(SFX) $(CXXFLAGS) $(OBJECTS) libflex/libflex.a libtrim/libtrim.a $(LDFLAGS)
+STAR$(SFX) : Depend.list parametersDefault.xxd $(OBJECTS) libflex libtrim libem
+	$(CXX) -o STAR$(SFX) $(CXXFLAGS) $(OBJECTS) libflex/libflex.a libtrim/libtrim.a libem/libem.a $(LDFLAGS)
 
 STARstatic$(SFX) : CXXFLAGS := $(CXXFLAGSextra) $(CXXFLAGS_main) $(CXXFLAGS)
 STARstatic$(SFX) : LDFLAGS := $(LDFLAGSextra) $(LDFLAGS_static) $(LDFLAGS)

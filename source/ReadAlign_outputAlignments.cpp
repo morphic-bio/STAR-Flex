@@ -5,6 +5,7 @@
 #include "SequenceFuns.h"
 #include "UmiCodec.h"
 #include "solo/CbCorrector.h"
+#include "TranscriptQuantEC.h"
 
 namespace {
 inline const char* sanitizeQname(char** readNameMates, uint32_t readNmates, uint32_t mateIdx) {
@@ -297,13 +298,112 @@ void ReadAlign::outputAlignments() {
         }
 
         //transcripts: need to be run after CB/UMI are obtained to output CR/UR tags
-        if ( P.quant.trSAM.yes && unmapType<0) {//Aligned.toTranscriptome output, only for mapped
+        uint nAlignT = 0;
+        if ((P.quant.trSAM.yes || P.quant.transcriptVB.yes) && unmapType<0 && chunkTr != nullptr && alignTrAll != nullptr) {//Aligned.toTranscriptome output, only for mapped
             if (P.pGe.transform.outQuant) {
-                quantTranscriptome(chunkTr, alignsGenOut.alN,  alignsGenOut.alMult,  alignTrAll);
+                nAlignT = quantTranscriptome(chunkTr, alignsGenOut.alN,  alignsGenOut.alMult,  alignTrAll);
             } else {
-                quantTranscriptome(chunkTr, nTr, trMult,  alignTrAll);
+                nAlignT = quantTranscriptome(chunkTr, nTr, trMult,  alignTrAll);
             };
-        };        
+        };
+        
+        // Build ECs for transcript quantification (TranscriptVB mode)
+        if (P.quant.transcriptVB.yes && unmapType<0 && quantEC != nullptr && alignTrAll != nullptr && nAlignT > 0) {
+            // Collect transcript IDs from transcriptomic alignments
+            std::vector<uint32_t> transcriptIds;
+            std::vector<double> auxProbs;
+            
+            for (uint i = 0; i < nAlignT; i++) {
+                uint32_t trId = alignTrAll[i].Chr;  // Chr field contains transcript ID in transcriptomic alignments
+                // Check if this transcript ID is already in our list
+                bool found = false;
+                for (size_t j = 0; j < transcriptIds.size(); j++) {
+                    if (transcriptIds[j] == trId) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    transcriptIds.push_back(trId);
+                }
+            }
+            
+            // Compute uniform weight for this read's alignments
+            double uniformWeight = transcriptIds.empty() ? 1.0 : 1.0 / transcriptIds.size();
+            
+            if (!transcriptIds.empty()) {
+                auxProbs.resize(transcriptIds.size(), uniformWeight);
+                
+                // Add to EC table
+                quantEC->addReadAlignmentsSimple(transcriptIds, auxProbs);
+            }
+            
+            // Collect GC observations from properly-paired transcriptomic alignments
+            if (P.quant.transcriptVB.gcBias && P.readNmates == 2) {
+                for (uint i = 0; i < nAlignT; i++) {
+                    Transcript &aT = alignTrAll[i];
+                    
+                    // Check if this is a properly-paired alignment (both mates present)
+                    // For PE, first exon has EX_iFrag=0, last exon has EX_iFrag=1
+                    if (aT.nExons < 2) continue;
+                    uint firstFrag = aT.exons[0][EX_iFrag];
+                    uint lastFrag = aT.exons[aT.nExons-1][EX_iFrag];
+                    if (firstFrag == lastFrag) continue;  // Both mates from same fragment = not properly paired
+                    
+                    // Get fragment boundaries in transcriptomic coordinates
+                    // Find the leftmost and rightmost positions
+                    uint64 fragStart = aT.exons[0][EX_G];
+                    uint64 fragEnd = fragStart;
+                    for (uint32 iex = 0; iex < aT.nExons; iex++) {
+                        uint64 exStart = aT.exons[iex][EX_G];
+                        uint64 exEnd = exStart + aT.exons[iex][EX_L];
+                        if (exStart < fragStart) fragStart = exStart;
+                        if (exEnd > fragEnd) fragEnd = exEnd;
+                    }
+                    
+                    uint64 fragLen = fragEnd - fragStart;
+                    if (fragLen < 20 || fragLen > 1000) continue;  // Skip unreasonable fragment lengths
+                    
+                    // Get transcript ID and compute GC from transcript sequence
+                    uint32_t trId = aT.Chr;
+                    if (trId >= chunkTr->nTr) continue;
+                    
+                    // Get genomic coordinates for this transcript
+                    uint64 trStart = chunkTr->trS[trId];
+                    uint64 trEnd = chunkTr->trE[trId];
+                    
+                    // Convert transcriptomic fragment coords to genomic
+                    // For single-exon transcripts, this is straightforward
+                    // For multi-exon, we'd need to map through exons (simplified here)
+                    uint64 genomicStart = trStart + fragStart;
+                    uint64 genomicEnd = trStart + fragEnd;
+                    
+                    // Safety check
+                    if (genomicEnd > trEnd + 1) continue;
+                    if (genomicEnd > mapGen.nGenome) continue;
+                    
+                    // Count GC bases in the fragment
+                    uint64 gcCount = 0;
+                    for (uint64 pos = genomicStart; pos < genomicEnd && pos < mapGen.nGenome; pos++) {
+                        char base = mapGen.G[pos];
+                        // In STAR encoding: 0=A, 1=C, 2=G, 3=T
+                        if (base == 1 || base == 2) {  // C or G
+                            gcCount++;
+                        }
+                    }
+                    
+                    // Compute GC percentage
+                    int32_t gcPct = static_cast<int32_t>((gcCount * 100) / fragLen);
+                    if (gcPct > 100) gcPct = 100;
+                    
+                    // Add GC observation with uniform weight
+                    quantEC->addGCObservation(static_cast<int32_t>(fragStart), 
+                                              static_cast<int32_t>(fragEnd), 
+                                              gcPct, 
+                                              uniformWeight);
+                }
+            }
+        }
         
         // Set detected sample token in SoloReadBarcode for tag extraction in inline hash capture
         if (soloRead && soloRead->readBar) {

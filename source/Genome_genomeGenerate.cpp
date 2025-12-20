@@ -22,6 +22,7 @@
 #include "SequenceFuns.h"
 #include "FlexProbeIndex.h"
 #include <fstream>
+#include <cstdlib>
 
 
 char* globalG;
@@ -476,6 +477,65 @@ void Genome::genomeGenerate() {
     SAiOut.close();
 
     SApass1.deallocateArray();
+
+    // Compute expected GC distribution for GC bias correction
+    if (P.pGe.sjdbGTFfile != "-" || P.pGe.transcriptomeFasta != "-") {
+        time(&rawTime);
+        P.inOut->logMain    << timeMonthDayTime(rawTime) << " ... computing expected GC distribution ...\n" <<flush;
+        *P.inOut->logStdOut << timeMonthDayTime(rawTime) << " ... computing expected GC distribution ...\n" <<flush;
+        
+        string compute_gc_cmd;
+        // Try to find compute_expected_gc in common locations
+        string tool_paths[] = {
+            "compute_expected_gc",  // In PATH
+            "../tools/compute_expected_gc/compute_expected_gc",  // Relative to STAR binary
+            "../../tools/compute_expected_gc/compute_expected_gc",  // From build directory
+            P.pGe.gDir + "/../tools/compute_expected_gc/compute_expected_gc"  // Relative to genome dir
+        };
+        string tool_path;
+        bool tool_found = false;
+        
+        // Check which tool path exists
+        for (int i = 0; i < 4; i++) {
+            string test_cmd = "which " + tool_paths[i] + " > /dev/null 2>&1";
+            if (i > 0) {
+                test_cmd = "test -x " + tool_paths[i] + " > /dev/null 2>&1";
+            }
+            if (system(test_cmd.c_str()) == 0) {
+                tool_path = tool_paths[i];
+                tool_found = true;
+                break;
+            }
+        }
+        
+        if (!tool_found) {
+            P.inOut->logMain << "WARNING: compute_expected_gc tool not found. Skipping expected GC computation.\n" <<flush;
+            P.inOut->logMain << "         GC bias correction will not be available. Install compute_expected_gc to enable.\n" <<flush;
+        } else {
+            string output_file = P.pGe.gDir + "/expected_gc.tsv";
+            
+            if (P.pGe.transcriptomeFasta != "-") {
+                // Use provided transcriptome FASTA
+                compute_gc_cmd = tool_path + " --transcriptome " + P.pGe.transcriptomeFasta 
+                               + " --output " + output_file + " 2>&1";
+            } else if (P.pGe.sjdbGTFfile != "-" && P.pGe.gFastaFiles.size() > 0) {
+                // Extract from genome + GTF
+                string genome_file = P.pGe.gFastaFiles[0];
+                compute_gc_cmd = tool_path + " --genome " + genome_file 
+                               + " --gtf " + P.pGe.sjdbGTFfile 
+                               + " --output " + output_file + " 2>&1";
+            }
+            
+            if (!compute_gc_cmd.empty()) {
+                int ret = system(compute_gc_cmd.c_str());
+                if (ret != 0) {
+                    P.inOut->logMain << "WARNING: compute_expected_gc failed (exit code " << ret << "). GC bias correction may not be available.\n" <<flush;
+                } else {
+                    P.inOut->logMain << "Successfully computed expected GC distribution: " << output_file << "\n" <<flush;
+                }
+            }
+        }
+    }
 
     time(&rawTime);
     timeString=asctime(localtime ( &rawTime ));

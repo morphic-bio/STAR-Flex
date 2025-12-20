@@ -4,9 +4,10 @@
 #include "ReadAlign.h"
 #include "SampleDetector.h"
 #include "GlobalVariables.h"
+#include "TranscriptQuantEC.h"
 
 ReadAlign::ReadAlign (Parameters& Pin, Genome &genomeIn, Transcriptome *TrIn, int iChunk)
-                    : mapGen(genomeIn), genOut(*genomeIn.genomeOut.g), P(Pin), chunkTr(TrIn)
+                    : mapGen(genomeIn), genOut(*genomeIn.genomeOut.g), P(Pin), chunkTr(TrIn), quantEC(nullptr)
 {
     readNmates=P.readNmates; //not readNends
     bamRecordIndexPtr = &g_bamRecordIndex;
@@ -14,9 +15,14 @@ ReadAlign::ReadAlign (Parameters& Pin, Genome &genomeIn, Transcriptome *TrIn, in
     rngMultOrder.seed(P.runRNGseed*(iChunk+1));
     rngUniformReal0to1=std::uniform_real_distribution<double> (0.0, 1.0);
     //transcriptome
-    if ( P.quant.trSAM.yes ) {
+    if ( P.quant.trSAM.yes || P.quant.transcriptVB.yes ) {
         alignTrAll=new Transcript [P.alignTranscriptsPerReadNmax];
     };
+    
+    // Initialize EC table for transcript quantification
+    if (P.quant.transcriptVB.yes && chunkTr != nullptr && chunkTr->nTr > 0) {
+        quantEC = new TranscriptQuantEC(chunkTr->nTr);
+    }
 
     if (P.pGe.gType==101) {//SuperTranscriptome
         splGraph = new SpliceGraph(*mapGen.superTr, P, this);

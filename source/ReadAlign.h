@@ -16,8 +16,9 @@
 #include "SpliceGraph.h"
 #include "ClipMate.h"
 
-// Forward declaration
+// Forward declarations
 class SampleDetector;
+class TranscriptQuantEC;
 
 #include <time.h>
 #include <random>
@@ -145,6 +146,9 @@ class ReadAlign {
 
         //quantification
         Transcriptome *chunkTr;
+    public:
+        TranscriptQuantEC *quantEC;  // EC table for transcript quantification (TranscriptVB mode)
+    private:
 
         //mapping time
         time_t timeStart, timeFinish;

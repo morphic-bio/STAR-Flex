@@ -35,6 +35,7 @@ public:
     vector <string> sjdbFileChrStartEnd;
     string sjdbGTFfile;
     string sjdbGTFchrPrefix;
+    string transcriptomeFasta;
     
     string sjdbGTFfeatureExon;
     string sjdbGTFtagExonParentTranscript;

@@ -256,6 +256,7 @@ Parameters::Parameters() {//initalize parameters info
     parArray.push_back(new ParameterInfoVector <string> (-1, -1, "sjdbFileChrStartEnd", &pGe.sjdbFileChrStartEnd));
     parArray.push_back(new ParameterInfoScalar <string> (-1, -1, "sjdbGTFfile", &pGe.sjdbGTFfile));
     parArray.push_back(new ParameterInfoScalar <string> (-1, -1, "sjdbGTFchrPrefix", &pGe.sjdbGTFchrPrefix));
+    parArray.push_back(new ParameterInfoScalar <string> (-1, -1, "transcriptomeFasta", &pGe.transcriptomeFasta));
     
     parArray.push_back(new ParameterInfoScalar <string> (-1, -1, "sjdbGTFfeatureExon", &pGe.sjdbGTFfeatureExon));
     parArray.push_back(new ParameterInfoScalar <string> (-1, -1, "sjdbGTFtagExonParentTranscript", &pGe.sjdbGTFtagExonParentTranscript));
@@ -278,6 +279,9 @@ Parameters::Parameters() {//initalize parameters info
     parArray.push_back(new ParameterInfoVector <string> (-1, -1, "quantMode", &quant.mode));
     parArray.push_back(new ParameterInfoScalar <int>     (-1, -1, "quantTranscriptomeBAMcompression", &quant.trSAM.bamCompression));
     parArray.push_back(new ParameterInfoScalar <string>     (-1, -1, "quantTranscriptomeSAMoutput", &quant.trSAM.output));
+    parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "quantVBgcBias", &quant.transcriptVB.gcBiasInt));
+    parArray.push_back(new ParameterInfoScalar <double>   (-1, -1, "quantVBprior", &quant.transcriptVB.vbPrior));
+    parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "quantVBem", &quant.transcriptVB.quantVBemInt)); // If true, use EM instead of VB
 
     //2-pass
     parArray.push_back(new ParameterInfoScalar <uint>   (-1, -1, "twopass1readsN", &twoPass.pass1readsN));
@@ -1107,10 +1111,13 @@ void Parameters::inputParameters (int argInN, char* argIn[]) {//input parameters
             } else if  (quant.mode.at(ii)=="GeneCounts") {
                 quant.geCount.yes=true;
                 quant.geCount.outFile=outFileNamePrefix + "ReadsPerGene.out.tab";
+            } else if (quant.mode.at(ii)=="TranscriptVB") {
+                quant.transcriptVB.yes=true;
+                quant.transcriptVB.outFile=outFileNamePrefix + "quant.sf";
             } else {
                 ostringstream errOut;
                 errOut << "EXITING because of fatal INPUT error: unrecognized option in --quantMode=" << quant.mode.at(ii) << "\n";
-                errOut << "SOLUTION: use one of the allowed values of --quantMode : TranscriptomeSAM or GeneCounts or - .\n";
+                errOut << "SOLUTION: use one of the allowed values of --quantMode : TranscriptomeSAM, GeneCounts, TranscriptVB, or - .\n";
                 exitWithError(errOut.str(),std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
             };
         };
@@ -1118,6 +1125,17 @@ void Parameters::inputParameters (int argInN, char* argIn[]) {//input parameters
     //these may be set in STARsolo or in SAM attributes
     quant.geneFull.yes=false;
     quant.gene.yes=false;
+    
+    // Initialize transcriptVB defaults
+    if (quant.transcriptVB.yes) {
+        // Convert int flags to bool
+        quant.transcriptVB.gcBias = (quant.transcriptVB.gcBiasInt != 0);
+        // quantVBem flag: if set to 1, use EM (vb=false), otherwise use VB (vb=true, default)
+        quant.transcriptVB.vb = (quant.transcriptVB.quantVBemInt == 0);
+        if (quant.transcriptVB.outFile.empty()) {
+            quant.transcriptVB.outFile = outFileNamePrefix + "quant.sf";
+        }
+    }
     
 
     outSAMstrandField.type=0; //none

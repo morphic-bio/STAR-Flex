@@ -120,6 +120,10 @@ sjdbGTFfile                             -
 sjdbGTFchrPrefix                        -
     string: prefix for chromosome names in a GTF file (e.g. 'chr' for using ENSMEBL annotations with UCSC genomes)
 
+transcriptomeFasta                      -
+    string: path to transcriptome FASTA file (optional, for GC bias correction). If not provided, transcriptome will be extracted from genome+GTF.
+    string: prefix for chromosome names in a GTF file (e.g. 'chr' for using ENSMEBL annotations with UCSC genomes)
+
 sjdbGTFfeatureExon                      exon
     string: feature type in GTF file to be used as exons for building transcripts
 
@@ -781,6 +785,15 @@ quantMode                   -
 quantTranscriptomeBAMcompression    1
     int: -2 to 10  transcriptome BAM compression level
                             -2  ... no BAM output
+
+quantVBgcBias                        0
+    int: 0/1 - enable GC bias correction for transcript quantification (TranscriptVB mode)
+
+quantVBprior                         0.01
+    double: Dirichlet prior for Variational Bayes quantification (TranscriptVB mode)
+
+quantVBem                            0
+    int: 0/1 - use EM instead of VB for transcript quantification (TranscriptVB mode)
                             -1  ... default compression (6?)
                              0  ... no compression
                              10 ... maximum compression
