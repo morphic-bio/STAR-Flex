@@ -49,9 +49,10 @@ struct BAMRecord {
     char* data;
     uint32_t size;
     bool hasY;
+    uint64_t iRead;  // readId (bits[63:32]=readId, bits[31:0]=other data, no Y-bit encoding)
     SortKey key;  // Sort key computed from raw BAM buffer
     
-    BAMRecord() : data(nullptr), size(0), hasY(false) {
+    BAMRecord() : data(nullptr), size(0), hasY(false), iRead(0) {
         key.tid = INT32_MAX;
         key.pos = INT32_MAX;
         key.flag = 0;
@@ -62,9 +63,10 @@ struct BAMRecord {
     
     // Move constructor
     BAMRecord(BAMRecord&& other) noexcept 
-        : data(other.data), size(other.size), hasY(other.hasY), key(other.key) {
+        : data(other.data), size(other.size), hasY(other.hasY), iRead(other.iRead), key(other.key) {
         other.data = nullptr;
         other.size = 0;
+        other.iRead = 0;
     }
     
     // Move assignment
@@ -74,9 +76,11 @@ struct BAMRecord {
             data = other.data;
             size = other.size;
             hasY = other.hasY;
+            iRead = other.iRead;
             key = other.key;
             other.data = nullptr;
             other.size = 0;
+            other.iRead = 0;
         }
         return *this;
     }
@@ -142,7 +146,9 @@ public:
     
     // Thread-safe: called from coordOneAlign replacement path
     // Takes raw BAM record bytes (same format as coordOneAlign input)
-    void addRecord(const char* bamData, uint32_t bamSize, bool hasY);
+    // iRead: readId (bits[63:32]=readId, bits[31:0]=other data, no Y-bit encoding)
+    // hasY: separate Y-chromosome flag (not encoded in iRead)
+    void addRecord(const char* bamData, uint32_t bamSize, uint64_t iRead, bool hasY);
     
     // Called after all threads complete; performs sort + merge
     void finalize();
@@ -150,7 +156,8 @@ public:
     // Iterate sorted records for output (post-sort streaming via k-way merge)
     // Returns false when no more records
     // Caller does NOT own the returned data pointer - it's valid until next call
-    bool nextRecord(const char** bamData, uint32_t* bamSize, bool* hasY);
+    // iRead: returns readId (no Y-bit encoding - hasY is separate)
+    bool nextRecord(const char** bamData, uint32_t* bamSize, uint64_t* iRead, bool* hasY);
     
     // Cleanup temp files
     ~SamtoolsSorter();

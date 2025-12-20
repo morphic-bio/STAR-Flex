@@ -79,9 +79,9 @@ int main() {
     // Unmapped (should be last)
     auto r3 = make_bam_record(-1, -1, "zzz", 0, -1, -1, 0);
 
-    sorter.addRecord(r1.data(), r1.size(), false);
-    sorter.addRecord(r2.data(), r2.size(), false);
-    sorter.addRecord(r3.data(), r3.size(), false);
+    sorter.addRecord(r1.data(), r1.size(), 0ULL, false);
+    sorter.addRecord(r2.data(), r2.size(), 1ULL, false);
+    sorter.addRecord(r3.data(), r3.size(), 2ULL, false);
     
     // Check if spill files were created (with tiny maxRAM, should trigger)
     DIR* dir = opendir(P.outBAMsortTmpDir.c_str());
@@ -100,11 +100,14 @@ int main() {
     sorter.finalize();
 
     std::vector<std::string> out;
+    std::vector<uint64_t> iReads;
     const char* bam = nullptr;
     uint32_t size = 0;
+    uint64_t iRead = 0;
     bool hasY = false;
-    while (sorter.nextRecord(&bam, &size, &hasY)) {
+    while (sorter.nextRecord(&bam, &size, &iRead, &hasY)) {
         out.push_back(get_qname(bam));
+        iReads.push_back(iRead);
     }
 
     if (out.size() != 3 ||
@@ -112,6 +115,25 @@ int main() {
         out[1] != "readB" ||
         out[2] != "zzz") {
         std::cerr << "FAIL: unexpected order\n";
+        return 1;
+    }
+    
+    // Verify iRead round-trips through spill/merge unchanged
+    if (iReads.size() != 3) {
+        std::cerr << "FAIL: expected 3 iRead values, got " << iReads.size() << "\n";
+        return 1;
+    }
+    // Check that iRead values match what we put in (order may differ due to sorting)
+    std::vector<uint64_t> expectedReads = {0ULL, 1ULL, 2ULL};
+    std::sort(iReads.begin(), iReads.end());
+    std::sort(expectedReads.begin(), expectedReads.end());
+    if (iReads != expectedReads) {
+        std::cerr << "FAIL: iRead round-trip mismatch\n";
+        std::cerr << "Expected: ";
+        for (auto r : expectedReads) std::cerr << r << " ";
+        std::cerr << "\nGot: ";
+        for (auto r : iReads) std::cerr << r << " ";
+        std::cerr << "\n";
         return 1;
     }
     

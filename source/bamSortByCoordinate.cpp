@@ -20,7 +20,7 @@ static bool isYChromosome(const char* bamData, const Genome& genome) {
 }
 
 // Finalize samtools sorting and write output
-static void bamSortSamtoolsFinalize(Parameters& P, Genome& genome, Solo& /*solo*/) {
+static void bamSortSamtoolsFinalize(Parameters& P, Genome& genome, Solo& solo) {
     if (g_samtoolsSorter == nullptr) {
         ostringstream errOut;
         errOut << "EXITING because of fatal ERROR: SamtoolsSorter not initialized but --outBAMsortMethod samtools was specified\n";
@@ -77,21 +77,36 @@ static void bamSortSamtoolsFinalize(Parameters& P, Genome& genome, Solo& /*solo*
                           genome.chrNameAll, genome.chrLengthAll);
     }
     
+    // Add temp buffer for tag injection
+    char bam1[BAM_ATTR_MaxSize];
+    
     // Stream sorted records via k-way merge
     const char* bamData;
     uint32_t bamSize;
+    uint64_t iRead;
     bool hasY;
     uint64_t recordCount = 0;
     
-    while (g_samtoolsSorter->nextRecord(&bamData, &bamSize, &hasY)) {
-        // Determine if this is a Y chromosome alignment
-        bool isYChrom = hasY || isYChromosome(bamData, genome);
+    while (g_samtoolsSorter->nextRecord(&bamData, &bamSize, &iRead, &hasY)) {
+        char* bam0 = const_cast<char*>(bamData);
+        uint32 size0 = bamSize;
         
+        // Inject CB/UB tags if requested
+        if (solo.pSolo.samAttrYes) {
+            // Pass iRead (no Y-bit encoding - hasY is separate)
+            solo.soloFeat[solo.pSolo.featureInd[solo.pSolo.samAttrFeature]]
+                ->addBAMtags(bam0, size0, bam1, iRead);
+        }
+        
+        // Determine if this is a Y chromosome alignment
+        bool isYChrom = hasY || isYChromosome(bam0, genome);
+        
+        // Use bam0/size0 for bgzf_write (may point to bam1 after tag injection)
         if (bgzfPrimary) {
-            bgzf_write(bgzfPrimary, bamData, bamSize);
+            bgzf_write(bgzfPrimary, bam0, size0);
         }
         if (P.emitNoYBAMyes) {
-            bgzf_write(isYChrom ? bgzfY : bgzfNoY, bamData, bamSize);
+            bgzf_write(isYChrom ? bgzfY : bgzfNoY, bam0, size0);
         }
         recordCount++;
     }

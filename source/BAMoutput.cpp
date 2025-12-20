@@ -463,7 +463,8 @@ void BAMoutput::unsortedFlush () {//flush all alignments
 void BAMoutput::coordOneAlign (char *bamIn, uint bamSize, uint iRead, bool hasY) {
     // Branch to samtools sorter if enabled
     if (P.outBAMsortMethod == "samtools" && g_samtoolsSorter != nullptr) {
-        g_samtoolsSorter->addRecord(bamIn, bamSize, hasY);
+        // Pass raw iRead (no Y-bit encoding needed - hasY is separate)
+        g_samtoolsSorter->addRecord(bamIn, bamSize, static_cast<uint64_t>(iRead), hasY);
         return;
     }
 

@@ -153,7 +153,10 @@ public:
     uint8_t  getPackedStatus(uint32_t readId) const;
 
     void outputResults(bool cellFilterYes, string outputPrefixMat);
-    void addBAMtags(char *&, uint32 &, char*) {} // stub - BAM tags not used in flex path
+    // Legacy: extracts iRead from trailing 8 bytes at bam0+size0 (includes Y-bit encoding)
+    void addBAMtags(char *&bam0, uint32 &size0, char *bam1);
+    // New: explicit iRead for samtools sorter (no Y-bit encoding - hasY is separate)
+    void addBAMtags(char *&bam0, uint32 &size0, char *bam1, uint64_t iRead);
     void statsOutput();
     void redistributeReadsByCB();
     

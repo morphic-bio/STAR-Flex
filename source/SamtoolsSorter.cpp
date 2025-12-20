@@ -44,6 +44,14 @@ struct SamtoolsSorter::SpillFileReader {
             return false;
         }
         
+        // Read iRead (uint64_t) - added after hasY byte
+        uint64_t iRead;
+        stream.read(reinterpret_cast<char*>(&iRead), sizeof(uint64_t));
+        if (!stream.good()) {
+            hasRecord = false;
+            return false;
+        }
+        
         // Read SortKey fields explicitly to avoid padding/ABI issues
         // Note: This is a temp-only format, not a stable ABI
         stream.read(reinterpret_cast<char*>(&key.tid), sizeof(int32_t));
@@ -59,6 +67,7 @@ struct SamtoolsSorter::SpillFileReader {
         
         currentRecord.size = size;
         currentRecord.hasY = (hasYFlag != 0);
+        currentRecord.iRead = iRead;
         currentRecord.key = key;
         if (currentRecord.data) delete[] currentRecord.data;
         currentRecord.data = new char[size];
@@ -132,12 +141,13 @@ SortKey SamtoolsSorter::computeSortKey(const char* bamData) const {
     return key;
 }
 
-void SamtoolsSorter::addRecord(const char* bamData, uint32_t bamSize, bool hasY) {
+void SamtoolsSorter::addRecord(const char* bamData, uint32_t bamSize, uint64_t iRead, bool hasY) {
     if (bamSize == 0) return;
     
     BAMRecord record;
     record.size = bamSize;
     record.hasY = hasY;
+    record.iRead = iRead;
     record.data = new char[bamSize];
     memcpy(record.data, bamData, bamSize);
     
@@ -203,13 +213,14 @@ void SamtoolsSorter::sortAndSpill() {
     }
     
     // Write records to spill file with metadata
-    // Format: [bamSize:uint32][hasY:uint8][key.tid:int32][key.pos:int32][key.flag:uint16][key.mtid:int32][key.mpos:int32][key.isize:int32][bamData:bytes]
+    // Format: [bamSize:uint32][hasY:uint8][iRead:uint64][key.tid:int32][key.pos:int32][key.flag:uint16][key.mtid:int32][key.mpos:int32][key.isize:int32][bamData:bytes]
     // Note: Serializing fields explicitly to avoid struct padding/ABI issues (temp-only format)
     for (auto& record : recordsToSpill) {
         uint32_t size = record.size;
         uint8_t hasYFlag = record.hasY ? 1 : 0;
         spillStream.write(reinterpret_cast<const char*>(&size), sizeof(uint32_t));
         spillStream.write(reinterpret_cast<const char*>(&hasYFlag), sizeof(uint8_t));
+        spillStream.write(reinterpret_cast<const char*>(&record.iRead), sizeof(uint64_t));
         spillStream.write(reinterpret_cast<const char*>(&record.key.tid), sizeof(int32_t));
         spillStream.write(reinterpret_cast<const char*>(&record.key.pos), sizeof(int32_t));
         spillStream.write(reinterpret_cast<const char*>(&record.key.flag), sizeof(uint16_t));
@@ -280,7 +291,7 @@ void SamtoolsSorter::initializeKWayMerge() {
     std::make_heap(mergeHeap_.begin(), mergeHeap_.end(), heapLess_);
 }
 
-bool SamtoolsSorter::nextRecord(const char** bamData, uint32_t* bamSize, bool* hasY) {
+bool SamtoolsSorter::nextRecord(const char** bamData, uint32_t* bamSize, uint64_t* iRead, bool* hasY) {
     if (!finalized_) {
         finalize();
     }
@@ -351,6 +362,7 @@ bool SamtoolsSorter::nextRecord(const char** bamData, uint32_t* bamSize, bool* h
         // Return the record
         *bamData = record->data;
         *bamSize = record->size;
+        *iRead = record->iRead;
         *hasY = record->hasY;
         return true;
     }
