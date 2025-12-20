@@ -183,6 +183,7 @@ class Parameters {
         uint32 outBAMcoordNbins;
         uint32 outBAMsortingBinsN;//user-defined number of bins for sorting
         string outBAMsortTmpDir;
+        string outBAMsortMethod;  // "star" (default) or "samtools"
         
         //Y-chromosome BAM split
         string emitNoYBAM;  // raw CLI: yes|no - split BAM output by Y-chromosome alignments

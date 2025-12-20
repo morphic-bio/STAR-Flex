@@ -75,7 +75,7 @@ OBJECTS = systemFunctions.o funPrimaryAlignMark.o \
 	ParametersClip_initialize.o ClipMate_clip.o ClipCR4.o opal/opal.o ClipMate_clipChunk.o ClipMate_initialize.o \
 	Transcriptome_classifyAlign.o Transcriptome_geneFullAlignOverlap_ExonOverIntron.o Transcriptome_alignExonOverlap.cpp \
 	SoloFeature_cellFiltering.o \
-	SoloFeature_statsOutput.o bamSortByCoordinate.o SoloBarcode.o \
+	SoloFeature_statsOutput.o bamSortByCoordinate.o SamtoolsSorter.o SoloBarcode.o \
 	ParametersSolo.o SoloRead.o SoloRead_record.o \
 	SoloReadBarcode.o SoloReadBarcode_getCBandUMI.o SoloBarcode_extractBarcode.o \
 	SoloReadFeature.o SoloReadFeature_record.o SoloReadFeature_inputRecords.o \
@@ -237,6 +237,13 @@ test_gene_resolver: CXXFLAGS := $(CXXFLAGSextra) $(CXXFLAGS_main) $(CXXFLAGS)
 test_gene_resolver: GeneResolver.o
 	$(CXX) $(CXXFLAGS) -I./ ../test/test_gene_resolver.cpp GeneResolver.o $(LDFLAGS_shared) -o ../test/test_gene_resolver
 	../test/test_gene_resolver
+
+.PHONY: test_SamtoolsSorter
+test_SamtoolsSorter: CXXFLAGS := $(CXXFLAGSextra) $(CXXFLAGS_main) $(CXXFLAGS)
+test_SamtoolsSorter: LDFLAGS := $(LDFLAGSextra) $(LDFLAGS_shared) $(LDFLAGS)
+test_SamtoolsSorter: Depend.list parametersDefault.xxd libflex libtrim libem $(filter-out STAR.o,$(OBJECTS))
+	$(CXX) $(CXXFLAGS) ../test/SamtoolsSorter_test.cpp $(filter-out STAR.o,$(OBJECTS)) libflex/libflex.a libtrim/libtrim.a libem/libem.a $(LDFLAGS) -o ../test/samtools_sorter_test
+	../test/samtools_sorter_test
 
 .PHONY: test_trim_parity
 test_trim_parity: libtrim

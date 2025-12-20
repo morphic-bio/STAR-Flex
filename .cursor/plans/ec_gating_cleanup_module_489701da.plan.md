@@ -1078,4 +1078,3 @@ parity-test: ec_filter_cli
 4. **Parity Testing Priority**:
 
 - First: Match Salmon's filterAndCollectAlignments exactly
-- Second: Match auxProb computation

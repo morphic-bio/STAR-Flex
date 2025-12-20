@@ -447,6 +447,11 @@ outBAMsortingThreadN    0
 outBAMsortingBinsN      50
     int: >0:  number of genome bins for coordinate-sorting
 
+outBAMsortMethod        star
+    string: star or samtools
+    star     ... legacy STAR bin-based sorter (default)
+    samtools ... samtools-style spill-to-disk sorter
+
 emitNoYBAM              no
     string:                 yes|no - split BAM output by Y-chromosome alignments
                             When enabled, emits _noY.bam and _Y.bam files

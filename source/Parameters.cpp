@@ -119,6 +119,7 @@ Parameters::Parameters() {//initalize parameters info
     parArray.push_back(new ParameterInfoScalar <int>        (-1, -1, "outBAMcompression", &outBAMcompression));
     parArray.push_back(new ParameterInfoScalar <int>        (-1, -1, "outBAMsortingThreadN", &outBAMsortingThreadN));
     parArray.push_back(new ParameterInfoScalar <uint32>        (-1, -1, "outBAMsortingBinsN", &outBAMsortingBinsN));
+    parArray.push_back(new ParameterInfoScalar <string>     (-1, -1, "outBAMsortMethod", &outBAMsortMethod));
     parArray.push_back(new ParameterInfoScalar <string>     (-1, -1, "emitNoYBAM", &emitNoYBAM));
     parArray.push_back(new ParameterInfoScalar <string>     (-1, -1, "keepBAM", &keepBAM));
     parArray.push_back(new ParameterInfoScalar <string>     (-1, -1, "noYOutput", &noYOutput));
@@ -759,6 +760,21 @@ void Parameters::inputParameters (int argInN, char* argIn[]) {//input parameters
 
                 outBAMsortTmpDir=outFileTmp+"/BAMsort/";
                 mkdir(outBAMsortTmpDir.c_str(),runDirPerm);
+                
+                // Validate outBAMsortMethod
+                {
+                    string t = outBAMsortMethod; std::transform(t.begin(), t.end(), t.begin(), ::tolower);
+                    if (t.empty() || t == "star") {
+                        outBAMsortMethod = "star";
+                    } else if (t == "samtools") {
+                        outBAMsortMethod = "samtools";
+                    } else {
+                        ostringstream errOut;
+                        errOut << "EXITING because of FATAL PARAMETER ERROR: --outBAMsortMethod must be 'star' or 'samtools', got: " << outBAMsortMethod << "\n";
+                        errOut << "SOLUTION: use --outBAMsortMethod star or --outBAMsortMethod samtools";
+                        exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
+                    }
+                }
             };
             
             // Parse Y-chromosome BAM split parameters

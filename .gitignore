@@ -52,3 +52,22 @@ plans/*
 test_*/
 chr21_probe*/
 bin/*
+# Build artifacts
+/source/*.o
+/source/*.d
+/source/STAR
+/source/STARlong
+/source/Depend.list
+/source/libem/libem.a
+/source/libflex/libflex.a
+/source/libtrim/libtrim.a
+
+# Test outputs / temp
+/tests/*/output
+/tests/*/tmp
+/tests/solo_smoke
+/tests/ychrom_test
+/tmp/samtools_sorter_test_*
+
+# Logs
+Log.out

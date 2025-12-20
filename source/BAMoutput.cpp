@@ -3,6 +3,7 @@
 #include "UmiCodec.h"
 #include <sys/stat.h>
 #include "GlobalVariables.h"
+#include "SamtoolsSorter.h"
 #include <pthread.h>
 #include "serviceFuns.cpp"
 #include "ThreadControl.h"
@@ -460,6 +461,11 @@ void BAMoutput::unsortedFlush () {//flush all alignments
 };
 
 void BAMoutput::coordOneAlign (char *bamIn, uint bamSize, uint iRead, bool hasY) {
+    // Branch to samtools sorter if enabled
+    if (P.outBAMsortMethod == "samtools" && g_samtoolsSorter != nullptr) {
+        g_samtoolsSorter->addRecord(bamIn, bamSize, hasY);
+        return;
+    }
 
     uint32 *bamIn32;
     uint alignG;

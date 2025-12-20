@@ -18,6 +18,7 @@
 #include "sysRemoveDir.h"
 #include "BAMfunctions.h"
 #include "bamSortByCoordinate.h"
+#include "SamtoolsSorter.h"
 #include "Transcriptome.h"
 #include "signalFromBAM.h"
 #include "mapThreadsSpawn.h"
@@ -276,6 +277,20 @@ int main(int argInN, char *argIn[])
     // initialize chimeric parameters here - note that chimeric parameters require samHeader
     P.pCh.initialize(&P);
 
+    // Apply limitBAMsortRAM fallback before creating SamtoolsSorter
+    if (P.outBAMcoord && P.limitBAMsortRAM == 0) {
+        // make it equal to the genome size
+        P.limitBAMsortRAM = genomeMain.nGenome + genomeMain.SA.lengthByte + genomeMain.SAi.lengthByte;
+    }
+
+    // Initialize samtools sorter if needed
+    if (P.outBAMsortMethod == "samtools" && P.outBAMcoord) {
+        g_samtoolsSorter = new SamtoolsSorter(P.limitBAMsortRAM, 
+                                               P.outBAMsortingThreadNactual,
+                                               P.outBAMsortTmpDir,
+                                               P);
+    }
+
     // this does not seem to work at the moment
     // P.inOut->logMain << "mlock value="<<mlockall(MCL_CURRENT|MCL_FUTURE) <<"\n"<<flush;
 
@@ -329,10 +344,6 @@ int main(int argInN, char *argIn[])
         bgzf_close(P.inOut->outQuantBAMfile);
     };
 
-    if (P.outBAMcoord && P.limitBAMsortRAM == 0)
-    { // make it equal ot the genome size
-        P.limitBAMsortRAM = genomeMain.nGenome + genomeMain.SA.lengthByte + genomeMain.SAi.lengthByte;
-    };
 
     time(&g_statsAll.timeFinishMap);
     *P.inOut->logStdOut << timeMonthDayTime(g_statsAll.timeFinishMap) << " ..... finished mapping\n"
@@ -507,6 +518,12 @@ int main(int argInN, char *argIn[])
         delete genomeMain.sharedMemory;
         genomeMain.sharedMemory = NULL;
     };
+
+    // Cleanup samtools sorter if it exists
+    if (g_samtoolsSorter != nullptr) {
+        delete g_samtoolsSorter;
+        g_samtoolsSorter = nullptr;
+    }
 
     delete P.inOut; // to close files
 

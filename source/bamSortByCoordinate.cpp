@@ -4,10 +4,119 @@
 #include "BAMbinSortUnmapped.h"
 #include "ErrorWarning.h"
 #include "bam_cat.h"
+#include "SamtoolsSorter.h"
+#include "GlobalVariables.h"
 #include <sys/stat.h>
+
+// Helper function to check if a chromosome is Y chromosome using genome.yTids
+static bool isYChromosome(const char* bamData, const Genome& genome) {
+    const uint32_t* bam32 = reinterpret_cast<const uint32_t*>(bamData);
+    int32_t refID = static_cast<int32_t>(bam32[1]);
+    if (refID < 0) {
+        return false;
+    }
+    // Use genome.yTids which contains the proper Y chromosome tid set
+    return genome.yTids.count(refID) > 0;
+}
+
+// Finalize samtools sorting and write output
+static void bamSortSamtoolsFinalize(Parameters& P, Genome& genome, Solo& /*solo*/) {
+    if (g_samtoolsSorter == nullptr) {
+        ostringstream errOut;
+        errOut << "EXITING because of fatal ERROR: SamtoolsSorter not initialized but --outBAMsortMethod samtools was specified\n";
+        errOut << "SOLUTION: This should not happen - please report this error";
+        exitWithError(errOut.str(), std::cerr, P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
+        return;
+    }
+    
+    *P.inOut->logStdOut << timeMonthDayTime() << " ..... started samtools BAM sorting\n" << flush;
+    P.inOut->logMain << timeMonthDayTime() << " ..... started samtools BAM sorting\n" << flush;
+    
+    // Finalize sorting
+    g_samtoolsSorter->finalize();
+    
+    // Open output handles based on settings
+    BGZF* bgzfPrimary = nullptr;
+    BGZF* bgzfY = nullptr;
+    BGZF* bgzfNoY = nullptr;
+    
+    if (!P.emitNoYBAMyes || P.keepBAMyes) {
+        bgzfPrimary = bgzf_open(P.outBAMfileCoordName.c_str(), 
+                                ("w" + to_string((long long)P.outBAMcompression)).c_str());
+        if (bgzfPrimary == nullptr) {
+            ostringstream errOut;
+            errOut << "EXITING because of fatal ERROR: could not open output bam file: " << P.outBAMfileCoordName << "\n";
+            errOut << "SOLUTION: check that the disk is not full, increase the max number of open files with Linux command ulimit -n before running STAR";
+            exitWithError(errOut.str(), std::cerr, P.inOut->logMain, EXIT_CODE_PARAMETER, P);
+        }
+        outBAMwriteHeader(bgzfPrimary, P.samHeaderSortedCoord, 
+                          genome.chrNameAll, genome.chrLengthAll);
+    }
+    
+    if (P.emitNoYBAMyes) {
+        bgzfY = bgzf_open(P.outBAMfileYName.c_str(), 
+                          ("w" + to_string((long long)P.outBAMcompression)).c_str());
+        if (bgzfY == nullptr) {
+            ostringstream errOut;
+            errOut << "EXITING because of fatal ERROR: could not open output Y bam file: " << P.outBAMfileYName << "\n";
+            errOut << "SOLUTION: check that the disk is not full, increase the max number of open files with Linux command ulimit -n before running STAR";
+            exitWithError(errOut.str(), std::cerr, P.inOut->logMain, EXIT_CODE_PARAMETER, P);
+        }
+        outBAMwriteHeader(bgzfY, P.samHeaderSortedCoord, 
+                          genome.chrNameAll, genome.chrLengthAll);
+        
+        bgzfNoY = bgzf_open(P.outBAMfileNoYName.c_str(), 
+                            ("w" + to_string((long long)P.outBAMcompression)).c_str());
+        if (bgzfNoY == nullptr) {
+            ostringstream errOut;
+            errOut << "EXITING because of fatal ERROR: could not open output noY bam file: " << P.outBAMfileNoYName << "\n";
+            errOut << "SOLUTION: check that the disk is not full, increase the max number of open files with Linux command ulimit -n before running STAR";
+            exitWithError(errOut.str(), std::cerr, P.inOut->logMain, EXIT_CODE_PARAMETER, P);
+        }
+        outBAMwriteHeader(bgzfNoY, P.samHeaderSortedCoord, 
+                          genome.chrNameAll, genome.chrLengthAll);
+    }
+    
+    // Stream sorted records via k-way merge
+    const char* bamData;
+    uint32_t bamSize;
+    bool hasY;
+    uint64_t recordCount = 0;
+    
+    while (g_samtoolsSorter->nextRecord(&bamData, &bamSize, &hasY)) {
+        // Determine if this is a Y chromosome alignment
+        bool isYChrom = hasY || isYChromosome(bamData, genome);
+        
+        if (bgzfPrimary) {
+            bgzf_write(bgzfPrimary, bamData, bamSize);
+        }
+        if (P.emitNoYBAMyes) {
+            bgzf_write(isYChrom ? bgzfY : bgzfNoY, bamData, bamSize);
+        }
+        recordCount++;
+    }
+    
+    // Close handles
+    if (bgzfPrimary) bgzf_close(bgzfPrimary);
+    if (bgzfY) bgzf_close(bgzfY);
+    if (bgzfNoY) bgzf_close(bgzfNoY);
+    
+    P.inOut->logMain << "samtools sorting completed: " << recordCount << " records sorted\n";
+    
+    // Cleanup
+    delete g_samtoolsSorter;
+    g_samtoolsSorter = nullptr;
+}
 
 void bamSortByCoordinate (Parameters &P, ReadAlignChunk **RAchunk, Genome &genome, Solo &solo) {
     if (P.outBAMcoord) {//sort BAM if needed
+        // Branch to samtools backend if enabled
+        if (P.outBAMsortMethod == "samtools") {
+            bamSortSamtoolsFinalize(P, genome, solo);
+            return;
+        }
+        
+        // Continue with legacy STAR bin sorter
         *P.inOut->logStdOut << timeMonthDayTime() << " ..... started sorting BAM\n" <<flush;
         P.inOut->logMain << timeMonthDayTime() << " ..... started sorting BAM\n" <<flush;
         uint32 nBins=P.outBAMcoordNbins;
