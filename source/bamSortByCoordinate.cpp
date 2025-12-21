@@ -83,19 +83,19 @@ static void bamSortSamtoolsFinalize(Parameters& P, Genome& genome, Solo& solo) {
     // Stream sorted records via k-way merge
     const char* bamData;
     uint32_t bamSize;
-    uint64_t iRead;
+    uint32_t readId;
     bool hasY;
     uint64_t recordCount = 0;
     
-    while (g_samtoolsSorter->nextRecord(&bamData, &bamSize, &iRead, &hasY)) {
+    while (g_samtoolsSorter->nextRecord(&bamData, &bamSize, &readId, &hasY)) {
         char* bam0 = const_cast<char*>(bamData);
         uint32 size0 = bamSize;
         
         // Inject CB/UB tags if requested
         if (solo.pSolo.samAttrYes) {
-            // Pass iRead (no Y-bit encoding - hasY is separate)
+            // Pass readId directly (no shifting needed)
             solo.soloFeat[solo.pSolo.featureInd[solo.pSolo.samAttrFeature]]
-                ->addBAMtags(bam0, size0, bam1, iRead);
+                ->addBAMtags(bam0, size0, bam1, readId);
         }
         
         // Determine if this is a Y chromosome alignment

@@ -155,8 +155,8 @@ public:
     void outputResults(bool cellFilterYes, string outputPrefixMat);
     // Legacy: extracts iRead from trailing 8 bytes at bam0+size0 (includes Y-bit encoding)
     void addBAMtags(char *&bam0, uint32 &size0, char *bam1);
-    // New: explicit iRead for samtools sorter (no Y-bit encoding - hasY is separate)
-    void addBAMtags(char *&bam0, uint32 &size0, char *bam1, uint64_t iRead);
+    // New: explicit readId for samtools sorter (uint32 readId, no shifting needed)
+    void addBAMtags(char *&bam0, uint32 &size0, char *bam1, uint32_t readId);
     void statsOutput();
     void redistributeReadsByCB();
     

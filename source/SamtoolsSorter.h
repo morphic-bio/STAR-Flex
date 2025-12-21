@@ -9,64 +9,27 @@
 #include <cstdint>
 #include <climits>
 #include <cassert>
+#include <cstring>
+#include <utility>
 
-// =============================================================================
-// SORTING SPECIFICATION (REQUIRED):
-// When numeric keys are equal (tid, pos, flag, mtid, mpos, isize), ordering
-// MUST be deterministic by QNAME byte comparison. This is a non-negotiable
-// requirement for reproducibility and is part of STAR's coordinate sort spec.
-// =============================================================================
+// Simplified coordinate sorting: legacy-style coordinate order (tid<<32|pos, unmapped→INT32_MAX) then readId
+// No QNAME tie-break, no SortKey storage - recompute coord from bamData in comparator
 
-// SortKey for deterministic coordinate sorting (samtools-equivalent)
-// All fields derived from raw BAM buffer without parsing to bam1_t
-struct SortKey {
-    int32_t tid;        // refID (-1 for unmapped -> INT32_MAX)
-    int32_t pos;        // position (-1 for unmapped -> INT32_MAX)
-    uint16_t flag;      // BAM flag
-    int32_t mtid;       // mate refID
-    int32_t mpos;       // mate position
-    int32_t isize;      // insert size
-    // Note: QNAME comparison done separately for tie-breaking (not stored in key)
-    
-    // Numeric comparison (QNAME compared separately if all numeric fields equal)
-    bool operator<(const SortKey& other) const {
-        if (tid != other.tid) return tid < other.tid;
-        if (pos != other.pos) return pos < other.pos;
-        if (flag != other.flag) return flag < other.flag;
-        if (mtid != other.mtid) return mtid < other.mtid;
-        if (mpos != other.mpos) return mpos < other.mpos;
-        return isize < other.isize;
-    }
-    
-    bool operator==(const SortKey& other) const {
-        return tid == other.tid && pos == other.pos && flag == other.flag &&
-               mtid == other.mtid && mpos == other.mpos && isize == other.isize;
-    }
-};
-
-// Structure to hold BAM record data with metadata
+// Structure to hold BAM record data with minimal metadata
 struct BAMRecord {
     char* data;
     uint32_t size;
     bool hasY;
-    uint64_t iRead;  // readId (bits[63:32]=readId, bits[31:0]=other data, no Y-bit encoding)
-    SortKey key;  // Sort key computed from raw BAM buffer
+    uint32_t readId;  // readId extracted from iRead >> 32
     
-    BAMRecord() : data(nullptr), size(0), hasY(false), iRead(0) {
-        key.tid = INT32_MAX;
-        key.pos = INT32_MAX;
-        key.flag = 0;
-        key.mtid = -1;
-        key.mpos = -1;
-        key.isize = 0;
-    }
+    BAMRecord() : data(nullptr), size(0), hasY(false), readId(0) {}
     
     // Move constructor
     BAMRecord(BAMRecord&& other) noexcept 
-        : data(other.data), size(other.size), hasY(other.hasY), iRead(other.iRead), key(other.key) {
+        : data(other.data), size(other.size), hasY(other.hasY), readId(other.readId) {
         other.data = nullptr;
         other.size = 0;
-        other.iRead = 0;
+        other.readId = 0;
     }
     
     // Move assignment
@@ -76,11 +39,10 @@ struct BAMRecord {
             data = other.data;
             size = other.size;
             hasY = other.hasY;
-            iRead = other.iRead;
-            key = other.key;
+            readId = other.readId;
             other.data = nullptr;
             other.size = 0;
-            other.iRead = 0;
+            other.readId = 0;
         }
         return *this;
     }
@@ -94,48 +56,34 @@ struct BAMRecord {
     }
 };
 
-// Unified QNAME comparison helper (used by both BAMRecordComparator and HeapLess)
+// Helper to compute coordinate key from raw BAM buffer (tid<<32|pos, unmapped→INT32_MAX)
 namespace SamtoolsSorterHelpers {
-    // REQUIRED: Compare QNAME bytes from raw BAM buffers for tie-breaking.
-    // Called when all numeric SortKey fields are equal.
-    // This is mandatory for deterministic ordering - not optional.
-    inline int compareQName(const char* bamA, const char* bamB) {
-        const uint8_t* a8 = reinterpret_cast<const uint8_t*>(bamA + 4);
-        const uint8_t* b8 = reinterpret_cast<const uint8_t*>(bamB + 4);
+    inline uint64_t computeCoordKey(const char* bamData) {
+        const uint32_t* bam32 = reinterpret_cast<const uint32_t*>(bamData);
+        int32_t tid = static_cast<int32_t>(bam32[1]);
+        int32_t pos = static_cast<int32_t>(bam32[2]);
         
-        // Extract l_qname from core (offset 8 from start of core = offset 8 from bam8)
-        uint8_t l_qname_a = a8[8];
-        uint8_t l_qname_b = b8[8];
+        // Unmapped reads: set to INT32_MAX so they sort last
+        uint64_t tid64 = (tid == -1) ? static_cast<uint64_t>(INT32_MAX) : static_cast<uint64_t>(tid);
+        uint64_t pos64 = (pos == -1) ? static_cast<uint64_t>(INT32_MAX) : static_cast<uint64_t>(pos);
         
-        if (l_qname_a == 0 || l_qname_b == 0) {
-            return (l_qname_a < l_qname_b) ? -1 : ((l_qname_a > l_qname_b) ? 1 : 0);
-        }
-        
-        // QNAME starts at offset 36 from bamData (4 block_size + 32 core)
-        const char* qname_a = reinterpret_cast<const char*>(bamA + 36);
-        const char* qname_b = reinterpret_cast<const char*>(bamB + 36);
-        
-        // Compare QNAME bytes (excluding trailing NUL if present)
-        size_t len_a = l_qname_a;
-        size_t len_b = l_qname_b;
-        if (len_a > 0 && qname_a[len_a - 1] == 0) len_a--;
-        if (len_b > 0 && qname_b[len_b - 1] == 0) len_b--;
-        
-        size_t min_len = (len_a < len_b) ? len_a : len_b;
-        int cmp = memcmp(qname_a, qname_b, min_len);
-        if (cmp != 0) return cmp;
-        return (len_a < len_b) ? -1 : ((len_a > len_b) ? 1 : 0);
+        return (tid64 << 32) | pos64;
     }
 }
 
-// Comparator for sorting BAM records by SortKey + QNAME (samtools-equivalent)
+// Comparator for sorting BAM records: coord (tid<<32|pos) then readId
 struct BAMRecordComparator {
     bool operator()(const BAMRecord& a, const BAMRecord& b) const {
-        // First compare numeric SortKey
-        if (a.key < b.key) return true;
-        if (b.key < a.key) return false;
-        // If all numeric fields equal, compare QNAME bytes
-        return SamtoolsSorterHelpers::compareQName(a.data, b.data) < 0;
+        // Compute coord keys from raw BAM buffers
+        uint64_t coordA = SamtoolsSorterHelpers::computeCoordKey(a.data);
+        uint64_t coordB = SamtoolsSorterHelpers::computeCoordKey(b.data);
+        
+        if (coordA != coordB) {
+            return coordA < coordB;
+        }
+        
+        // Tie-break by readId
+        return a.readId < b.readId;
     }
 };
 
@@ -146,9 +94,9 @@ public:
     
     // Thread-safe: called from coordOneAlign replacement path
     // Takes raw BAM record bytes (same format as coordOneAlign input)
-    // iRead: readId (bits[63:32]=readId, bits[31:0]=other data, no Y-bit encoding)
-    // hasY: separate Y-chromosome flag (not encoded in iRead)
-    void addRecord(const char* bamData, uint32_t bamSize, uint64_t iRead, bool hasY);
+    // readId: uint32 readId extracted from iRead >> 32
+    // hasY: separate Y-chromosome flag
+    void addRecord(const char* bamData, uint32_t bamSize, uint32_t readId, bool hasY);
     
     // Called after all threads complete; performs sort + merge
     void finalize();
@@ -156,8 +104,8 @@ public:
     // Iterate sorted records for output (post-sort streaming via k-way merge)
     // Returns false when no more records
     // Caller does NOT own the returned data pointer - it's valid until next call
-    // iRead: returns readId (no Y-bit encoding - hasY is separate)
-    bool nextRecord(const char** bamData, uint32_t* bamSize, uint64_t* iRead, bool* hasY);
+    // readId: returns uint32 readId for tag injection
+    bool nextRecord(const char** bamData, uint32_t* bamSize, uint32_t* readId, bool* hasY);
     
     // Cleanup temp files
     ~SamtoolsSorter();
@@ -182,29 +130,89 @@ private:
     struct SpillFileReader;
     std::vector<SpillFileReader*> spillReaders_;
     bool finalized_;
+    BAMRecord returnedRecord_;  // Spill record buffer returned to caller (valid until next call)
     
-    // Min-heap for k-way merge with QNAME tie-breaking
+    // Min-heap for k-way merge: coord (tid<<32|pos) then readId
     // source_id: -1 = in-memory records, >=0 = spill file index
     struct HeapEntry {
-        SortKey key;
-        int sourceId;        // -1 = in-memory, >=0 spill file index
+        uint64_t coordKey;  // tid<<32|pos (computed from bamPtr)
+        uint32_t readId;    // readId for tie-breaking
+        int sourceId;       // -1 = in-memory, >=0 spill file index
         size_t recordIdx;   // index into records_ when sourceId == -1
-        const char* bamPtr;  // pointer to current BAM record for tie-break
+        const char* bamPtr; // pointer to current BAM record (for recomputing coord)
+        BAMRecord record;   // Owned copy of BAM record (for spill files, ensures data persists after readNext)
+        
+        HeapEntry() : coordKey(0), readId(0), sourceId(0), recordIdx(0), bamPtr(nullptr) {}
+        
+        // Move constructor
+        HeapEntry(HeapEntry&& other) noexcept
+            : coordKey(other.coordKey), readId(other.readId), sourceId(other.sourceId),
+              recordIdx(other.recordIdx), bamPtr(other.bamPtr), record(std::move(other.record)) {
+            other.bamPtr = nullptr;
+        }
+        
+        // Move assignment
+        HeapEntry& operator=(HeapEntry&& other) noexcept {
+            if (this != &other) {
+                coordKey = other.coordKey;
+                readId = other.readId;
+                sourceId = other.sourceId;
+                recordIdx = other.recordIdx;
+                bamPtr = other.bamPtr;
+                record = std::move(other.record);
+                other.bamPtr = nullptr;
+            }
+            return *this;
+        }
+        
+        // Copy constructor (needed for heap operations)
+        HeapEntry(const HeapEntry& other) 
+            : coordKey(other.coordKey), readId(other.readId), sourceId(other.sourceId),
+              recordIdx(other.recordIdx), bamPtr(other.bamPtr) {
+            // Deep copy record data (only if it exists - in-memory records have nullptr)
+            record.size = other.record.size;
+            record.hasY = other.record.hasY;
+            record.readId = other.record.readId;
+            if (other.record.data != nullptr && other.record.size > 0) {
+                record.data = new char[other.record.size];
+                memcpy(record.data, other.record.data, other.record.size);
+            } else {
+                record.data = nullptr;
+            }
+        }
+        
+        // Copy assignment
+        HeapEntry& operator=(const HeapEntry& other) {
+            if (this != &other) {
+                coordKey = other.coordKey;
+                readId = other.readId;
+                sourceId = other.sourceId;
+                recordIdx = other.recordIdx;
+                bamPtr = other.bamPtr;
+                // Deep copy record data (only if it exists - in-memory records have nullptr)
+                if (record.data) delete[] record.data;
+                record.size = other.record.size;
+                record.hasY = other.record.hasY;
+                record.readId = other.record.readId;
+                if (other.record.data != nullptr && other.record.size > 0) {
+                    record.data = new char[other.record.size];
+                    memcpy(record.data, other.record.data, other.record.size);
+                } else {
+                    record.data = nullptr;
+                }
+            }
+            return *this;
+        }
     };
     
-    // Comparator for min-heap with REQUIRED QNAME tie-breaking.
-    // INVARIANT: bamPtr must be non-null for any entry in the heap.
-    // When numeric keys are equal, QNAME byte comparison determines order.
+    // Comparator for min-heap: coord then readId
     struct HeapLess {
         bool operator()(const HeapEntry& a, const HeapEntry& b) const {
-            // Compare numeric SortKey first
-            if (a.key < b.key) return false;  // a comes before b
-            if (b.key < a.key) return true;   // b comes before a
-            // Numeric keys equal - QNAME tie-break is REQUIRED
-            // INVARIANT: bamPtr must be valid for all heap entries
-            assert(a.bamPtr != nullptr && "HeapEntry::bamPtr must not be null");
-            assert(b.bamPtr != nullptr && "HeapEntry::bamPtr must not be null");
-            return SamtoolsSorterHelpers::compareQName(a.bamPtr, b.bamPtr) > 0;  // min-heap: smaller QNAME has higher priority
+            if (a.coordKey != b.coordKey) {
+                return a.coordKey > b.coordKey;  // min-heap: smaller coord has higher priority
+            }
+            // Tie-break by readId
+            return a.readId > b.readId;  // min-heap: smaller readId has higher priority
         }
     };
     
@@ -212,10 +220,10 @@ private:
     HeapLess heapLess_;  // Comparator instance
     
     // Helper functions
-    SortKey computeSortKey(const char* bamData) const;
     void sortAndSpill();
     void initializeKWayMerge();
     void cleanupSpillFiles();
+    void clearReturnedRecord();
 };
 
 #endif // SAMTOOLS_SORTER_H

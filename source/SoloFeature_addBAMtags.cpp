@@ -3,29 +3,39 @@
 #include "BAMfunctions.h"
 #include "ErrorWarning.h"
 #include <cstring>
+#include <cstdlib>
 
 // Legacy overload: extracts iRead from trailing 8 bytes (legacy bin sorter convention with Y-bit encoding)
 void SoloFeature::addBAMtags(char *&bam0, uint32 &size0, char *bam1) {
     // Extract iReadWithY from trailing 8 bytes (legacy convention: bit63=Y-flag)
     uint64_t iReadWithY = *(uint64_t*)(bam0 + size0);
-    // Mask Y-bit and extract readId for compatibility with samtools path
+    // Mask Y-bit and extract readId (bits[63:32])
     uint64_t iRead = (iReadWithY & ~(1ULL << 63));
-    addBAMtags(bam0, size0, bam1, iRead);
+    uint32_t readId = static_cast<uint32_t>(iRead >> 32);
+    addBAMtags(bam0, size0, bam1, readId);
 }
 
-// Main implementation: explicit iRead for samtools sorter (no Y-bit encoding)
+// Main implementation: explicit readId for samtools sorter (uint32 readId, no shifting needed)
 //
 // Policy: CB+UB together (requireCbUbTogether)
 // - When true (default): UB requires CB, CB lookup failures are fatal if UB is requested.
-//   This is an intentional policy to ensure data consistency and may be relaxed later.
+//   This is an intentional policy to ensure data consistency.
 // - When false: Allow UB-only or CB-only injection without hard-failure.
 //   CB lookup is only guarded when needCB is true, and UB decode failures are non-fatal.
 //
-// To relax the policy: set requireCbUbTogether = false below.
-void SoloFeature::addBAMtags(char *&bam0, uint32 &size0, char *bam1, uint64_t iRead) {
-    // Policy flag: require CB+UB together (default: true)
-    // Set to false to allow UB-only or CB-only injection
-    static const bool requireCbUbTogether = true;
+// Policy control: Set environment variable STAR_REQUIRE_CBUB_TOGETHER=no to relax the policy.
+// Default: true (strict policy)
+//
+// Policy exception: status==2 (invalid UMI) is an intentional exception - CB is emitted, UB is skipped.
+// This matches recordReadInfo semantics where CB is valid but UMI is invalid.
+void SoloFeature::addBAMtags(char *&bam0, uint32 &size0, char *bam1, uint32_t readId) {
+    // Policy flag: require CB+UB together
+    // Can be relaxed via environment variable STAR_REQUIRE_CBUB_TOGETHER=no
+    // Default: true (strict policy)
+    static const bool requireCbUbTogetherDefault = true;
+    static const bool requireCbUbTogether = (std::getenv("STAR_REQUIRE_CBUB_TOGETHER") != nullptr) 
+        ? (std::string(std::getenv("STAR_REQUIRE_CBUB_TOGETHER")) == "no" ? false : true)
+        : requireCbUbTogetherDefault;
     
     // Early return if tags not requested
     if (!pSolo.samAttrYes) {
@@ -43,23 +53,50 @@ void SoloFeature::addBAMtags(char *&bam0, uint32 &size0, char *bam1, uint64_t iR
     if (requireCbUbTogether && needUB && !needCB) {
         ostringstream errOut;
         errOut << "EXITING because of fatal ERROR: UB tag requested but CB tag not requested\n";
-        errOut << "SOLUTION: Request both CB and UB tags, or set requireCbUbTogether = false in SoloFeature_addBAMtags.cpp";
+        errOut << "SOLUTION: Request both CB and UB tags, or set environment variable STAR_REQUIRE_CBUB_TOGETHER=no";
+        exitWithError(errOut.str(), std::cerr, P.inOut->logMain, EXIT_CODE_PARAMETER, P);
+        return;
+    }
+    
+    // Hard error: UB requested but UMI length invalid
+    if (needUB && (pSolo.umiL == 0 || pSolo.umiL > 16)) {
+        ostringstream errOut;
+        errOut << "EXITING because of fatal ERROR: UB tag requested but UMI length is invalid\n";
+        errOut << "pSolo.umiL=" << static_cast<int>(pSolo.umiL) << " (must be 1-16 for UB injection)\n";
+        errOut << "SOLUTION: Set --soloUMIlen to a value between 1 and 16, or do not request UB tag";
         exitWithError(errOut.str(), std::cerr, P.inOut->logMain, EXIT_CODE_PARAMETER, P);
         return;
     }
     
     // Hard error: Check packedReadInfo is initialized
+    // Stage 2: Flex-aware check - PackedReadInfo may be empty in Flex modes
+    bool isFlexMode = (pSolo.inlineHashMode || pSolo.inlineCBCorrection);
+    bool isMinimalMemory = (pSolo.soloFlexMinimalMemory && pSolo.inlineHashMode);
+    
     if (packedReadInfo.data.empty()) {
         ostringstream errOut;
         errOut << "EXITING because of fatal ERROR: PackedReadInfo not initialized for CB/UB injection\n";
-        errOut << "SOLUTION: This should not happen - please report this error";
+        if (isFlexMode || isMinimalMemory) {
+            errOut << "NOTE: Flex mode detected (inlineHashMode=" << (pSolo.inlineHashMode ? "true" : "false");
+            if (pSolo.inlineCBCorrection) errOut << ", inlineCBCorrection=true";
+            if (isMinimalMemory) errOut << ", soloFlexMinimalMemory=true";
+            errOut << ")\n";
+            errOut << "SOLUTION: PackedReadInfo must be populated for tag injection. ";
+            if (isMinimalMemory) {
+                errOut << "Disable --soloFlexMinimalMemory or ensure PackedReadInfo is populated for tag injection.";
+            } else if (pSolo.inlineCBCorrection) {
+                errOut << "Inline CB correction mode requires PackedReadInfo for tag injection.";
+            } else {
+                errOut << "Ensure PackedReadInfo is initialized before tag injection.";
+            }
+        } else {
+            errOut << "SOLUTION: This should not happen - please report this error";
+        }
         exitWithError(errOut.str(), std::cerr, P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
         return;
     }
     
-    // Extract readId (samtools path: no Y-bit encoding, just shift)
-    // iRead format: bits[63:32]=readId, bits[31:0]=other data
-    uint32_t readId = static_cast<uint32_t>(iRead >> 32);
+    // readId is passed directly (no shifting needed)
     
     // Hard error: Check readId in range
     if (readId >= packedReadInfo.data.size()) {
@@ -72,24 +109,38 @@ void SoloFeature::addBAMtags(char *&bam0, uint32 &size0, char *bam1, uint64_t iR
     }
     
     // Lookup from PackedReadInfo
+    // Stage 2: Flex-aware - PackedReadInfo is the primary source for both Flex and non-Flex paths
+    // Future: If Flex uses alternative sources (e.g., inline hash), add lookup logic here
     uint32_t cbIdx = packedReadInfo.getCB(readId);
     uint32_t umiPacked = packedReadInfo.getUMI(readId);
     uint8_t status = packedReadInfo.getStatus(readId);
     
     // Status-aware tag emission (matches recordReadInfo semantics)
-    // status==0: skip both CB and UB (missing CB) - no error
+    // status==0: skip both CB and UB (missing CB) - no error unless policy requires CB
     // status==1: emit both CB and UB (valid)
     // status==2: emit CB only, skip UB (invalid UMI)
+    //   POLICY EXCEPTION: status==2 is an intentional exception to CB+UB together policy.
+    //   Invalid UMI still yields CB tag (matches recordReadInfo semantics where CB is valid but UMI is not).
+    //   This allows partial tag injection when UMI correction fails but CB is still valid.
+    // Stage 2: Flex path uses same status semantics as non-Flex
     if (status == 0) {
         // Policy: if requireCbUbTogether and UB is requested, missing CB is fatal
         if (requireCbUbTogether && needUB) {
             ostringstream errOut;
             errOut << "EXITING because of fatal ERROR: UB tag requested but CB is missing (status==0)\n";
-            errOut << "SOLUTION: This is enforced by requireCbUbTogether policy. Set requireCbUbTogether = false to allow UB-only injection.";
+            errOut << "SOLUTION: This is enforced by requireCbUbTogether policy. Set environment variable STAR_REQUIRE_CBUB_TOGETHER=no to allow UB-only injection.";
             exitWithError(errOut.str(), std::cerr, P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
             return;
         }
         return;  // No tags to add
+    }
+    
+    // Policy check for status==2: invalid UMI but valid CB
+    // EXCEPTION: status==2 is allowed to emit CB-only (intentional exception to CB+UB together)
+    // This matches recordReadInfo semantics where CB is valid but UMI is invalid
+    if (status == 2 && requireCbUbTogether && needUB) {
+        // Note: This is an intentional exception - CB will be emitted, UB will be skipped
+        // Documented above in status-aware tag emission comment
     }
     
     // Decode CB with bounds check
@@ -116,15 +167,17 @@ void SoloFeature::addBAMtags(char *&bam0, uint32 &size0, char *bam1, uint64_t iR
     }
     
     // Decode UMI using length-aware decoder (only if status == 1)
-    // Policy: if requireCbUbTogether is false, allow UB decode failures to be non-fatal
+    // UMI length validation already checked above (hard error if needUB && umiL invalid)
     string ubStr;
     bool emitUB = false;
-    if (status == 1 && needUB && pSolo.umiL > 0 && pSolo.umiL <= 16) {
+    if (status == 1 && needUB) {
+        // UMI length is guaranteed valid here (1-16) due to check above
         // Use convertNuclInt64toString from SequenceFuns.h
         // Do NOT skip when umiPacked == 0 (valid all-A UMI)
         ubStr = convertNuclInt64toString(umiPacked, pSolo.umiL);
         emitUB = true;
     }
+    // Note: status==2 intentionally skips UB (invalid UMI) but still emits CB (policy exception)
     
     // If no tags to add, leave bam0/size0 unchanged
     if (!emitCB && !emitUB) {
