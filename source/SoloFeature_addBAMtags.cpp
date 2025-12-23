@@ -37,15 +37,28 @@ void SoloFeature::addBAMtags(char *&bam0, uint32 &size0, char *bam1, uint32_t re
         ? (std::string(std::getenv("STAR_REQUIRE_CBUB_TOGETHER")) == "no" ? false : true)
         : requireCbUbTogetherDefault;
     
-    // Early return if tags not requested
-    if (!pSolo.samAttrYes) {
+    // ZI tag emission flag: controlled by STAR_EMIT_READID_TAG env var (default: off)
+    static bool ziTagEmitChecked = false;
+    static bool ziTagEmitEnabled = false;
+    if (!ziTagEmitChecked) {
+        const char* envVal = std::getenv("STAR_EMIT_READID_TAG");
+        ziTagEmitEnabled = (envVal != nullptr && std::string(envVal) != "0" && std::string(envVal) != "");
+        if (ziTagEmitEnabled) {
+            P.inOut->logMain << "ZI tag emission enabled (STAR_EMIT_READID_TAG)" << endl;
+        }
+        ziTagEmitChecked = true;
+    }
+    
+    // Early return if tags not requested (check both CB/UB and ZI)
+    if (!pSolo.samAttrYes && !ziTagEmitEnabled) {
         return;
     }
     
     // Check if CB or UB are requested
     bool needCB = P.outSAMattrPresent.CB;
     bool needUB = P.outSAMattrPresent.UB;
-    if (!needCB && !needUB) {
+    // If neither CB/UB nor ZI are requested, return early
+    if (!needCB && !needUB && !ziTagEmitEnabled) {
         return;
     }
     
@@ -125,14 +138,19 @@ void SoloFeature::addBAMtags(char *&bam0, uint32 &size0, char *bam1, uint32_t re
     // Stage 2: Flex path uses same status semantics as non-Flex
     if (status == 0) {
         // Policy: if requireCbUbTogether and UB is requested, missing CB is fatal
-        if (requireCbUbTogether && needUB) {
+        // BUT: Allow ZI-only emission even when CB/UB can't be emitted (for validation)
+        if (requireCbUbTogether && needUB && !ziTagEmitEnabled) {
             ostringstream errOut;
             errOut << "EXITING because of fatal ERROR: UB tag requested but CB is missing (status==0)\n";
             errOut << "SOLUTION: This is enforced by requireCbUbTogether policy. Set environment variable STAR_REQUIRE_CBUB_TOGETHER=no to allow UB-only injection.";
             exitWithError(errOut.str(), std::cerr, P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
             return;
         }
-        return;  // No tags to add
+        // Even if CB/UB aren't emitted, still emit ZI if enabled (for validation)
+        if (!ziTagEmitEnabled) {
+            return;  // No tags to add
+        }
+        // Fall through to emit ZI tag only (skip CB/UB policy check if ZI-only)
     }
     
     // Policy check for status==2: invalid UMI but valid CB
@@ -179,8 +197,8 @@ void SoloFeature::addBAMtags(char *&bam0, uint32 &size0, char *bam1, uint32_t re
     }
     // Note: status==2 intentionally skips UB (invalid UMI) but still emits CB (policy exception)
     
-    // If no tags to add, leave bam0/size0 unchanged
-    if (!emitCB && !emitUB) {
+    // If no tags to add (including ZI), leave bam0/size0 unchanged
+    if (!emitCB && !emitUB && !ziTagEmitEnabled) {
         return;
     }
     
@@ -211,6 +229,9 @@ void SoloFeature::addBAMtags(char *&bam0, uint32 &size0, char *bam1, uint32_t re
     }
     if (emitUB) {
         tagSize += 3 + ubStr.size() + 1;  // UB:Z:<ubStr>\0
+    }
+    if (ziTagEmitEnabled) {
+        tagSize += 7;  // ZI:i:<readId> = ['Z']['I']['I'][4-byte uint32] = 7 bytes
     }
     
     // Calculate new sizes
@@ -255,6 +276,15 @@ void SoloFeature::addBAMtags(char *&bam0, uint32 &size0, char *bam1, uint32_t re
         tagPtr[2] = 'Z';
         memcpy(tagPtr + 3, ubStr.c_str(), ubStr.size() + 1);
         tagPtr += 3 + ubStr.size() + 1;
+    }
+    
+    if (ziTagEmitEnabled) {
+        // Append ZI tag: ZI:i:<readId> (uint32 little-endian)
+        tagPtr[0] = 'Z';
+        tagPtr[1] = 'I';
+        tagPtr[2] = 'I';  // type 'I' = uint32
+        *reinterpret_cast<uint32_t*>(tagPtr + 3) = readId;  // little-endian uint32
+        tagPtr += 7;
     }
     
     // Update bam0/size0 to point to new record

@@ -174,6 +174,11 @@ void SoloFeature::collapseUMIall(bool minimalMode)
         finalizeTagTableFromReadInfo();
     }
     
+    // Export readId/CB/UB/status TSV table (env var gated, after CB/UB finalized, before packedReadInfo cleared)
+    if (!minimalMode) {
+        writeReadIdTagTable();
+    }
+    
 #ifdef DEBUG_CB_UB_PARITY
     // Write parity counters after all CBs processed
     if (parityEnabled) {

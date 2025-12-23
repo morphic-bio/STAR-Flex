@@ -166,6 +166,7 @@ public:
     
     void writeTagTableIfRequested(bool) {} // stub - tag table not used in flex path
     void finalizeTagTableFromReadInfo();
+    void writeReadIdTagTable();  // Export readId/CB/UB/status TSV table (env var gated)
     void initPackedReadInfo(uint32_t nReads) { packedReadInfo.init(nReads, pSolo.cbWLstr.size(), pSolo.umiL); }
     
     // UMI correction (clique deduplication) data structures

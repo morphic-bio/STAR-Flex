@@ -59,7 +59,10 @@ void SoloFeature::countCBgeneUMI()
         
         // Direct hash consumption: no materialization/legacy collapse
         collapseUMIall_fromHash();
-
+        
+        // Export readId/CB/UB/status TSV table (env var gated, after CB/UB finalized)
+        writeReadIdTagTable();
+        
         time(&rawTime);
         P.inOut->logMain << timeMonthDayTime(rawTime) << " ... Finished collapsing UMIs (direct hash mode)" << endl;
         return;

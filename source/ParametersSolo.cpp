@@ -292,12 +292,17 @@ void ParametersSolo::initialize(Parameters *pPin)
             }
             
             // Enable inline CB correction (if not explicitly set)
-            if (inlineCBCorrectionStr.empty() || inlineCBCorrectionStr == "no") {
+            // Only override if empty (default), respect explicit "no" from user
+            // Also override the boolean directly since it was already parsed earlier
+            if (inlineCBCorrectionStr.empty()) {
                 inlineCBCorrectionStr = "yes";
+                inlineCBCorrection = true;  // Override boolean directly
             }
             
             // Enable minimal memory mode (if not explicitly set)
-            if (soloFlexMinimalMemoryStr.empty() || soloFlexMinimalMemoryStr == "no") {
+            // Only override if empty (default), respect explicit "no" from user
+            // Set string now, boolean will be parsed later
+            if (soloFlexMinimalMemoryStr.empty()) {
                 soloFlexMinimalMemoryStr = "yes";
             }
             
