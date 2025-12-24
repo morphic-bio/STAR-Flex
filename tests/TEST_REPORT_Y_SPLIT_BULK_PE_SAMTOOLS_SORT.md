@@ -1,14 +1,15 @@
-# Bulk Paired-End Y/NoY Split Validation Test Report
+# Bulk Paired-End Y/NoY Split Test Report (samtools sorter)
 
-Generated: Wed Dec 24 06:32:30 AM UTC 2025
+Generated: Tue Dec 23 07:02:54 PM UTC 2025
 
 ## Test Configuration
 
 - STAR Binary: `/mnt/pikachu/STAR-Flex/tests/../source/STAR`
 - Dataset: `/storage/PE/downsampled/21033-09-01-13-01_S1_L007_R1_001.fastq.gz`, `/storage/PE/downsampled/21033-09-01-13-01_S1_L007_R2_001.fastq.gz`
 - Reference: `/storage/flex_filtered_reference/star_index`
-- Base Directory: `/tmp/ychrom_bulk_pe_test`
-- Mode: Bulk Paired-End RNA-seq (NOT single-cell/Flex)
+- Base Directory: `/tmp/ychrom_bulk_pe_samtools_sort_test`
+- Mode: Bulk Paired-End RNA-seq with samtools sorter
+- Sort Method: `--outBAMsortMethod samtools`
 
 ## Baseline Statistics
 
@@ -17,13 +18,7 @@ Generated: Wed Dec 24 06:32:30 AM UTC 2025
 
 ## Split Run Results
 
-### Unsorted Mode
-
-- Y reads: `5639`
-- noY reads: `264450`
-- Total: `270089`
-
-### Sorted Mode
+### Sorted Mode (samtools sorter)
 
 - Y reads: `5639`
 - noY reads: `264450`
@@ -31,7 +26,7 @@ Generated: Wed Dec 24 06:32:30 AM UTC 2025
 
 ## Validation Results
 
-- Passed: `9`
+- Passed: `5`
 - Failed: `0`
 
 ### Checks Performed
@@ -44,9 +39,7 @@ Generated: Wed Dec 24 06:32:30 AM UTC 2025
 
 ## Files
 
-- Baseline BAM: `/tmp/ychrom_bulk_pe_test/baseline/Aligned.out.bam`
-- Unsorted Y: `/tmp/ychrom_bulk_pe_test/unsorted_split/Aligned.out_Y.bam`
-- Unsorted noY: `/tmp/ychrom_bulk_pe_test/unsorted_split/Aligned.out_noY.bam`
-- Sorted Y: `/tmp/ychrom_bulk_pe_test/sorted_split/Aligned.sortedByCoord.out_Y.bam`
-- Sorted noY: `/tmp/ychrom_bulk_pe_test/sorted_split/Aligned.sortedByCoord.out_noY.bam`
+- Baseline BAM: `/tmp/ychrom_bulk_pe_samtools_sort_test/baseline/Aligned.sortedByCoord.out.bam`
+- Sorted Y: `/tmp/ychrom_bulk_pe_samtools_sort_test/sorted_split/Aligned.sortedByCoord.out_Y.bam`
+- Sorted noY: `/tmp/ychrom_bulk_pe_samtools_sort_test/sorted_split/Aligned.sortedByCoord.out_noY.bam`
 

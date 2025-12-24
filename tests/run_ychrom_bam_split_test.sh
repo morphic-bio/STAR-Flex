@@ -24,17 +24,22 @@ echo ""
 
 # Step 1: Create minimal reference genome (chr1 and chrY)
 echo "Step 1: Creating reference genome..."
-# Create longer sequences for better mapping (100bp each)
+# Create unique sequences (200bp each) with highly unique patterns to avoid multi-mapping issues
+# Use diverse, non-repetitive sequences for each chromosome
 cat > "$REF_DIR/chr1.fa" << 'EOF'
 >chr1
-AAAAAAAAAACCCCCCCCCCGGGGGGGGGGTTTTTTTTTTAAAAAAAAAACCCCCCCCCCGGGGGGGGGGTTTTTTTTTT
-AAAAAAAAAACCCCCCCCCCGGGGGGGGGGTTTTTTTTTTAAAAAAAAAACCCCCCCCCCGGGGGGGGGGTTTTTTTTTT
+ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT
+GCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTA
+TGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCA
+CGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGAT
 EOF
 
 cat > "$REF_DIR/chrY.fa" << 'EOF'
 >chrY
-ATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCG
-ATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCG
+TGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGAC
+CATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATG
+GTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCA
+ACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGA
 EOF
 
 # Create GTF annotation
@@ -48,30 +53,35 @@ EOF
 # Step 2: Generate test reads that match the reference
 echo "Step 2: Generating test reads..."
 python3 << PYEOF
-# Create reads that match the reference sequences
-chr1_pattern = "AAAAAAAAAACCCCCCCCCCGGGGGGGGGGTTTTTTTTTT"
-seq1_chr1 = (chr1_pattern * 2)[:50]  # Repeat pattern to get 50bp
+# Create reads that match the reference sequences exactly
+# Use longer reads (100bp) that start from the beginning of the reference
+# chr1: starts with ACGTACGT..., chrY: starts with TGACTGAC...
+# Use 150bp reads for better mapping success
+chr1_ref = "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCACGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGAT"
+seq1_chr1 = chr1_ref[:150]  # Use 150bp reads
 
-chrY_pattern = "ATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCG"
-seq2_chrY = chrY_pattern[:50]  # First 50bp
+chrY_ref = "TGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGGTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGA"
+seq2_chrY = chrY_ref[:150]  # Use 150bp reads
 
-q = 'I' * 50
+q = 'I' * 150
 
-# Read 1: chr1/chr1 pair (should go to _noY.bam)
+# Create multiple read pairs to ensure we get reads in both Y and noY files
+# Read 1-2: chr1/chr1 pairs (should go to _noY.bam)
+# Read 3-4: chrY/chrY pairs (should go to _Y.bam)
+# Read 5: chr1/chrY pair (should go to _Y.bam because mate2 is on Y)
 with open('$FASTQ_DIR/R1.fastq', 'w') as f:
     f.write(f'@read1/1\n{seq1_chr1}\n+\n{q}\n')
-    # Read 2: chrY/chrY pair (should go to _Y.bam)
-    f.write(f'@read2/1\n{seq2_chrY}\n+\n{q}\n')
-    # Read 3: chr1/chrY pair (should go to _Y.bam because mate2 is on Y)
-    f.write(f'@read3/1\n{seq1_chr1}\n+\n{q}\n')
+    f.write(f'@read2/1\n{seq1_chr1}\n+\n{q}\n')
+    f.write(f'@read3/1\n{seq2_chrY}\n+\n{q}\n')
+    f.write(f'@read4/1\n{seq2_chrY}\n+\n{q}\n')
+    f.write(f'@read5/1\n{seq1_chr1}\n+\n{q}\n')
 
 with open('$FASTQ_DIR/R2.fastq', 'w') as f:
-    # Read 1 mate2: chr1
     f.write(f'@read1/2\n{seq1_chr1}\n+\n{q}\n')
-    # Read 2 mate2: chrY
-    f.write(f'@read2/2\n{seq2_chrY}\n+\n{q}\n')
-    # Read 3 mate2: chrY (this makes read3 go to _Y.bam)
+    f.write(f'@read2/2\n{seq1_chr1}\n+\n{q}\n')
     f.write(f'@read3/2\n{seq2_chrY}\n+\n{q}\n')
+    f.write(f'@read4/2\n{seq2_chrY}\n+\n{q}\n')
+    f.write(f'@read5/2\n{seq2_chrY}\n+\n{q}\n')
 
 print("Created test reads:")
 print("  Read 1: chr1/chr1 -> should go to _noY.bam")
@@ -104,6 +114,13 @@ if [ -s "$FASTQ_DIR/R2.fastq" ]; then
       --outTmpDir "$TMP_DIR" \
       --alignIntronMax 1 \
       --alignMatesGapMax 1000 \
+      --outFilterMatchNmin 20 \
+      --outFilterMismatchNmax 5 \
+      --outFilterScoreMin 0 \
+      --outFilterScoreMinOverLread 0 \
+      --outFilterMultimapNmax 10 \
+      --seedSearchStartLmax 30 \
+      --seedPerReadNmax 10000 \
       2>&1 | grep -v "^STAR" || true
 else
     # Single-end
