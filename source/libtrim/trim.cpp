@@ -25,7 +25,7 @@ void trim_params_init(struct TrimParams* params) {
     params->adapter_r2 = TRUSEQ_ADAPTER_R2;
     params->quality_cutoff = 20;
     params->min_length = 20;
-    params->min_overlap = 3;  // cutadapt/Trim Galore default (-O 3)
+    params->min_overlap = 1;  // Trim Galore default (--stringency 1)
     params->max_error_rate = 0.1;
     params->trim_5p_quality = false;
 }

@@ -7,6 +7,8 @@
 #include <iomanip>
 #include <cmath>
 
+namespace libem {
+
 // Log constants
 static constexpr double LOG_0 = -std::numeric_limits<double>::infinity();
 static constexpr double LOG_1 = 0.0;
@@ -818,3 +820,5 @@ void AlignmentModel::dumpMatrixToFile(const TransitionMatrix& matrix, const std:
     
     out.close();
 }
+
+} // namespace libem

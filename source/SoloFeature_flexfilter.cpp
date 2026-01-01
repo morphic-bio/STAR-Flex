@@ -205,6 +205,10 @@ void SoloFeature::runFlexFilterInline(
     config.debugTagLog = pSolo.flexFilterDebugTagLog;
     config.debugOutputDir = pSolo.flexFilterDebugOutputDir;
     config.disableOccupancyFilter = pSolo.flexFilterDisableOccupancy;
+    config.enableInvariantChecks = pSolo.flexFilterInvariantChecks;
+    
+    // Output options
+    config.keepCBTag = pSolo.flexFilterKeepCBTag;
 
     createDirectory(outputPrefix, P.runDirPerm, "FlexFilter output directory", P);
 
@@ -321,7 +325,9 @@ void SoloFeature::runFlexFilterInline(
         samplePrefix += tagResult.sampleLabel + "/Gene/filtered/";
         createDirectory(samplePrefix, P.runDirPerm, "FlexFilter filtered MEX directory", P);
 
-        int writeResult = MexWriter::writeMex(samplePrefix, filteredBarcodes, mexFeatures, filteredTriplets);
+        // Per-sample MEX: strip sample tag from barcodes (16bp output) unless keepCBTag is set
+        int cb_len = config.keepCBTag ? -1 : 16;
+        int writeResult = MexWriter::writeMex(samplePrefix, filteredBarcodes, mexFeatures, filteredTriplets, cb_len);
         if (writeResult != 0) {
             std::cerr << "  ERROR: MexWriter failed for " << tagResult.sampleLabel
                       << " (barcodes=" << filteredBarcodes.size()

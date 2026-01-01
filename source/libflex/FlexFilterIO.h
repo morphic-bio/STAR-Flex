@@ -142,6 +142,8 @@ bool loadCompositeMex(
  * @param createDir Directory creation function (nullptr = use default)
  * @param runDirPerm Permission mode for created directories
  * @param[out] result Write result with statistics
+ * @param cb_len Output barcode length. If > 0, barcodes are truncated to this length.
+ *               Default: 16 (strip sample tag). Use -1 to keep full CB+TAG barcodes.
  * 
  * Prints: "Writing MEX to: <path>" to stdout
  * Warns: "WARNING: Passing barcode not found in MEX: <bc>"
@@ -154,7 +156,8 @@ void writeFilteredMexForTag(
     const CompositeMexData& mexData,
     CreateDirectoryFunc createDir,
     mode_t runDirPerm,
-    MexWriteResult& result);
+    MexWriteResult& result,
+    int cb_len = 16);
 
 //-----------------------------------------------------------------------------
 // Summary Emission

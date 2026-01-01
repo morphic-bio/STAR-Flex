@@ -30,14 +30,18 @@
 #include "systemFunctions.h"
 #include "ProbeListIndex.h"
 #include "TranscriptQuantEC.h"
+#include "LibFormatDetection.h"
 #include "vb_engine.h"
 #include "em_engine.h"
 #include "ec_loader.h"
 #include "gc_bias.h"
+#include "fld_accumulator.h"
 #include "TranscriptQuantOutput.h"
 // Note: effective_length.h not included due to Transcriptome class name conflict
-// GC bias effective length computation will be implemented separately
+// Use wrapper function instead
+#include "effective_length_wrapper.h"
 #include "InlineCBCorrection.h"
+#include "alignment_model.h"  // For Transcriptome and AlignmentModel
 #include <memory>
 #include <cstdlib>
 #include <cerrno>
@@ -233,9 +237,44 @@ int main(int argInN, char *argIn[])
     //////////////////////////////////// 2-pass 1st pass
     twoPassRunPass1(P, genomeMain, transcriptomeMain, sjdbLoci);
 
+    // Shared libem Transcriptome sequence cache for error model (read-only, shared across threads)
+    std::unique_ptr<libem::Transcriptome> libem_transcriptome;
+    
     if (P.quant.yes)
     { // load transcriptome
         transcriptomeMain = new Transcriptome(P);
+        
+        // Load transcript sequences for error model if enabled
+        if (P.quant.transcriptVB.yes && P.quant.transcriptVB.errorModelMode != "off") {
+            // Determine FASTA path: P.pGe.transcriptomeFasta else transcriptome.fa
+            std::string fasta_path;
+            if (!P.pGe.transcriptomeFasta.empty() && P.pGe.transcriptomeFasta != "-") {
+                fasta_path = P.pGe.transcriptomeFasta;
+            } else {
+                // Try transcriptome.fa in genome directory
+                fasta_path = P.pGe.gDir + "/transcriptome.fa";
+            }
+            
+            libem_transcriptome.reset(new libem::Transcriptome());
+            if (!libem_transcriptome->loadFromFasta(fasta_path)) {
+                // Failed to load - disable error model
+                P.inOut->logMain << "WARNING: Failed to load transcript sequences from " << fasta_path 
+                                 << ". Error model will be disabled.\n";
+                libem_transcriptome.reset();
+            } else {
+                // Reorder by STAR transcript names to match BAM header order
+                std::vector<std::string> star_names(transcriptomeMain->nTr);
+                for (uint i = 0; i < transcriptomeMain->nTr; ++i) {
+                    star_names[i] = transcriptomeMain->trID[i];
+                }
+                if (!libem_transcriptome->reorderByNames(star_names)) {
+                    P.inOut->logMain << "WARNING: Failed to reorder transcript sequences to match STAR order. "
+                                     << "Error model may use incorrect sequences.\n";
+                }
+                P.inOut->logMain << "Loaded " << libem_transcriptome->size() 
+                                 << " transcript sequences for error model\n";
+            }
+        }
     };
 
     // Pre-initialize inline CB correction whitelist (needed before mapping)
@@ -253,9 +292,13 @@ int main(int argInN, char *argIn[])
     if (transcriptomeMain != nullptr && P.pSolo.type != 0) {
         if (!P.pSolo.probeListPath.empty() && P.pSolo.probeListPath != "-") {
             ProbeListIndex probeIdxInit;
-            if (probeIdxInit.load(P.pSolo.probeListPath)) {
+            uint32_t deprecatedCount = 0;
+            if (probeIdxInit.load(P.pSolo.probeListPath, P.pSolo.removeDeprecated, &deprecatedCount)) {
                 SoloFeature::initGeneProbeIdx(*transcriptomeMain, &probeIdxInit);
                 P.inOut->logMain << "[GENE-PROBE-INIT] Pre-mapping init done from " << P.pSolo.probeListPath << "\n";
+                if (P.pSolo.removeDeprecated && deprecatedCount > 0) {
+                    P.inOut->logMain << "[GENE-PROBE-INIT] Removed " << deprecatedCount << " deprecated entries from probe list\n";
+                }
             } else {
                 P.inOut->logMain << "[GENE-PROBE-INIT] WARNING: failed to load probe list at " << P.pSolo.probeListPath << "\n";
             }
@@ -298,8 +341,61 @@ int main(int argInN, char *argIn[])
     ReadAlignChunk *RAchunk[P.runThreadN];
     for (int ii = 0; ii < P.runThreadN; ii++)
     {
-        RAchunk[ii] = new ReadAlignChunk(P, genomeMain, transcriptomeMain, ii);
+        RAchunk[ii] = new ReadAlignChunk(P, genomeMain, transcriptomeMain, ii, 
+                                          libem_transcriptome.get());  // Pass shared transcriptome
     };
+
+    // === LIBRARY FORMAT DETECTION (single-threaded) ===
+    if (P.quant.transcriptVB.yes && P.quant.transcriptVB.libType == "A") {
+        P.inOut->logMain << "Starting library format auto-detection "
+                         << "(first " << P.quant.transcriptVB.autoDetectWindow 
+                         << " reads)...\n" << flush;
+        
+        // Create shared detector (will be accessed by TranscriptQuantEC during voting)
+        P.quant.transcriptVB.libFormatDetector = new LibFormatDetector(
+            P.quant.transcriptVB.autoDetectWindow);
+        
+        // Set detection mode BEFORE processing
+        P.quant.transcriptVB.inDetectionMode = true;
+        
+        // Temporarily set read limit to detection window
+        uint64_t originalLimit = P.readMapNumber;
+        P.readMapNumber = P.quant.transcriptVB.autoDetectWindow;
+        
+        // Process first N reads using RAchunk[0] single-threaded
+        // Voting happens INSIDE addReadAlignments() when inDetectionMode=true
+        // NOTE: If total reads <= autoDetectWindow, RAchunk[0] will process all reads here
+        // and then mapThreadsSpawn() will run again on RAchunk[0] with no remaining reads.
+        // This is fine for datasets larger than autoDetectWindow, but avoid very small
+        // read counts with auto-detect enabled to prevent potential duplicate output.
+        RAchunk[0]->processChunks();
+        
+        // Restore original limit
+        P.readMapNumber = originalLimit;
+        
+        // Finalize detection - HARD FAILURE if ambiguous (exits before returning)
+        LibraryFormat detected = P.quant.transcriptVB.libFormatDetector->finalizeOrFail(
+            P.inOut->logMain);
+        
+        // Store detected format as uint8_t
+        P.quant.transcriptVB.detectedLibFormatId = detected.typeId();
+        P.quant.transcriptVB.detectionComplete = true;
+        P.quant.transcriptVB.inDetectionMode = false;  // Detection done
+        
+        // formatName() is defined in LibFormatDetection.h (see Section 9)
+        P.inOut->logMain << "Detected library format: " << formatName(detected) 
+                         << " from " << P.iReadAll << " reads\n" << flush;
+        
+        // Clean up detector (no longer needed)
+        delete P.quant.transcriptVB.libFormatDetector;
+        P.quant.transcriptVB.libFormatDetector = nullptr;
+        
+        // Reset global counters after detection completes
+        // This ensures pre-burn-in gating starts fresh for the main mapping pass (matches Salmon's behavior)
+        extern std::atomic<uint64_t> global_processed_fragments;
+        global_processed_fragments.store(0, std::memory_order_relaxed);
+        Parameters::global_fld_obs_count.store(0, std::memory_order_relaxed);
+    }
 
     if (P.runRestart.type != 1)
         mapThreadsSpawn(P, RAchunk);
@@ -396,7 +492,7 @@ int main(int argInN, char *argIn[])
         P.inOut->logMain << timeMonthDayTime() << " ..... started transcript quantification\n";
         
         // 1. Merge EC tables from all threads
-        TranscriptQuantEC mergedEC(transcriptomeMain->nTr);
+        TranscriptQuantEC mergedEC(transcriptomeMain->nTr, 0, "", 0, P);
         for (int ichunk = 0; ichunk < P.runThreadN; ichunk++) {
             if (RAchunk[ichunk] != nullptr && 
                 RAchunk[ichunk]->RA != nullptr && 
@@ -411,12 +507,37 @@ int main(int argInN, char *argIn[])
                           << flush;
         P.inOut->logMain << "Merged " << mergedEC.getECTable().n_ecs << " equivalence classes from " << P.runThreadN << " threads\n";
         
+        // Log drop statistics (per trace plan Step 3)
+        P.inOut->logMain << "EC building drop statistics:\n"
+                         << "  dropped_incompat: " << mergedEC.getDroppedIncompat() << "\n"
+                         << "  dropped_missing_mate_fields: " << mergedEC.getDroppedMissingMateFields() << "\n"
+                         << "  dropped_unknown_obs_fmt: " << mergedEC.getDroppedUnknownObsFmt() << "\n";
+        
+        // Note: Transcript lengths are already set per-thread in ReadAlign.cpp constructor
+        // and carried through merge(), so no need to set them again here.
+        
         // 2. Initialize transcript state
         TranscriptState state;
         state.resize(transcriptomeMain->nTr);
         
-        // Compute mean fragment length from observed data (if available)
-        double meanFragLen = 200.0;  // Default assumption for PE reads
+        // Compute effective lengths using FLD (if available) or fallback to mean fragment length
+        const FLDAccumulator& observedFLD = mergedEC.getObservedFLD();
+        double meanFragLen = 200.0;  // Default fallback
+        bool use_fld = observedFLD.isValid();
+        
+        if (use_fld) {
+            meanFragLen = observedFLD.getMean();
+            double fragLenStdDev = observedFLD.getStdDev();
+            *P.inOut->logStdOut << "Fragment length distribution: mean=" << meanFragLen 
+                              << ", stddev=" << fragLenStdDev 
+                              << ", fragments=" << observedFLD.getTotalFragments() << "\n"
+                              << flush;
+            P.inOut->logMain << "Fragment length distribution: mean=" << meanFragLen 
+                           << ", stddev=" << fragLenStdDev 
+                           << ", fragments=" << observedFLD.getTotalFragments() << "\n";
+        }
+        
+        // Log GC observations if GC bias is enabled
         if (P.quant.transcriptVB.gcBias) {
             const GCFragModel& observedGC = mergedEC.getObservedGC();
             const auto& gcCounts = observedGC.getCounts();
@@ -431,36 +552,59 @@ int main(int argInN, char *argIn[])
             }
         }
         
+        // Compute effective lengths using FLD PMF (if available) or simple mean-based calculation
+        std::vector<double> fld_pmf;
+        if (use_fld) {
+            fld_pmf = observedFLD.getPMF();
+        }
+        
+        // Build raw_lengths_int vector
+        std::vector<int32_t> raw_lengths_int(transcriptomeMain->nTr);
+        for (uint i = 0; i < transcriptomeMain->nTr; ++i) {
+            raw_lengths_int[i] = static_cast<int32_t>(transcriptomeMain->trLen[i]);
+        }
+        
+        // Compute effective lengths
+        std::vector<double> eff_lengths;
+        if (use_fld && !fld_pmf.empty()) {
+            // Use EffectiveLengthCalculator via wrapper (avoids Transcriptome conflict)
+            eff_lengths = computeEffectiveLengthsFromPMFWrapper(fld_pmf, raw_lengths_int);
+        } else {
+            // Fallback: simple mean-based calculation
+            eff_lengths.resize(transcriptomeMain->nTr);
+            for (uint i = 0; i < transcriptomeMain->nTr; ++i) {
+                double rawLen = static_cast<double>(transcriptomeMain->trLen[i]);
+                double effLen = rawLen - meanFragLen + 1.0;
+                if (effLen < 1.0) effLen = 1.0;
+                if (effLen > rawLen) effLen = rawLen;
+                eff_lengths[i] = effLen;
+            }
+        }
+        
+        // Populate transcript state
         for (uint i = 0; i < transcriptomeMain->nTr; ++i) {
             state.names[i] = transcriptomeMain->trID[i];
             double rawLen = static_cast<double>(transcriptomeMain->trLen[i]);
             state.lengths[i] = rawLen;
-            
-            // Compute effective length: similar to Salmon's approach
-            // effLen = length - meanFragLen + 1, clamped to minimum
-            double effLen = rawLen - meanFragLen + 1.0;
-            if (effLen < 1.0) effLen = 1.0;
-            if (effLen > rawLen) effLen = rawLen;
-            state.eff_lengths[i] = effLen;
+            state.eff_lengths[i] = eff_lengths[i];
         }
         
-        // 3. Compute GC-corrected effective lengths (if enabled)
+        // Note: GC-corrected effective lengths would require transcript sequences
+        // For now, FLD-based effective lengths are computed above
         if (P.quant.transcriptVB.gcBias) {
-            // GC bias correction would adjust effective lengths based on observed/expected GC ratio
-            // For now, we've collected the GC observations; full correction requires transcript sequences
-            // The EC weights already incorporate the fragment distribution
-            *P.inOut->logStdOut << "GC bias: using FLD-adjusted effective lengths\n"
+            *P.inOut->logStdOut << "GC bias: GC correction requires transcript sequences (not yet implemented)\n"
                               << flush;
-            P.inOut->logMain << "GC bias: using FLD-adjusted effective lengths\n";
+            P.inOut->logMain << "GC bias: GC correction requires transcript sequences (not yet implemented)\n";
         }
         
         // 4. Run VB/EM quantification
         EMParams params;
         params.use_vb = P.quant.transcriptVB.vb;
         params.vb_prior = P.quant.transcriptVB.vbPrior;
-        params.max_iters = 200;
-        params.tolerance = 1e-8;
-        params.threads = 1;  // Single-threaded for deterministic results
+        // Use defaults from EMParams (max_iters=10000, min_iters=100, tolerance=0.01)
+        // Do NOT override for VB - let VB use same defaults as EM for Salmon parity
+        // Thread count: use OMP default unless explicitly set (we'll pass --runThreadN externally for parity tests)
+        params.threads = 0;  // 0 = use OMP default (multi-thread capable)
         
         EMResult result;
         if (params.use_vb) {
@@ -477,6 +621,27 @@ int main(int argInN, char *argIn[])
         
         // 5. Write quant.sf
         writeQuantSF(result, state, P.quant.transcriptVB.outFile);
+        
+        // 6. Write quant.genes.sf (gene-level aggregation)
+        if (P.quant.transcriptVB.geneOutput) {
+            int geneResult = writeQuantGeneSF(result, state, *transcriptomeMain, 
+                                               P.quant.transcriptVB.outFileGene);
+            
+            if (geneResult == 1) {
+                // File open error
+                P.inOut->logMain << "ERROR: Failed to open gene output file: " 
+                                 << P.quant.transcriptVB.outFileGene << "\n";
+            } else {
+                P.inOut->logMain << "Gene quantification written to: " 
+                                 << P.quant.transcriptVB.outFileGene << "\n";
+                
+                if (geneResult == 2) {
+                    // MissingGeneID warning
+                    P.inOut->logMain << "WARNING: transcripts with MissingGeneID were aggregated "
+                                     << "to a single gene entry in quant.genes.sf\n";
+                }
+            }
+        }
         
         *P.inOut->logStdOut << timeMonthDayTime() << " ..... finished transcript quantification\n"
                           << flush;

@@ -6,7 +6,8 @@
 #include "GlobalVariables.h"
 #include "TranscriptQuantEC.h"
 
-ReadAlign::ReadAlign (Parameters& Pin, Genome &genomeIn, Transcriptome *TrIn, int iChunk)
+ReadAlign::ReadAlign (Parameters& Pin, Genome &genomeIn, Transcriptome *TrIn, int iChunk,
+                      const libem::Transcriptome* libemTr)
                     : mapGen(genomeIn), genOut(*genomeIn.genomeOut.g), P(Pin), chunkTr(TrIn), quantEC(nullptr)
 {
     readNmates=P.readNmates; //not readNends
@@ -21,7 +22,23 @@ ReadAlign::ReadAlign (Parameters& Pin, Genome &genomeIn, Transcriptome *TrIn, in
     
     // Initialize EC table for transcript quantification
     if (P.quant.transcriptVB.yes && chunkTr != nullptr && chunkTr->nTr > 0) {
-        quantEC = new TranscriptQuantEC(chunkTr->nTr);
+        // Create AlignmentModel per thread if error model is enabled
+        std::unique_ptr<libem::AlignmentModel> alignment_model;
+        if (P.quant.transcriptVB.errorModelMode != "off" && libemTr != nullptr) {
+            alignment_model.reset(new libem::AlignmentModel(0.001, 4));  // alpha=0.001, readBins=4
+        }
+        
+        quantEC = new TranscriptQuantEC(chunkTr->nTr, iChunk, 
+                                         P.quant.transcriptVB.traceFile,
+                                         P.quant.transcriptVB.traceLimit, P,
+                                         alignment_model.release(),  // Transfer ownership
+                                         libemTr);  // Shared read-only transcriptome
+        // Set transcript lengths at construction time so startPosProb is enabled during EC building
+        std::vector<int32_t> lens(chunkTr->nTr);
+        for (uint i = 0; i < chunkTr->nTr; ++i) {
+            lens[i] = static_cast<int32_t>(chunkTr->trLen[i]);
+        }
+        quantEC->setTranscriptLengths(lens);
     }
 
     if (P.pGe.gType==101) {//SuperTranscriptome
@@ -160,4 +177,3 @@ void ReadAlign::resetN () {//reset resets the counters to 0 for a new read
         maxScoreMate[ii]=0;
     };
 };
-

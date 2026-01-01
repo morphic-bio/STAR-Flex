@@ -16,6 +16,7 @@
 #include <atomic>
 #include <vector>
 #include <cassert>
+#include <stdexcept>
 using namespace std;
 
 AmbientProfile EmptyDropsMultinomial::computeAmbientProfile(
@@ -218,7 +219,9 @@ vector<EmptyDropsResult> EmptyDropsMultinomial::computePValues(
     uint32 nSimpleCells,
     const vector<string>& featureNames,
     uint32 nTotalCells,
-    const string& debugOutputDir
+    const string& debugOutputDir,
+    const string& tagName,
+    bool enableInvariantChecks
 ) {
     vector<EmptyDropsResult> results;
     
@@ -396,6 +399,25 @@ vector<EmptyDropsResult> EmptyDropsMultinomial::computePValues(
             for (auto& p : ambientForSampler) p /= sumP;
         }
         cerr << "[EmptyDrops] CR sampler using full compact ambient (" << ambientForSampler.size() << " genes, sum=" << sumP << ")" << endl;
+        
+        // Size check: validate invariants before calling CR sampler (only when explicitly enabled)
+        if (enableInvariantChecks) {
+            uint32_t sumTotallen = 0;
+            for (uint32_t len : totallen) {
+                sumTotallen += len;
+            }
+            if (sumTotallen != prob.size()) {
+                string errorMsg = (tagName.empty() ? "" : "tag=" + tagName + " ") + 
+                                 "sum(totallen)=" + to_string(sumTotallen) + " != prob.size()=" + to_string(prob.size());
+                cerr << "[ED_INVARIANT_FAIL] " << errorMsg << endl;
+                throw runtime_error("[ED_INVARIANT_FAIL] " + errorMsg);
+            }
+            if (ambientForSampler.empty()) {
+                string errorMsg = (tagName.empty() ? "" : "tag=" + tagName + " ") + "ambientForSampler.size()=0";
+                cerr << "[ED_INVARIANT_FAIL] " << errorMsg << endl;
+                throw runtime_error("[ED_INVARIANT_FAIL] " + errorMsg);
+            }
+        }
         
         // Call CR sampler with ambient vector (compact or dense)
         // Use mcThreads for parallel Monte Carlo (0 = single-threaded)

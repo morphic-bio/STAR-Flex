@@ -50,21 +50,23 @@ struct ECTable {
 
 // EM algorithm parameters
 struct EMParams {
-    uint32_t max_iters = 200;         // VB default (Salmon uses ~200 for VB)
-    double tolerance = 1e-8;          // VB default (Salmon uses ~1e-8 for VB)
-    double vb_prior = 0.01;           // Dirichlet concentration (Salmon default)
+    uint32_t max_iters = 10000;       // Maximum iterations
+    double tolerance = 0.01;          // Relative change tolerance for convergence
+    double vb_prior = 0.01;           // Dirichlet concentration
     bool use_vb = false;              // --vb flag
     bool init_by_length = false;      // weight initial abundances by length
     int threads = 0;                  // 0 = OMP default
-    double zero_threshold = 0.001;    // zero out NumReads below this threshold (Salmon-like behavior)
+    double zero_threshold = 1e-8;     // Truncation threshold
     bool debug_trace = false;         // enable debug tracing for selected transcripts
     std::vector<std::string> debug_transcripts; // transcript IDs to trace
     std::string debug_file;           // output file for debug traces
-    bool per_transcript_prior = true; // default: per-transcript (Salmon default)
+    bool per_transcript_prior = true; // default: per-transcript
                                       // If false: prior_i = vb_prior * eff_length_i (per-nucleotide)
-    bool use_uniform_init = false;    // If true, use uniform initialization (alpha = prior only)
-                                      // If false, use prior + unique_counts (backward compatible)
-                                      // Salmon uses txp.projectedCounts + uniform mixing, not unique_counts
+    
+    // VB-specific parameters (Salmon-style initialization)
+    uint32_t min_iters = 100;         // Minimum iterations before checking convergence (VB only)
+    double num_required_fragments = 5e6; // For VB init: fracObserved = min(1, totalWeight/numRequired)
+    double alpha_check_cutoff = 1e-2; // Only check convergence for transcripts with alpha > cutoff
 };
 
 // EM algorithm results

@@ -159,6 +159,7 @@ def main():
     parser.add_argument('salmon_file', help='Salmon quant.sf file')
     parser.add_argument('star_file', help='STAR TranscriptVB quant.sf file')
     parser.add_argument('--verbose', '-v', action='store_true', help='Show detailed output')
+    parser.add_argument('--gene', action='store_true', help='Compare gene-level files (quant.genes.sf)')
     args = parser.parse_args()
     
     # Load files

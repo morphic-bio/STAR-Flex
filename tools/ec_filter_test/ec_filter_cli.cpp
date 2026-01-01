@@ -1,5 +1,5 @@
 // EC Filter CLI - BAM parsing and Salmon-format EC output
-// Implements streaming BAM → alignment filtering → EC building → eq_classes.txt
+// Implements streaming BAM → alignment-mode EC building → eq_classes.txt (no pre-filtering)
 
 #include "libem/alignment_filter.h"
 #include "libem/ec_builder.h"
@@ -16,6 +16,7 @@
 #include <vector>
 #include <unordered_map>
 #include <unordered_set>
+#include <set>
 #include <cstring>
 #include <cstdlib>
 #include <algorithm>
@@ -24,6 +25,10 @@
 #include <random>
 #include <map>
 #include <cstring>
+
+using libem::AlignmentModel;
+using libem::Transcriptome;
+using libem::TranscriptSequence;
 
 // Helper to get AS tag from BAM record
 int32_t get_alignment_score(bam1_t* b) {
@@ -123,49 +128,95 @@ LibraryFormat detectLibraryFormat(const char* bam_path, int sample_size = 1000) 
         return LibraryFormat::IU();
     }
     
-    bam1_t* b1 = bam_init1();
-    bam1_t* b2 = bam_init1();
+    // Map to store mates per qname: qname -> {read1, read2}
+    std::unordered_map<std::string, std::pair<bam1_t*, bam1_t*>> mate_map;
+    
+    bam1_t* b = bam_init1();
     int count = 0;
     
-    while (count < sample_size && sam_read1(fp, hdr, b1) >= 0) {
-        // Check if paired
-        if (!(b1->core.flag & BAM_FPAIRED)) {
+    while (count < sample_size && sam_read1(fp, hdr, b) >= 0) {
+        uint32_t flag = b->core.flag;
+        
+        // Skip unpaired, secondary, and supplementary alignments
+        if (!(flag & BAM_FPAIRED) || (flag & BAM_FSECONDARY) || (flag & BAM_FSUPPLEMENTARY)) {
             continue;
         }
         
-        // Try to read second mate
-        if (sam_read1(fp, hdr, b2) < 0) {
-            break;
-        }
+        const char* qname = bam_get_qname(b);
+        std::string qname_str(qname);
         
-        // Verify same read name
-        if (strcmp(bam_get_qname(b1), bam_get_qname(b2)) != 0) {
-            // Different read names - put b2 back by closing and reopening
-            // Actually, we can't easily "unread" in htslib, so skip this pair
-            bam_destroy1(b2);
-            b2 = bam_init1();
-            continue;
-        }
+        // Determine if this is read1 or read2 using BAM_FREAD1/BAM_FREAD2 flags
+        bool is_read1 = !(flag & BAM_FREAD2);  // BAM_FREAD2 is set for read2
+        bool is_read2 = (flag & BAM_FREAD2) != 0;
         
-        // Both mapped and proper pair
-        bool mapped1 = !(b1->core.flag & BAM_FUNMAP);
-        bool mapped2 = !(b2->core.flag & BAM_FUNMAP);
-        bool proper = (b1->core.flag & BAM_FPROPER_PAIR) && (b2->core.flag & BAM_FPROPER_PAIR);
-        
-        if (mapped1 && mapped2 && proper && b1->core.tid == b2->core.tid) {
-            bool fwd1 = !(b1->core.flag & BAM_FREVERSE);
-            bool fwd2 = !(b2->core.flag & BAM_FREVERSE);
-            int32_t pos1 = b1->core.pos;
-            int32_t pos2 = b2->core.pos;
+        // Check if we already have a mate for this qname
+        auto it = mate_map.find(qname_str);
+        if (it == mate_map.end()) {
+            // First mate seen - store it
+            bam1_t* stored = bam_dup1(b);
+            if (is_read1) {
+                mate_map[qname_str] = std::make_pair(stored, nullptr);
+            } else {
+                mate_map[qname_str] = std::make_pair(nullptr, stored);
+            }
+        } else {
+            // Second mate - check if we have the opposite read
+            bam1_t*& stored_r1 = it->second.first;
+            bam1_t*& stored_r2 = it->second.second;
             
-            LibraryFormat observed = hitType(pos1, fwd1, pos2, fwd2);
-            type_counts[observed.typeId()]++;
-            count++;
+            if (is_read1 && stored_r1 == nullptr && stored_r2 != nullptr) {
+                // We have read2, now we have read1
+                stored_r1 = bam_dup1(b);
+            } else if (is_read2 && stored_r2 == nullptr && stored_r1 != nullptr) {
+                // We have read1, now we have read2
+                stored_r2 = bam_dup1(b);
+            } else {
+                // Skip r1+r1 or r2+r2 pairs, or already have both
+                continue;
+            }
+            
+            // Now we have both read1 and read2 - process the pair
+            bam1_t* r1 = stored_r1;
+            bam1_t* r2 = stored_r2;
+            
+            if (r1 && r2) {
+                // Both mapped and proper pair
+                bool mapped1 = !(r1->core.flag & BAM_FUNMAP);
+                bool mapped2 = !(r2->core.flag & BAM_FUNMAP);
+                bool proper1 = (r1->core.flag & BAM_FPROPER_PAIR) != 0;
+                bool proper2 = (r2->core.flag & BAM_FPROPER_PAIR) != 0;
+                
+                if (mapped1 && mapped2 && proper1 && proper2 && r1->core.tid == r2->core.tid) {
+                    bool fwd1 = !(r1->core.flag & BAM_FREVERSE);
+                    bool fwd2 = !(r2->core.flag & BAM_FREVERSE);
+                    int32_t pos1 = r1->core.pos;
+                    int32_t pos2 = r2->core.pos;
+                    
+                    LibraryFormat observed = hitType(pos1, fwd1, pos2, fwd2);
+                    type_counts[observed.typeId()]++;
+                    count++;
+                }
+                
+                // Clean up stored records
+                bam_destroy1(stored_r1);
+                bam_destroy1(stored_r2);
+                mate_map.erase(it);
+            }
         }
     }
     
-    bam_destroy1(b1);
-    bam_destroy1(b2);
+    // Free any pending stored records
+    for (auto& pair : mate_map) {
+        if (pair.second.first) {
+            bam_destroy1(pair.second.first);
+        }
+        if (pair.second.second) {
+            bam_destroy1(pair.second.second);
+        }
+    }
+    mate_map.clear();
+    
+    bam_destroy1(b);
     bam_hdr_destroy(hdr);
     sam_close(fp);
     
@@ -542,11 +593,8 @@ void print_usage(const char* prog_name) {
     std::cerr << "  --input <file>              Input BAM file (required)\n";
     std::cerr << "  --transcripts <file>        Transcriptome FASTA file (optional, for validation)\n";
     std::cerr << "  --decoys <file>             Decoy transcript list (one name per line, optional)\n";
-    std::cerr << "  --score-exp <float>         Score exponent (default: 1.0)\n";
-    std::cerr << "  --min-aln-prob <float>      Minimum alignment probability (default: 1e-5)\n";
-    std::cerr << "  --min-score-fraction <float> Minimum score fraction (default: 0.65)\n";
+    std::cerr << "  --score-exp <float>         Score exponent (default: 1.0, used for AS-based errLike in computeAuxProbs)\n";
     std::cerr << "  --range-factorization-bins <int> Range factorization bins (default: 4)\n";
-    std::cerr << "  --hard-filter               Enable hard filtering (default: false)\n";
     std::cerr << "  --no-local-pruning          Disable local pruning (default: disabled)\n";
     std::cerr << "  --no-global-pruning         Disable global pruning (default: disabled)\n";
     std::cerr << "  --incompat-prior <float>    Incompatibility prior (default: 0.0 → skip incompatible)\n";
@@ -564,17 +612,21 @@ void print_usage(const char* prog_name) {
     std::cerr << "  --discard-orphans           Discard orphan reads (default: false, keep orphans)\n";
     std::cerr << "  --paired                    Force paired-end mode\n";
     std::cerr << "  --single                    Force single-end mode\n";
-    std::cerr << "  --trace-reads <file>        Trace read processing (detailed per-read info)\n";
+    std::cerr << "  --trace-reads <file>        Trace read processing (alignment-mode format)\n";
     std::cerr << "  --trace-limit <N>           Stop tracing after N reads (default: no limit)\n";
     std::cerr << "  --threads <int>             Number of threads (default: 1)\n";
     std::cerr << "  --output-format <format>    Output format: salmon (default)\n";
     std::cerr << "  -o, --output <file>         Output EC file (required)\n";
     std::cerr << "  -h, --help                  Show this help\n";
     std::cerr << "\n";
-    std::cerr << "Parity mode notes:\n";
+    std::cerr << "Alignment-mode parity notes:\n";
+    std::cerr << "  This CLI implements Salmon alignment-mode strictly (no pre-filtering).\n";
+    std::cerr << "  Compatibility gating and auxProb computation happen in computeAuxProbs.\n";
     std::cerr << "  For Salmon parity, run Salmon with:\n";
     std::cerr << "    --noFragLengthDist --noLengthCorrection --noEffectiveLengthCorrection --incompatPrior 0\n";
-    std::cerr << "  This ensures log_frag_prob=0 and log_compat_prob=0 match our CLI.\n";
+    std::cerr << "  Use --lib-type A (auto-detect) unless you know the library type.\n";
+    std::cerr << "  Default --incompat-prior 0 drops incompatible alignments (matches Salmon).\n";
+    std::cerr << "  --ignore-compat keeps incompatible alignments (equivalent to --incompatPrior 1).\n";
 }
 
 int main(int argc, char* argv[]) {
@@ -589,10 +641,7 @@ int main(int argc, char* argv[]) {
     std::string decoy_file;
     std::string output_file;
     double score_exp = 1.0;
-    double min_aln_prob = 1e-5;
-    double min_score_fraction = 0.65;
     uint32_t range_factorization_bins = 4;
-    bool hard_filter = false;
     bool no_local_pruning = true;  // Default: disabled for Salmon parity
     bool no_global_pruning = true;  // Default: disabled for Salmon parity
     double incompat_prior = 0.0;    // Default: skip incompatible alignments (0.0 → ignore_incompat=true)
@@ -622,14 +671,8 @@ int main(int argc, char* argv[]) {
             decoy_file = argv[++i];
         } else if (strcmp(argv[i], "--score-exp") == 0 && i + 1 < argc) {
             score_exp = std::stod(argv[++i]);
-        } else if (strcmp(argv[i], "--min-aln-prob") == 0 && i + 1 < argc) {
-            min_aln_prob = std::stod(argv[++i]);
-        } else if (strcmp(argv[i], "--min-score-fraction") == 0 && i + 1 < argc) {
-            min_score_fraction = std::stod(argv[++i]);
         } else if (strcmp(argv[i], "--range-factorization-bins") == 0 && i + 1 < argc) {
             range_factorization_bins = std::stoul(argv[++i]);
-        } else if (strcmp(argv[i], "--hard-filter") == 0) {
-            hard_filter = true;
         } else if (strcmp(argv[i], "--no-local-pruning") == 0) {
             no_local_pruning = true;
         } else if (strcmp(argv[i], "--no-global-pruning") == 0) {
@@ -821,12 +864,7 @@ int main(int argc, char* argv[]) {
     std::cerr << "Marked " << decoy_names.size() << " transcripts as decoys\n";
     
     // Step 2: Prepare filter and EC builder parameters
-    FilterParams filter_params;
-    filter_params.score_exp = score_exp;
-    filter_params.min_aln_prob = min_aln_prob;
-    filter_params.decoy_threshold = 1.0;
-    filter_params.hard_filter = hard_filter;
-    filter_params.min_score_fraction = min_score_fraction;
+    // Alignment-mode: no pre-filtering (compatibility gating + auxProb only)
     
     ECBuilderParams ec_params;
     ec_params.use_range_factorization = (range_factorization_bins > 0);
@@ -860,6 +898,27 @@ int main(int argc, char* argv[]) {
     ec_params.lib_format = detected_format;
     ec_params.discard_orphans = false;    // Keep orphans (default false, matching Salmon)
     
+    // Auto-detect compatibility gating: disable compat gating during auto-detect window
+    // (matches Salmon's behavior: compat OFF during detection, ON after detection)
+    // Only apply auto-detect gating when incompat_prior == 0.0 (default behavior)
+    bool auto_detect_mode = (lib_type == "A" || lib_type == "a" || lib_type == "auto") && 
+                            !ignore_compat && incompat_prior == 0.0;
+    constexpr size_t AUTO_DETECT_SAMPLE_SIZE = 1000;  // Same as detectLibraryFormat sample size
+    size_t reads_processed = 0;
+    bool compat_gating_enabled = false;  // Will be set to true after auto-detect completes
+    bool original_ignore_incompat = ec_params.ignore_incompat;  // Store original value
+    double original_incompat_prior = ec_params.incompat_prior;  // Store original value
+    
+    if (auto_detect_mode) {
+        // During auto-detect, disable compatibility gating
+        // ignore_incompat = false means "don't skip incompatible" (gating OFF)
+        // incompat_prior = 1.0 means no penalty for incompatible alignments
+        ec_params.ignore_incompat = false;
+        ec_params.incompat_prior = 1.0;
+        std::cerr << "Auto-detect mode: compatibility gating disabled for first " 
+                  << AUTO_DETECT_SAMPLE_SIZE << " reads\n";
+    }
+    
     ExtendedPruningParams pruning_params;
     pruning_params.enable_local_pruning = !no_local_pruning;
     pruning_params.enable_global_pruning = !no_global_pruning;
@@ -868,16 +927,14 @@ int main(int argc, char* argv[]) {
     std::vector<std::vector<RawAlignment>> read_alignments;
     std::vector<std::string> read_qnames;  // Track qnames for tracing
     bam1_t* b = bam_init1();
-    bam1_t* b2 = bam_init1();
     
     std::string current_qname;
     std::vector<RawAlignment> current_read_alignments;
     std::vector<AlignmentBamData> current_read_bam_data;
+    std::vector<bam1_t*> current_read_records;
     
     size_t total_reads = 0;
     size_t skipped_reads = 0;
-    bool have_next = false;  // True if b2 contains next record to process
-    
     // Error model training schedule (Salmon-style minibatches)
     constexpr size_t mini_batch_size = 1000;  // Salmon default in alignment mode
     size_t batch_read_count = 0;
@@ -892,6 +949,134 @@ int main(int argc, char* argv[]) {
         rng.seed(42);
         std::cerr << "Using fixed RNG seed (42) for deterministic error model updates\n";
     }
+
+    auto build_alignments_from_records = [&](const std::vector<bam1_t*>& records) {
+        current_read_alignments.clear();
+        free_alignment_bams(current_read_bam_data);
+
+        if (records.empty()) {
+            return;
+        }
+
+        auto add_orphan = [&](bam1_t* rec, MateStatus ms) {
+            int32_t tid = rec->core.tid;
+            if (tid < 0) return;
+
+            RawAlignment aln;
+            aln.transcript_id = static_cast<uint32_t>(tid);
+            aln.score = get_alignment_score(rec);
+            aln.log_frag_prob = 0.0;
+            aln.log_compat_prob = 0.0;
+            aln.est_aln_prob = 1.0;
+            aln.mate_status = ms;
+            aln.is_forward = !(rec->core.flag & BAM_FREVERSE);
+            aln.is_decoy = (tid >= 0 && tid < static_cast<int32_t>(is_decoy.size())) ? is_decoy[tid] : false;
+            aln.fragment_len = -1;  // Orphan: no fragment length
+            current_read_alignments.push_back(aln);
+            if (alignment_model || gc_bias_enabled) {
+                AlignmentBamData bam_entry{clone_bam_record(rec), nullptr, false};
+                current_read_bam_data.push_back(bam_entry);
+            }
+        };
+
+        if (read_mode == SINGLE) {
+            for (bam1_t* rec : records) {
+                if (!rec || (rec->core.flag & BAM_FUNMAP)) continue;
+                add_orphan(rec, MateStatus::SINGLE_END);
+            }
+            return;
+        }
+
+        // Salmon-style pairing: treat each record independently
+        // - If record is a proper pair on same transcript, create a paired alignment from this record
+        //   using mate fields from BAM (mpos + mate strand)
+        // - Otherwise treat as orphan based on BAM_FREAD1/BAM_FREAD2
+        // - Keep secondary/supplementary alignments (do not filter them)
+
+        for (bam1_t* rec : records) {
+            if (!rec) continue;
+
+            uint32_t flag = rec->core.flag;
+            bool read_mapped = !(flag & BAM_FUNMAP);
+            if (!read_mapped) continue;
+
+            bool is_paired = (flag & BAM_FPAIRED) != 0;
+            bool proper_pair = (flag & BAM_FPROPER_PAIR) != 0;
+            int32_t tid = rec->core.tid;
+            int32_t mtid = rec->core.mtid;
+
+            if (is_paired && proper_pair && tid >= 0 && mtid >= 0 && tid == mtid) {
+                // Only count one mate for proper pairs to avoid duplicate paired alignments
+                if (flag & BAM_FREAD2) {
+                    continue;
+                }
+                // Build a paired alignment from this single record using mate fields
+                RawAlignment aln;
+                aln.transcript_id = static_cast<uint32_t>(tid);
+                aln.pos = rec->core.pos;
+                aln.score = get_alignment_score(rec);
+                aln.log_frag_prob = 0.0;
+                aln.log_compat_prob = 0.0;
+                aln.est_aln_prob = 1.0;
+                aln.mate_status = MateStatus::PAIRED_END_PAIRED;
+                aln.is_forward = !(flag & BAM_FREVERSE);
+                aln.is_decoy = (tid >= 0 && tid < static_cast<int32_t>(is_decoy.size())) ? is_decoy[tid] : false;
+                aln.mate_is_forward = !(flag & BAM_FMREVERSE);
+                aln.mate_pos = rec->core.mpos;
+                aln.mate_fields_set = true;
+                
+                // Compute fragment length: prefer TLEN if valid, else compute from mate positions + CIGAR
+                int32_t frag_len = -1;
+                if (rec->core.isize != 0) {
+                    // TLEN is signed: positive for forward orientation, negative for reverse
+                    int32_t tlen = rec->core.isize;
+                    frag_len = (tlen < 0) ? -tlen : tlen;
+                    // Validate TLEN is reasonable
+                    if (frag_len < 20 || frag_len > 1000) {
+                        frag_len = -1;
+                    }
+                }
+                
+                if (frag_len < 0) {
+                    // Fallback: compute from mate positions + CIGAR reference length
+                    int32_t pos1 = rec->core.pos;
+                    int32_t pos2 = rec->core.mpos;
+                    bool fwd1 = !(flag & BAM_FREVERSE);
+                    bool fwd2 = !(flag & BAM_FMREVERSE);
+                    
+                    // Must be opposite strands (inward orientation) for valid fragment
+                    if (fwd1 != fwd2 && pos1 >= 0 && pos2 >= 0) {
+                        uint32_t* cigar = bam_get_cigar(rec);
+                        if (cigar) {
+                            int32_t len1 = bam_cigar2rlen(rec->core.n_cigar, cigar);
+                            // Forward read's leftmost 5' end
+                            int32_t p1 = fwd1 ? pos1 : pos2;
+                            // Reverse read's rightmost 3' end
+                            int32_t p2 = fwd1 ? (pos2 + len1) : (pos1 + len1);
+                            frag_len = (p1 > p2) ? (p1 - p2) : (p2 - p1);
+                            // Validate computed fragment length
+                            if (frag_len < 20 || frag_len > 1000) {
+                                frag_len = -1;
+                            }
+                        }
+                    }
+                }
+                
+                aln.fragment_len = frag_len;
+                current_read_alignments.push_back(aln);
+            } else {
+                // Orphan path
+                MateStatus ms;
+                if (!is_paired) {
+                    ms = MateStatus::SINGLE_END;
+                } else {
+                    bool is_read1 = !(flag & BAM_FREAD2);
+                    ms = is_read1 ? MateStatus::PAIRED_END_LEFT : MateStatus::PAIRED_END_RIGHT;
+                }
+                add_orphan(rec, ms);
+            }
+        }
+    };
 
     auto finalize_read_group = [&](void) {
         if (current_read_alignments.empty()) {
@@ -1052,166 +1237,8 @@ int main(int argc, char* argv[]) {
             }
             
             current_qname = target_qname;
-            current_read_alignments.clear();
-            free_alignment_bams(current_read_bam_data);
-            
             std::vector<bam1_t*>& records = it->second;
-            
-            if (read_mode == PAIRED) {
-                // Group records into pairs by position
-                for (size_t i = 0; i < records.size(); i += 2) {
-                    bam1_t* rec1 = records[i];
-                    bam1_t* rec2 = (i + 1 < records.size()) ? records[i + 1] : nullptr;
-                    
-                    int32_t tid1 = rec1->core.tid;
-                    int32_t score1 = get_alignment_score(rec1);
-                    uint32_t flag1 = rec1->core.flag;
-                    bool mapped1 = !(flag1 & BAM_FUNMAP);
-                    
-                    if (!rec2) {
-                        // Orphan
-                        if (mapped1) {
-                            RawAlignment aln;
-                            aln.transcript_id = static_cast<uint32_t>(tid1);
-                            aln.score = score1;
-                            aln.log_frag_prob = 0.0;
-                            aln.log_compat_prob = 0.0;
-                            aln.est_aln_prob = 1.0;
-                            aln.mate_status = (flag1 & BAM_FREAD1) ? MateStatus::PAIRED_END_LEFT : MateStatus::PAIRED_END_RIGHT;
-                            aln.is_decoy = (tid1 >= 0 && tid1 < static_cast<int32_t>(is_decoy.size())) ? is_decoy[tid1] : false;
-                            current_read_alignments.push_back(aln);
-                            if (alignment_model || gc_bias_enabled) {
-                                AlignmentBamData bam_entry{bam_dup1(rec1), nullptr, false};
-                                current_read_bam_data.push_back(bam_entry);
-                            }
-                        }
-                        continue;
-                    }
-                    
-                    int32_t tid2 = rec2->core.tid;
-                    int32_t score2 = get_alignment_score(rec2);
-                    uint32_t flag2 = rec2->core.flag;
-                    bool mapped2 = !(flag2 & BAM_FUNMAP);
-                    
-                    bool both_mapped = mapped1 && mapped2;
-                    bool proper_pair = (flag1 & BAM_FPROPER_PAIR) && (flag2 & BAM_FPROPER_PAIR) && (tid1 == tid2);
-                    bool discordant = both_mapped && (tid1 != tid2);
-                    
-                    if (discordant) {
-                        // Discordant pair - treat as two orphans
-                        RawAlignment aln1;
-                        aln1.transcript_id = static_cast<uint32_t>(tid1);
-                        aln1.score = score1;
-                        aln1.log_frag_prob = 0.0;
-                        aln1.log_compat_prob = 0.0;
-                        aln1.est_aln_prob = 1.0;
-                        aln1.mate_status = MateStatus::PAIRED_END_LEFT;
-                        aln1.is_decoy = (tid1 >= 0 && tid1 < static_cast<int32_t>(is_decoy.size())) ? is_decoy[tid1] : false;
-                        current_read_alignments.push_back(aln1);
-                        if (alignment_model || gc_bias_enabled) {
-                            AlignmentBamData bam_entry{bam_dup1(rec1), nullptr, false};
-                            current_read_bam_data.push_back(bam_entry);
-                        }
-                        
-                        RawAlignment aln2;
-                        aln2.transcript_id = static_cast<uint32_t>(tid2);
-                        aln2.score = score2;
-                        aln2.log_frag_prob = 0.0;
-                        aln2.log_compat_prob = 0.0;
-                        aln2.est_aln_prob = 1.0;
-                        aln2.mate_status = MateStatus::PAIRED_END_RIGHT;
-                        aln2.is_forward = !(flag2 & BAM_FREVERSE);
-                        aln2.is_decoy = (tid2 >= 0 && tid2 < static_cast<int32_t>(is_decoy.size())) ? is_decoy[tid2] : false;
-                        current_read_alignments.push_back(aln2);
-                        if (alignment_model || gc_bias_enabled) {
-                            AlignmentBamData bam_entry{bam_dup1(rec2), nullptr, false};
-                            current_read_bam_data.push_back(bam_entry);
-                        }
-                    } else if (both_mapped && proper_pair) {
-                        // Proper pair
-                        bool fwd1 = !(flag1 & BAM_FREVERSE);
-                        bool fwd2 = !(flag2 & BAM_FREVERSE);
-                        int32_t pos1 = rec1->core.pos;
-                        int32_t pos2 = rec2->core.pos;
-                        
-                        LibraryFormat observed_format = hitType(pos1, fwd1, pos2, fwd2);
-                        bool is_compat = true;
-                        if (ec_params.lib_format.strandedness != ReadStrandedness::U) {
-                            is_compat = compatibleHit(ec_params.lib_format, observed_format);
-                        }
-                        
-                        if (ec_params.ignore_incompat && !is_compat) {
-                            continue;
-                        }
-                        
-                        RawAlignment aln;
-                        aln.transcript_id = static_cast<uint32_t>(tid1);
-                        aln.score = score1 + score2;
-                        aln.log_frag_prob = 0.0;
-                        aln.log_compat_prob = 0.0;
-                        aln.est_aln_prob = 1.0;
-                        aln.mate_status = MateStatus::PAIRED_END_PAIRED;
-                        aln.is_forward = fwd1;
-                        aln.is_decoy = (tid1 >= 0 && tid1 < static_cast<int32_t>(is_decoy.size())) ? is_decoy[tid1] : false;
-                        current_read_alignments.push_back(aln);
-                        if (alignment_model || gc_bias_enabled) {
-                            AlignmentBamData bam_entry{bam_dup1(rec1), bam_dup1(rec2), true};
-                            current_read_bam_data.push_back(bam_entry);
-                        }
-                    } else if (mapped1) {
-                        // First mate only
-                        RawAlignment aln;
-                        aln.transcript_id = static_cast<uint32_t>(tid1);
-                        aln.score = score1;
-                        aln.log_frag_prob = 0.0;
-                        aln.log_compat_prob = 0.0;
-                        aln.est_aln_prob = 1.0;
-                        aln.mate_status = MateStatus::PAIRED_END_LEFT;
-                        aln.is_decoy = (tid1 >= 0 && tid1 < static_cast<int32_t>(is_decoy.size())) ? is_decoy[tid1] : false;
-                        current_read_alignments.push_back(aln);
-                        if (alignment_model || gc_bias_enabled) {
-                            AlignmentBamData bam_entry{bam_dup1(rec1), nullptr, false};
-                            current_read_bam_data.push_back(bam_entry);
-                        }
-                    } else if (mapped2) {
-                        // Second mate only
-                        RawAlignment aln;
-                        aln.transcript_id = static_cast<uint32_t>(tid2);
-                        aln.score = score2;
-                        aln.log_frag_prob = 0.0;
-                        aln.log_compat_prob = 0.0;
-                        aln.est_aln_prob = 1.0;
-                        aln.mate_status = MateStatus::PAIRED_END_RIGHT;
-                        aln.is_decoy = (tid2 >= 0 && tid2 < static_cast<int32_t>(is_decoy.size())) ? is_decoy[tid2] : false;
-                        current_read_alignments.push_back(aln);
-                        if (alignment_model || gc_bias_enabled) {
-                            AlignmentBamData bam_entry{bam_dup1(rec2), nullptr, false};
-                            current_read_bam_data.push_back(bam_entry);
-                        }
-                    }
-                }
-            } else {
-                // Single-end mode
-                for (bam1_t* rec : records) {
-                    int32_t tid = rec->core.tid;
-                    int32_t score = get_alignment_score(rec);
-                    
-                    RawAlignment aln;
-                    aln.transcript_id = static_cast<uint32_t>(tid);
-                    aln.score = score;
-                    aln.log_frag_prob = 0.0;
-                    aln.log_compat_prob = 0.0;
-                    aln.est_aln_prob = 1.0;
-                    aln.mate_status = MateStatus::SINGLE_END;
-                    aln.is_forward = !(rec->core.flag & BAM_FREVERSE);
-                    aln.is_decoy = (tid >= 0 && tid < static_cast<int32_t>(is_decoy.size())) ? is_decoy[tid] : false;
-                    current_read_alignments.push_back(aln);
-                    if (alignment_model || gc_bias_enabled) {
-                        AlignmentBamData bam_entry{bam_dup1(rec), nullptr, false};
-                        current_read_bam_data.push_back(bam_entry);
-                    }
-                }
-            }
+            build_alignments_from_records(records);
             
             finalize_read_group();
             total_reads++;
@@ -1234,250 +1261,46 @@ int main(int argc, char* argv[]) {
     // =========================================================================
 
     while (true) {
-        bam1_t* current_b = nullptr;
-        
-        if (have_next) {
-            // Swap buffers: b2 becomes current, b becomes next
-            bam1_t* tmp = b;
-            b = b2;
-            b2 = tmp;
-            have_next = false;
-            current_b = b;
-        } else {
-            // Read next record into b
-            int ret = sam_read1(bam_file, header, b);
-            if (ret < 0) {
-                break;  // EOF
-            }
-            current_b = b;
+        int ret = sam_read1(bam_file, header, b);
+        if (ret < 0) {
+            break;  // EOF
         }
         
-        // Skip only unmapped (Salmon keeps secondary/supplementary alignments)
-        if (current_b->core.flag & BAM_FUNMAP) {
+        if (b->core.flag & BAM_FUNMAP) {
             continue;
         }
         
-        const char* qname = bam_get_qname(current_b);
-        bool is_paired = (current_b->core.flag & BAM_FPAIRED) != 0;
+        const char* qname = bam_get_qname(b);
+        bool is_paired = (b->core.flag & BAM_FPAIRED) != 0;
         
-        // Auto-detect read mode if not specified
         if (read_mode == AUTO) {
             read_mode = is_paired ? PAIRED : SINGLE;
         }
         
-        if (read_mode == PAIRED && is_paired) {
-            // Paired-end: read two consecutive records
-            if (current_qname.empty() || strcmp(qname, current_qname.c_str()) != 0) {
-                // New read pair - save previous if any
+        if (current_qname.empty() || strcmp(qname, current_qname.c_str()) != 0) {
+            if (!current_qname.empty()) {
+                build_alignments_from_records(current_read_records);
                 finalize_read_group();
-                current_qname = qname;
-            }
-            
-            // Read first mate (current_b)
-            int32_t tid1 = current_b->core.tid;
-            int32_t score1 = get_alignment_score(current_b);
-            uint32_t flag1 = current_b->core.flag;
-            bool mapped1 = !(flag1 & BAM_FUNMAP);
-            
-                // Try to read second mate into b2
-                int ret = sam_read1(bam_file, header, b2);
-                if (ret < 0) {
-                    // Only one mate - treat as orphan (Salmon keeps mapped orphans)
-                    if (mapped1) {
-                        RawAlignment aln;
-                        aln.transcript_id = static_cast<uint32_t>(tid1);
-                        aln.score = score1;
-                        aln.log_frag_prob = 0.0;  // --noFragLengthDist
-                        aln.log_compat_prob = 0.0;  // --incompatPrior 0
-                        aln.est_aln_prob = 1.0;  // Not used in alignment-mode
-                        aln.mate_status = (flag1 & BAM_FREAD1) ? MateStatus::PAIRED_END_LEFT : MateStatus::PAIRED_END_RIGHT;
-                        aln.is_decoy = (tid1 >= 0 && tid1 < static_cast<int32_t>(is_decoy.size())) ? is_decoy[tid1] : false;
-                        current_read_alignments.push_back(aln);
-                        if (alignment_model || gc_bias_enabled) {
-                            AlignmentBamData bam_entry{clone_bam_record(current_b), nullptr, false};
-                            current_read_bam_data.push_back(bam_entry);
-                        }
-                    }
-                    total_reads++;
-                    continue;
+                for (bam1_t* rec : current_read_records) {
+                    bam_destroy1(rec);
                 }
-            
-            // Verify qnames match
-            const char* qname2 = bam_get_qname(b2);
-            if (strcmp(qname, qname2) != 0) {
-                // Second mate has different name - save b2 for next iteration
-                have_next = true;
-                // Process current_b as orphan
-                if (mapped1) {
-                    RawAlignment aln;
-                    aln.transcript_id = static_cast<uint32_t>(tid1);
-                    aln.score = score1;
-                    aln.log_frag_prob = 0.0;
-                    aln.log_compat_prob = 0.0;
-                    aln.mate_status = (flag1 & BAM_FREAD1) ? MateStatus::PAIRED_END_LEFT : MateStatus::PAIRED_END_RIGHT;
-                    aln.is_forward = !(flag1 & BAM_FREVERSE);
-                    aln.is_decoy = (tid1 >= 0 && tid1 < static_cast<int32_t>(is_decoy.size())) ? is_decoy[tid1] : false;
-                    current_read_alignments.push_back(aln);
-                    if (alignment_model || gc_bias_enabled) {
-                        AlignmentBamData bam_entry{clone_bam_record(current_b), nullptr, false};
-                        current_read_bam_data.push_back(bam_entry);
-                    }
-                }
-                total_reads++;
-                continue;
+                current_read_records.clear();
             }
-            
-            // Keep secondary/supplementary alignments (Salmon keeps them)
-            // Process both mates regardless of secondary/supplementary flags
-            
-            int32_t tid2 = b2->core.tid;
-            int32_t score2 = get_alignment_score(b2);
-            uint32_t flag2 = b2->core.flag;
-            bool mapped2 = !(flag2 & BAM_FUNMAP);
-            
-                // Determine mapping type (Salmon alignment-mode logic)
-                bool both_mapped = mapped1 && mapped2;
-                bool proper_pair = (flag1 & BAM_FPROPER_PAIR) && (flag2 & BAM_FPROPER_PAIR) && (tid1 == tid2);
-                bool discordant = both_mapped && (tid1 != tid2);
-                
-                // Salmon treats discordant pairs as orphans (MappedOrphan)
-                if (discordant) {
-                    // Discordant pair - treat as two separate orphans
-                    RawAlignment aln1;
-                    aln1.transcript_id = static_cast<uint32_t>(tid1);
-                    aln1.score = score1;
-                    aln1.log_frag_prob = 0.0;  // --noFragLengthDist
-                    aln1.log_compat_prob = 0.0;  // --incompatPrior 0
-                    aln1.est_aln_prob = 1.0;  // Not used in alignment-mode, but set for completeness
-                    aln1.mate_status = MateStatus::PAIRED_END_LEFT;
-                    aln1.is_decoy = (tid1 >= 0 && tid1 < static_cast<int32_t>(is_decoy.size())) ? is_decoy[tid1] : false;
-                    current_read_alignments.push_back(aln1);
-                    if (alignment_model || gc_bias_enabled) {
-                        AlignmentBamData bam_entry{clone_bam_record(current_b), nullptr, false};
-                        current_read_bam_data.push_back(bam_entry);
-                    }
-                    
-                    RawAlignment aln2;
-                    aln2.transcript_id = static_cast<uint32_t>(tid2);
-                    aln2.score = score2;
-                    aln2.log_frag_prob = 0.0;
-                    aln2.log_compat_prob = 0.0;
-                    aln2.est_aln_prob = 1.0;
-                    aln2.mate_status = MateStatus::PAIRED_END_RIGHT;
-                    aln2.is_forward = !(flag2 & BAM_FREVERSE);
-                    aln2.is_decoy = (tid2 >= 0 && tid2 < static_cast<int32_t>(is_decoy.size())) ? is_decoy[tid2] : false;
-                    current_read_alignments.push_back(aln2);
-                    if (alignment_model || gc_bias_enabled) {
-                        AlignmentBamData bam_entry{clone_bam_record(b2), nullptr, false};
-                        current_read_bam_data.push_back(bam_entry);
-                    }
-                } else if (both_mapped && proper_pair) {
-                    // Proper pair - both mapped to same transcript
-                    // Check compatibility using both mates' orientations
-                    bool fwd1 = !(flag1 & BAM_FREVERSE);
-                    bool fwd2 = !(flag2 & BAM_FREVERSE);
-                    int32_t pos1 = current_b->core.pos;
-                    int32_t pos2 = b2->core.pos;
-                    
-                    // Determine observed library format from this pair
-                    LibraryFormat observed_format = hitType(pos1, fwd1, pos2, fwd2);
-                    
-                    // Check if observed format is compatible with expected format
-                    bool is_compat = true;
-                    if (ec_params.lib_format.strandedness != ReadStrandedness::U) {
-                        // For stranded libraries, check compatibility
-                        is_compat = compatibleHit(ec_params.lib_format, observed_format);
-                    }
-                    
-                    // Skip incompatible pairs if ignore_incompat is true
-                    if (ec_params.ignore_incompat && !is_compat) {
-                        // Skip this pair - don't add to current_read_alignments
-                        total_reads++;
-                        continue;
-                    }
-                    
-                    RawAlignment aln;
-                    aln.transcript_id = static_cast<uint32_t>(tid1);
-                    aln.score = score1 + score2;  // Sum of AS tags
-                    aln.log_frag_prob = 0.0;  // --noFragLengthDist
-                    aln.log_compat_prob = 0.0;  // Will be set in computeAuxProbs
-                    aln.est_aln_prob = 1.0;  // Not used in alignment-mode
-                    aln.mate_status = MateStatus::PAIRED_END_PAIRED;
-                    // For paired reads, use read1's orientation (both should be on same transcript)
-                    aln.is_forward = fwd1;
-                    aln.is_decoy = (tid1 >= 0 && tid1 < static_cast<int32_t>(is_decoy.size())) ? is_decoy[tid1] : false;
-                    current_read_alignments.push_back(aln);
-                    if (alignment_model || gc_bias_enabled) {
-                        AlignmentBamData bam_entry{clone_bam_record(current_b), clone_bam_record(b2), true};
-                        current_read_bam_data.push_back(bam_entry);
-                    }
-                } else if (mapped1) {
-                    // Orphan - first mate mapped (Salmon keeps mapped orphans by default)
-                    RawAlignment aln;
-                    aln.transcript_id = static_cast<uint32_t>(tid1);
-                    aln.score = score1;
-                    aln.log_frag_prob = 0.0;
-                    aln.log_compat_prob = 0.0;
-                    aln.est_aln_prob = 1.0;
-                    aln.mate_status = MateStatus::PAIRED_END_LEFT;
-                    aln.is_decoy = (tid1 >= 0 && tid1 < static_cast<int32_t>(is_decoy.size())) ? is_decoy[tid1] : false;
-                    current_read_alignments.push_back(aln);
-                    if (alignment_model || gc_bias_enabled) {
-                        AlignmentBamData bam_entry{clone_bam_record(current_b), nullptr, false};
-                        current_read_bam_data.push_back(bam_entry);
-                    }
-                } else if (mapped2) {
-                    // Orphan - second mate mapped (Salmon keeps mapped orphans by default)
-                    RawAlignment aln;
-                    aln.transcript_id = static_cast<uint32_t>(tid2);
-                    aln.score = score2;
-                    aln.log_frag_prob = 0.0;
-                    aln.log_compat_prob = 0.0;
-                    aln.est_aln_prob = 1.0;
-                    aln.mate_status = MateStatus::PAIRED_END_RIGHT;
-                    aln.is_forward = !(flag2 & BAM_FREVERSE);
-                    aln.is_decoy = (tid2 >= 0 && tid2 < static_cast<int32_t>(is_decoy.size())) ? is_decoy[tid2] : false;
-                    current_read_alignments.push_back(aln);
-                    if (alignment_model || gc_bias_enabled) {
-                        AlignmentBamData bam_entry{clone_bam_record(b2), nullptr, false};
-                        current_read_bam_data.push_back(bam_entry);
-                    }
-                }
-            
-            total_reads += 2;
-        } else {
-            // Single-end mode
-            if (current_qname.empty() || strcmp(qname, current_qname.c_str()) != 0) {
-                // New read - save previous if any
-                finalize_read_group();
-                current_qname = qname;
-            }
-            
-            int32_t tid = current_b->core.tid;
-            int32_t score = get_alignment_score(current_b);
-            
-            RawAlignment aln;
-            aln.transcript_id = static_cast<uint32_t>(tid);
-            aln.score = score;
-            aln.log_frag_prob = 0.0;  // --noFragLengthDist
-            aln.log_compat_prob = 0.0;  // --incompatPrior 0
-            aln.est_aln_prob = 1.0;  // Not used in alignment-mode
-            aln.mate_status = MateStatus::SINGLE_END;
-            uint32_t flag = current_b->core.flag;
-            aln.is_forward = !(flag & BAM_FREVERSE);
-            aln.is_decoy = (tid >= 0 && tid < static_cast<int32_t>(is_decoy.size())) ? is_decoy[tid] : false;
-            current_read_alignments.push_back(aln);
-            if (alignment_model || gc_bias_enabled) {
-                AlignmentBamData bam_entry{clone_bam_record(current_b), nullptr, false};
-                current_read_bam_data.push_back(bam_entry);
-            }
-            
-            total_reads++;
+            current_qname = qname;
         }
+        
+        current_read_records.push_back(bam_dup1(b));
+        total_reads++;
     }
     
-    // Save last read group
-    finalize_read_group();
+    if (!current_read_records.empty()) {
+        build_alignments_from_records(current_read_records);
+        finalize_read_group();
+        for (bam1_t* rec : current_read_records) {
+            bam_destroy1(rec);
+        }
+        current_read_records.clear();
+    }
     
     // Report error model status
     if (alignment_model) {
@@ -1494,17 +1317,14 @@ int main(int argc, char* argv[]) {
     }
     
     bam_destroy1(b);
-    bam_destroy1(b2);
     bam_hdr_destroy(header);
     sam_close(bam_file);
     
 post_processing:
     std::cerr << "Processed " << total_reads << " BAM records\n";
     std::cerr << "Grouped into " << read_alignments.size() << " reads\n";
-    // Step 4: Build equivalence classes directly (alignment-mode, no filtering)
-    // Salmon alignment-mode does NOT call filterAndCollectAlignments or updateRefMappings
-    // It builds ECs directly from all alignments in a read group
-    std::cerr << "Building equivalence classes (alignment-mode, no filtering)...\n";
+    // Step 4: Build equivalence classes (alignment-mode: compatibility gating + auxProb only)
+    std::cerr << "Building equivalence classes (alignment-mode, no pre-filtering)...\n";
     
     // Sort alignments by transcript_id per read (for consistent ordering)
     for (auto& alignments : read_alignments) {
@@ -1520,11 +1340,24 @@ post_processing:
                   });
     }
     
-    // Remove empty read groups
-    read_alignments.erase(
-        std::remove_if(read_alignments.begin(), read_alignments.end(),
-                      [](const std::vector<RawAlignment>& alns) { return alns.empty(); }),
-        read_alignments.end());
+    // Remove empty read groups while keeping read_qnames aligned
+    std::vector<std::vector<RawAlignment>> kept_read_alignments;
+    std::vector<std::string> kept_read_qnames;
+    kept_read_alignments.reserve(read_alignments.size());
+    kept_read_qnames.reserve(read_qnames.size());
+    
+    for (size_t i = 0; i < read_alignments.size(); ++i) {
+        if (!read_alignments[i].empty()) {
+            kept_read_alignments.push_back(std::move(read_alignments[i]));
+            if (i < read_qnames.size()) {
+                kept_read_qnames.push_back(std::move(read_qnames[i]));
+            }
+        }
+    }
+    
+    // Replace with kept vectors (maintains alignment between read_alignments and read_qnames)
+    read_alignments = std::move(kept_read_alignments);
+    read_qnames = std::move(kept_read_qnames);
     
     std::cerr << "Building ECs from " << read_alignments.size() << " reads with alignments\n";
     std::cerr << "Skipped " << skipped_reads << " empty read groups\n";
@@ -1552,7 +1385,7 @@ post_processing:
     size_t total_dropped_incompat = 0;
     size_t total_orphans = 0;
     size_t total_nonzero_errlike = 0;
-    size_t zero_prob_frags = 0;  // Reads where all alignments filtered (sumOfAlignProbs == LOG_0)
+    size_t zero_prob_frags = 0;  // Reads where all alignments dropped (sumOfAlignProbs == LOG_0)
     std::ofstream zero_prob_out;  // Output file for zero-prob reads
     
     if (trace_reads) {
@@ -1593,10 +1426,25 @@ post_processing:
             break;
         }
         
-        // Compute auxProbs for this read (with tracing enabled if requested)
-        ReadMapping mapping = computeAuxProbs(alignments, ec_params, trace_reads);
+        // Auto-detect compatibility gating: re-enable compat gating after detection window
+        if (auto_detect_mode && !compat_gating_enabled && reads_processed >= AUTO_DETECT_SAMPLE_SIZE) {
+            // Restore original values: ignore_incompat = true (gating ON), incompat_prior = 0.0
+            ec_params.ignore_incompat = original_ignore_incompat;
+            ec_params.incompat_prior = original_incompat_prior;
+            compat_gating_enabled = true;
+            std::cerr << "Auto-detect complete: compatibility gating re-enabled at read " 
+                      << reads_processed << "\n";
+        }
+        reads_processed++;
         
-        // Check for zero-probability fragment (all alignments filtered)
+        // Alignment-mode: no pre-filtering, pass all alignments to computeAuxProbs
+        // Compatibility gating and auxProb computation happen inside computeAuxProbs
+        const std::vector<RawAlignment>& alignments_to_process = alignments;
+        
+        // Compute auxProbs for this read (with tracing enabled if requested)
+        ReadMapping mapping = computeAuxProbs(alignments_to_process, ec_params, trace_reads);
+        
+        // Check for zero-probability fragment (all alignments dropped by compatibility gating or auxProb computation)
         // This matches Salmon's check: if (sumOfAlignProbs == LOG_0) { continue; }
         if (mapping.transcript_ids.empty()) {
             zero_prob_frags++;
@@ -1604,7 +1452,7 @@ post_processing:
                 std::string qname = read_qnames[i];
                 zero_prob_out << qname << "\t";
                 zero_prob_out << "num_alignments=" << alignments.size() << "\t";
-                zero_prob_out << "all_filtered=true";
+                zero_prob_out << "all_dropped=true";
                 zero_prob_out << "\n";
             }
             continue;
@@ -1794,7 +1642,7 @@ post_processing:
     }
     
     std::cerr << "Built " << ec_table.ecs.size() << " equivalence classes\n";
-    std::cerr << "Zero-probability fragments (all alignments filtered): " << zero_prob_frags << "\n";
+    std::cerr << "Zero-probability fragments (all alignments dropped): " << zero_prob_frags << "\n";
     
     // Step 6: Apply extended pruning if enabled
     if (!no_local_pruning || !no_global_pruning) {

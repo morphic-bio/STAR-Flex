@@ -3,6 +3,7 @@
 
 #include "em_types.h"
 #include "alignment_filter.h"
+#include "fld_accumulator.h"
 #include <vector>
 #include <cstdint>
 #include <cmath>
@@ -69,6 +70,15 @@ struct LibraryFormat {
                (static_cast<uint8_t>(strandedness) << 3);
     }
     
+    // Map to Salmon's formatID encoding for trace output parity
+    // Salmon's formatID IS the bit-packed encoding (same as our typeId())
+    // From Salmon's LibraryFormat.hpp:
+    //   formatID() = type | (orientation << 1) | (strandedness << 3)
+    // So we just return typeId() directly.
+    uint8_t salmonFormatID() const {
+        return typeId();
+    }
+    
     // Create LibraryFormat from ID
     static LibraryFormat formatFromID(uint8_t id) {
         ReadType rt = static_cast<ReadType>(id & 0x01);
@@ -93,6 +103,33 @@ struct ECBuilderParams {
     bool ignore_incompat = true;             // If true, skip incompatible alignments (set when incompat_prior == 0.0)
     LibraryFormat lib_format = LibraryFormat::IU();  // Library format for compat check (default: IU = inward unstranded)
     bool discard_orphans = false;            // If true, discard orphan reads (default false)
+    
+    // Fragment length distribution PMF (optional, used when use_frag_len_dist=true)
+    // PMF[i] = probability of fragment length i
+    const std::vector<double>* fld_pmf = nullptr;  // Pointer to PMF vector (null if not available)
+    
+    // FLD accumulator for O(1) logFragProb computation (preferred over PMF)
+    // If provided, use getLogProb() instead of PMF lookup
+    const FLDAccumulator* fld_accumulator = nullptr;  // Pointer to FLD accumulator (null if not available)
+    
+    // Transcript reference lengths (optional, used for start position probability)
+    // transcript_lengths[i] = reference length of transcript i
+    const std::vector<int32_t>* transcript_lengths = nullptr;  // Pointer to lengths vector (null if not available)
+    bool use_start_pos_prob = false;  // Enable start position probability term
+    
+    // Alignment filtering parameters (Salmon defaults)
+    double min_score_fraction = 0.0;  // minScoreFraction: 0 = disabled, 0.65 = Salmon default for alignment-mode
+    bool apply_filtering = false;     // Enable filterAndCollectAlignments (default false for STAR inline mode)
+    
+    // FLD burn-in tracking (Salmon defaults)
+    uint64_t num_processed_fragments = 0;  // Number of fragments processed so far (at batch start for gating)
+    uint64_t num_pre_burnin_frags = 5000;  // Pre-burnin threshold (Salmon default: 5000)
+    uint64_t num_burnin_frags = 5000000;   // Burn-in threshold (Salmon default: 5e6)
+    bool use_conditional_pmf = true;        // Use conditional PMF (PMF - CMF) after burn-in (Salmon default)
+    
+    // Mini-batch gating (Salmon parity)
+    size_t batch_reads = 0;                 // Number of reads in current batch (for trace)
+    uint64_t batch_start_count = 0;        // Global count at batch start (for trace)
 };
 
 // Per-alignment trace information
@@ -105,23 +142,54 @@ struct AlignmentTrace {
     double log_compat_prob;
     bool dropped_incompat;
     bool is_orphan;
-    double aux_prob;           // Before normalization
+    double aux_prob;           // Before normalization (logFragProb + errLike + logCompat)
+    double start_pos_prob;     // Start position probability (-log(valid_positions))
+    double log_prob;           // Full alignment log prob (auxProb + startPosProb + transcriptLogCount)
     double weight;             // After normalization
+    uint8_t expected_format_id;
+    uint8_t observed_format_id;
+    bool is_compat;
+    uint8_t mate_status;
+    bool mate_fields_set;
+    bool is_forward;
+    bool mate_is_forward;
+    int32_t pos;
+    int32_t mate_pos;
+    bool is_primary;
+    bool dropped;
+    
+    // Trace instrumentation fields (for debugging auxProb mismatches)
+    int32_t frag_len;          // Fragment length (pedantic, -1 if invalid)
+    bool use_aux_params;       // Whether aux params (logFragProb + errLike) are enabled
+    uint64_t global_frag_count; // Global processed fragment count at batch start (for gating)
+    size_t batch_reads;        // Number of reads in current batch (for debugging)
+    uint64_t batch_start_count; // Global count at batch start (for debugging)
+    bool in_detection_mode;    // Whether this read was processed during detection mode
 };
 
 // Intermediate representation before EC aggregation
 struct ReadMapping {
     std::vector<uint32_t> transcript_ids;
     std::vector<double> aux_probs;     // Log-space initially, then normalized
+    std::vector<double> log_probs;     // Full log prob (auxProb + startPosProb) for stochastic updates
+    std::vector<int32_t> frag_lens;    // Fragment lengths for FLD updates
     std::vector<size_t> alignment_indices;   // Indices into the original alignment list
     double aux_denom;                   // log-sum for normalization
+    double log_prob_denom;              // log-sum for log_probs normalization
     
     // Trace information (populated if tracing enabled)
     std::vector<AlignmentTrace> trace_info;
     int32_t best_as;                    // Best AS across all alignments
     size_t num_dropped_incompat;        // Count of dropped incompatible alignments
+    size_t num_dropped_missing_mate_fields;  // Count of dropped alignments due to missing mate fields
+    size_t num_dropped_unknown_obs_fmt;      // Count of dropped alignments due to unknown observed format
     
-    ReadMapping() : aux_denom(LOG_0), best_as(0), num_dropped_incompat(0) {}
+    // Count of valid FLD observations (fragments with valid length and compatible alignments)
+    // Used for pre-burn-in gating (matches Salmon's behavior)
+    size_t num_valid_fld_obs = 0;
+    
+    ReadMapping() : aux_denom(LOG_0), log_prob_denom(LOG_0), best_as(0), num_dropped_incompat(0), 
+                    num_dropped_missing_mate_fields(0), num_dropped_unknown_obs_fmt(0), num_valid_fld_obs(0) {}
 };
 
 // Compatibility checking functions (ported from Salmon)

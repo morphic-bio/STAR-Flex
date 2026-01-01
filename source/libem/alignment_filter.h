@@ -32,13 +32,19 @@ struct RawAlignment {
     // For paired-end
     int32_t mate_score;
     int32_t fragment_len;
+    bool mate_is_forward;       // For paired-end pairs: orientation of mate (needed for observed format)
+    int32_t mate_pos;           // For paired-end pairs: position of mate (needed for observed format)
+    bool mate_fields_set;       // true when mate_pos/mate_is_forward are populated
+    bool is_primary;            // true if alignment is primary
     
-    RawAlignment() 
+    RawAlignment()
         : transcript_id(0), pos(0), score(0), est_aln_prob(0.0),
           log_frag_prob(0.0), log_compat_prob(0.0),
           err_like(0.0), has_err_like(false),
           mate_status(MateStatus::SINGLE_END), is_decoy(false),
-          is_forward(true), mate_score(0), fragment_len(0) {}
+          is_forward(true), mate_score(0), fragment_len(0),
+          mate_is_forward(false), mate_pos(-1), mate_fields_set(false),
+          is_primary(true) {}
 };
 
 // Score tracking per read (mirrors Salmon's MappingScoreInfo)
@@ -79,7 +85,8 @@ struct FilterParams {
     double decoy_threshold = 1.0;    // decoyThreshold
     bool hard_filter = false;         // hardFilter: if true, keep only best score
     uint32_t max_read_occs = 200;    // maxReadOccs: discard if > this many hits
-    double min_score_fraction = 0.65; // minScoreFraction: Salmon default
+    double min_score_fraction = 0.0;  // minScoreFraction: 0 = disabled (default for STAR inline mode)
+                                      // Set to 0.65 for Salmon-parity mode (drops alignments < 65% of best score)
 };
 
 // Update per-transcript best scores (called per alignment)

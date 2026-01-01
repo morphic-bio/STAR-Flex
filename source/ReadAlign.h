@@ -19,6 +19,9 @@
 // Forward declarations
 class SampleDetector;
 class TranscriptQuantEC;
+namespace libem {
+class Transcriptome;
+}
 
 #include <time.h>
 #include <random>
@@ -29,7 +32,8 @@ class TranscriptQuantEC;
 
 class ReadAlign {
     public:
-        ReadAlign (Parameters& Pin, Genome &genomeIn, Transcriptome *TrIn, int iChunk);//allocate arrays
+        ReadAlign (Parameters& Pin, Genome &genomeIn, Transcriptome *TrIn, int iChunk,
+                   const libem::Transcriptome* libemTr = nullptr);//allocate arrays
         int oneRead();
 
         Genome &mapGen, &genOut; //mapped-to-genome structure
@@ -289,5 +293,4 @@ class ReadAlign {
 };
 
 #endif
-
 

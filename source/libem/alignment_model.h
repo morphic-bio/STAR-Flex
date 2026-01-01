@@ -11,6 +11,8 @@
 #include <fstream>
 #include <functional>
 
+namespace libem {
+
 // Alignment state constants (matching Salmon's AlignmentCommon.hpp)
 enum AlignmentState : uint8_t {
     ALN_A = 0,
@@ -318,5 +320,7 @@ inline bool cigarConsumesRef(uint8_t op) {
     return op == BAM_CMATCH || op == BAM_CDEL || op == BAM_CREF_SKIP ||
            op == BAM_CEQUAL || op == BAM_CDIFF;
 }
+
+} // namespace libem
 
 #endif // ALIGNMENT_MODEL_H

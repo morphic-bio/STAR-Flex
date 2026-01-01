@@ -59,7 +59,10 @@ struct Feature {
  * @param barcodes Ordered list of cell barcodes (determines column order, 0-based)
  * @param features Ordered list of features (determines row order, 0-based)
  * @param triplets Sparse matrix entries (cell_idx, gene_idx, count), 0-based
- * @return 0 on success, -1 on error
+ * @param cb_len Output barcode length. If > 0, barcodes are truncated to this length.
+ *               If -1 (default), no truncation is applied.
+ *               For per-sample MEX outputs, use cb_len=16 to strip sample tags.
+ * @return 0 on success, -1 on error (including duplicate barcodes after truncation)
  * 
  * Example usage:
  * ```cpp
@@ -72,21 +75,25 @@ struct Feature {
  *     {0, 0, 5},  // cell 0, gene 0, count 5
  *     {1, 1, 3}   // cell 1, gene 1, count 3
  * };
- * MexWriter::writeMex("/path/to/output", barcodes, features, triplets);
+ * // Per-sample output with 16bp barcodes (tag stripped)
+ * MexWriter::writeMex("/path/to/output/", barcodes, features, triplets, 16);
  * ```
  */
 int writeMex(const std::string& outputPrefix,
              const std::vector<std::string>& barcodes,
              const std::vector<Feature>& features,
-             const std::vector<Triplet>& triplets);
+             const std::vector<Triplet>& triplets,
+             int cb_len = -1);
 
 /**
  * @brief Convenience overload: features as simple ID strings (name=ID, type="Gene Expression")
+ * @param cb_len Output barcode length. If > 0, barcodes are truncated to this length.
  */
 int writeMex(const std::string& outputPrefix,
              const std::vector<std::string>& barcodes,
              const std::vector<std::string>& featureIds,
-             const std::vector<Triplet>& triplets);
+             const std::vector<Triplet>& triplets,
+             int cb_len = -1);
 
 } // namespace MexWriter
 

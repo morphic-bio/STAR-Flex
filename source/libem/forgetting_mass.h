@@ -15,33 +15,40 @@ public:
           log_forgetting_mass_(0.0) {}
 
     // Compute log forgetting mass for the next minibatch and increment timestep.
+    // Matches Salmon's operator() behavior:
+    //   - First increment batchNum_
+    //   - If batchNum_ > 1, apply forgetting mass formula
+    //   - Return the current log forgetting mass
     void getLogMassAndTimestep(double& log_forgetting_mass,
                                uint64_t& current_minibatch_timestep) {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (batch_num_ < log_forgetting_masses_.size()) {
-            current_minibatch_timestep = batch_num_;
-            log_forgetting_mass = log_forgetting_masses_[batch_num_];
-            ++batch_num_;
+        
+        // Salmon increments batchNum_ FIRST
+        ++batch_num_;
+        
+        // If we've already computed this timestep, return cached value
+        if (batch_num_ <= log_forgetting_masses_.size()) {
+            current_minibatch_timestep = batch_num_ - 1;
+            log_forgetting_mass = log_forgetting_masses_[batch_num_ - 1];
             return;
         }
-
-        double fm = 0.0;
-        if (!log_forgetting_masses_.empty() && batch_num_ > 1) {
-            // Salmon formula: log forgetting mass for batch t
-            // fm = fm_prev + forgetting_factor * log(t-1) - log(t^forgetting_factor - 1)
+        
+        // Compute new forgetting mass
+        // Salmon: if (batchNum_ > 1) { apply formula }
+        double fm = log_forgetting_mass_;  // Start with current accumulator value
+        if (batch_num_ > 1) {
+            // Salmon formula: forgetting_factor * log(t-1) - log(t^forgetting_factor - 1)
             double t = static_cast<double>(batch_num_);
             double denom = std::pow(t, forgetting_factor_) - 1.0;
             if (denom > 0) {
-                fm = log_forgetting_masses_.back() +
-                     forgetting_factor_ * std::log(t - 1.0) -
-                     std::log(denom);
-            } else {
-                // Fallback for edge cases
-                fm = log_forgetting_masses_.back();
+                fm += forgetting_factor_ * std::log(t - 1.0) - std::log(denom);
             }
         }
-
+        
+        log_forgetting_mass_ = fm;  // Update accumulator
         log_forgetting_masses_.push_back(fm);
+        
+        // Update cumulative
         if (cumulative_log_forgetting_masses_.empty()) {
             cumulative_log_forgetting_masses_.push_back(fm);
         } else {
@@ -49,9 +56,8 @@ public:
                 logAdd(cumulative_log_forgetting_masses_.back(), fm));
         }
 
-        current_minibatch_timestep = batch_num_;
-        log_forgetting_mass = log_forgetting_masses_[batch_num_];
-        ++batch_num_;
+        current_minibatch_timestep = batch_num_ - 1;
+        log_forgetting_mass = fm;
     }
 
 private:

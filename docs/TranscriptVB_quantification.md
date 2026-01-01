@@ -59,12 +59,14 @@ STAR --runMode alignReads \
 | `--quantVBgcBias` | 0 | Enable GC bias collection (0/1) |
 | `--quantVBem` | 0 | Use EM instead of VB (0/1) |
 | `--quantVBprior` | 0.01 | Dirichlet prior for VB algorithm |
+| `--quantVBgenes` | 1 | Output gene-level quantification (0/1) |
 
 ## Output Files
 
 | File | Description |
 |------|-------------|
-| `*quant.sf` | Salmon-compatible quantification results |
+| `*quant.sf` | Salmon-compatible transcript-level quantification results |
+| `*quant.genes.sf` | Gene-level quantification results (aggregated from transcripts) |
 | `*Aligned.out.sam/bam` | Standard STAR alignment output |
 | `*Log.out` | Log file with quantification statistics |
 
@@ -76,6 +78,39 @@ ENST00000456328    1657    1458.000    0.000000    0.000
 ENST00000450305    632    433.000    12.345678    1.234
 ...
 ```
+
+### quant.genes.sf Format
+
+When `--quantMode TranscriptVB` is used, STAR also produces `quant.genes.sf` containing gene-level expression estimates. This file aggregates transcript-level results to genes.
+
+| Column | Description |
+|--------|-------------|
+| Name | Gene ID (from GTF gene_id attribute) |
+| Length | TPM-weighted average of transcript lengths |
+| EffectiveLength | TPM-weighted average of transcript effective lengths |
+| TPM | Sum of transcript TPMs for this gene |
+| NumReads | Sum of transcript counts for this gene |
+
+**Example:**
+```
+Name	Length	EffectiveLength	TPM	NumReads
+ENSG00000268674	510	295.805	0	0
+ENSG00000271254	3081.77	2865.89	9.91087	491.292
+ENSG00000275063	351	150.012	0	0
+```
+
+**Disabling Gene Output:**
+
+To disable gene-level output:
+
+```bash
+--quantVBgenes 0
+```
+
+**Notes:**
+- Length/EffectiveLength use TPM-weighted averaging for expressed genes
+- Genes with zero expression use unweighted averages
+- The output format matches Salmon's `--geneMap` output (trailing zeros trimmed)
 
 ## Algorithm Details
 

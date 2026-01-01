@@ -11,6 +11,15 @@
 #include "bamRemoveDuplicates.h"
 #include "streamFuns.h"
 
+// Define global atomic counter for processed read groups (matches Salmon's processedReads)
+// Used for pre-burn-in gating: aux params are enabled when this count >= numPreBurninFrags (5000)
+// Each read group (nAlignT > 0) counts as one, regardless of compat/FLD validity
+std::atomic<uint64_t> global_processed_fragments{0};
+
+// Define global atomic counter for FLD observations (fragments that contribute to FLD)
+// Used for FLD statistics only, NOT for pre-burn-in gating
+std::atomic<uint64_t> Parameters::global_fld_obs_count{0};
+
 //for mkfifo
 #include <sys/stat.h>
 #include <cstdlib>
@@ -57,6 +66,22 @@ Parameters::Parameters() {//initalize parameters info
     // Flex gene probe parameters (50bp gene probes for Flex workflow)
     parArray.push_back(new ParameterInfoScalar <string> (-1, -1, "flexGeneProbeSet", &pGe.flexGeneProbe.csvFile));
     parArray.push_back(new ParameterInfoScalar <uint32> (-1, -1, "flexGeneProbeLength", &pGe.flexGeneProbe.enforceLength));
+    parArray.push_back(new ParameterInfoScalar <string> (-1, -1, "removeDeprecated", &pGe.flexGeneProbe.removeDeprecated));
+
+    // CellRanger-style reference formatting parameters
+    parArray.push_back(new ParameterInfoScalar <string> (-1, -1, "cellrangerStyleIndex", &pGe.cellrangerStyle.indexEnabled));
+    parArray.push_back(new ParameterInfoScalar <string> (-1, -1, "cellrangerStyleDownloadOnly", &pGe.cellrangerStyle.downloadOnly));
+    parArray.push_back(new ParameterInfoScalar <string> (-1, -1, "cellrangerStyleCacheDir", &pGe.cellrangerStyle.cacheDir));
+    parArray.push_back(new ParameterInfoScalar <string> (-1, -1, "allUntrustedUrl", &pGe.cellrangerStyle.allUntrustedUrl));
+    parArray.push_back(new ParameterInfoScalar <string> (-1, -1, "faUrl", &pGe.cellrangerStyle.faUrl));
+    parArray.push_back(new ParameterInfoScalar <string> (-1, -1, "gtfUrl", &pGe.cellrangerStyle.gtfUrl));
+    parArray.push_back(new ParameterInfoScalar <string> (-1, -1, "autoCksumUpdate", &pGe.cellrangerStyle.autoCksumUpdate));
+    parArray.push_back(new ParameterInfoScalar <string> (-1, -1, "cellrangerRefRelease", &pGe.cellrangerStyle.refRelease));
+    
+    // Auto-index workflow parameters
+    parArray.push_back(new ParameterInfoScalar <string> (-1, -1, "autoIndex", &pGe.autoIndexWorkflow.autoIndex));
+    parArray.push_back(new ParameterInfoScalar <string> (-1, -1, "forceIndex", &pGe.autoIndexWorkflow.forceIndex));
+    parArray.push_back(new ParameterInfoScalar <string> (-1, -1, "forceAllIndex", &pGe.autoIndexWorkflow.forceAllIndex));
 
     //read
     parArray.push_back(new ParameterInfoVector <string> (-1, -1, "readFilesType", &readFilesType));
@@ -283,6 +308,12 @@ Parameters::Parameters() {//initalize parameters info
     parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "quantVBgcBias", &quant.transcriptVB.gcBiasInt));
     parArray.push_back(new ParameterInfoScalar <double>   (-1, -1, "quantVBprior", &quant.transcriptVB.vbPrior));
     parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "quantVBem", &quant.transcriptVB.quantVBemInt)); // If true, use EM instead of VB
+    parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "quantVBgenes", &quant.transcriptVB.geneOutputInt));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "quantVBLibType", &quant.transcriptVB.libType));
+    parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "quantVBAutoDetectWindow", &quant.transcriptVB.autoDetectWindow));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "quantVBTrace", &quant.transcriptVB.traceFile));
+    parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "quantVBTraceLimit", &quant.transcriptVB.traceLimit));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "quantVBErrorModel", &quant.transcriptVB.errorModelMode));
 
     //2-pass
     parArray.push_back(new ParameterInfoScalar <uint>   (-1, -1, "twopass1readsN", &twoPass.pass1readsN));
@@ -327,6 +358,7 @@ Parameters::Parameters() {//initalize parameters info
     // CR-compatible keys mode (handoff)
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "soloKeysCompat", &pSolo.keysCompatStr));
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "soloProbeList", &pSolo.probeListPath));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "soloRemoveDeprecated", &pSolo.removeDeprecatedStr));
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "soloSampleWhitelist", &pSolo.sampleWhitelistPath));
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "soloSampleProbes", &pSolo.sampleProbesPath));
     parArray.push_back(new ParameterInfoScalar <uint32>   (-1, -1, "soloSampleProbeOffset", &pSolo.sampleProbeOffset));
@@ -348,6 +380,7 @@ Parameters::Parameters() {//initalize parameters info
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "soloAssignAmbiguous", &pSolo.assignAmbiguousStr));
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "soloUseInlineReplayer", &pSolo.useInlineReplayerStr));
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "soloInlineCBCorrection", &pSolo.inlineCBCorrectionStr));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "soloInlineHashMode", &pSolo.inlineHashModeStr));
 
     // Flex omnibus flag
     parArray.push_back(new ParameterInfoScalar<string>(-1, -1, "flex", &pSolo.flexModeStr));
@@ -388,6 +421,10 @@ Parameters::Parameters() {//initalize parameters info
     parArray.push_back(new ParameterInfoScalar<string>(-1, -1, "soloFlexDebugOutputDir", &pSolo.flexFilterDebugOutputDir));
     parArray.push_back(new ParameterInfoScalar<string>(-1, -1, "soloFlexDebugTagLog", &pSolo.flexFilterDebugTagLogStr));
     parArray.push_back(new ParameterInfoScalar<string>(-1, -1, "soloFlexDisableOccupancy", &pSolo.flexFilterDisableOccupancyStr));
+    parArray.push_back(new ParameterInfoScalar<string>(-1, -1, "soloFlexInvariantChecks", &pSolo.flexFilterInvariantChecksStr));
+
+    // Output options
+    parArray.push_back(new ParameterInfoScalar<string>(-1, -1, "soloFlexKeepCBTag", &pSolo.flexFilterKeepCBTagStr));
 
     // Minimal memory mode
     parArray.push_back(new ParameterInfoScalar<string>(-1, -1, "soloFlexMinimalMemory", &pSolo.soloFlexMinimalMemoryStr));
@@ -1148,8 +1185,66 @@ void Parameters::inputParameters (int argInN, char* argIn[]) {//input parameters
         quant.transcriptVB.gcBias = (quant.transcriptVB.gcBiasInt != 0);
         // quantVBem flag: if set to 1, use EM (vb=false), otherwise use VB (vb=true, default)
         quant.transcriptVB.vb = (quant.transcriptVB.quantVBemInt == 0);
+        quant.transcriptVB.geneOutput = (quant.transcriptVB.geneOutputInt != 0);
         if (quant.transcriptVB.outFile.empty()) {
             quant.transcriptVB.outFile = outFileNamePrefix + "quant.sf";
+        }
+        quant.transcriptVB.outFileGene = outFileNamePrefix + "quant.genes.sf";
+        
+        // Validate autoDetectWindow is positive
+        if (quant.transcriptVB.autoDetectWindow <= 0) {
+            ostringstream errOut;
+            errOut << "EXITING because of FATAL PARAMETER ERROR: "
+                   << "--quantVBAutoDetectWindow must be > 0\n";
+            exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
+        }
+        
+        // Validate libType is a known value and normalize to uppercase
+        string upper = quant.transcriptVB.libType;
+        for (auto& c : upper) c = std::toupper(c);
+        if (upper != "A" && upper != "IU" && upper != "ISF" && upper != "ISR" && upper != "U") {
+            ostringstream errOut;
+            errOut << "EXITING because of FATAL PARAMETER ERROR: "
+                   << "--quantVBLibType must be one of: A, IU, ISF, ISR, U\n"
+                   << "Got: " << quant.transcriptVB.libType << "\n";
+            exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
+        }
+        // Normalize libType to uppercase so libType == "A" works in STAR.cpp
+        quant.transcriptVB.libType = upper;
+        
+        // Normalize errorModelMode to lowercase
+        string errorModelModeLower = quant.transcriptVB.errorModelMode;
+        for (auto& c : errorModelModeLower) c = std::tolower(c);
+        if (errorModelModeLower != "auto" && errorModelModeLower != "cigar" && 
+            errorModelModeLower != "as" && errorModelModeLower != "off") {
+            ostringstream errOut;
+            errOut << "EXITING because of FATAL PARAMETER ERROR: "
+                   << "--quantVBErrorModel must be one of: auto, cigar, as, off\n"
+                   << "Got: " << quant.transcriptVB.errorModelMode << "\n";
+            exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
+        }
+        quant.transcriptVB.errorModelMode = errorModelModeLower;
+
+        // Treat "None" and "-" as unset trace output
+        if (quant.transcriptVB.traceFile == "-" || quant.transcriptVB.traceFile == "None") {
+            quant.transcriptVB.traceFile.clear();
+        }
+        
+        // If auto-detect enabled, validate window vs readMapNumber
+        if (quant.transcriptVB.libType == "A") {
+            if (readMapNumber > 0 && readMapNumber < (uint64_t)quant.transcriptVB.autoDetectWindow) {
+                // User wants fewer reads than detection window - cap the window
+                inOut->logMain << "Warning: --readMapNumber (" << readMapNumber 
+                               << ") < autoDetectWindow (" << quant.transcriptVB.autoDetectWindow
+                               << "). Capping detection window to " << readMapNumber << ".\n";
+                quant.transcriptVB.autoDetectWindow = (int)readMapNumber;
+                
+                // If window is very small, warn about detection reliability
+                if (quant.transcriptVB.autoDetectWindow < 100) {
+                    inOut->logMain << "Warning: Detection window < 100 reads may be unreliable.\n"
+                                   << "Consider using --quantVBLibType IU|ISF|ISR|U explicitly.\n";
+                }
+            }
         }
     }
     

@@ -1,4 +1,5 @@
 #include "ReadAlignChunk.h"
+#include "alignment_model.h"  // For Transcriptome
 #include <pthread.h>
 #include "ErrorWarning.h"
 #include "ProbeListIndex.h"
@@ -6,7 +7,8 @@
 #include <fstream>
 #include <cstdlib>
 
-ReadAlignChunk::ReadAlignChunk(Parameters& Pin, Genome &genomeIn, Transcriptome *TrIn, int iChunk) : P(Pin), mapGen(genomeIn) {//initialize chunk
+ReadAlignChunk::ReadAlignChunk(Parameters& Pin, Genome &genomeIn, Transcriptome *TrIn, int iChunk,
+                                const libem::Transcriptome* libemTr) : P(Pin), mapGen(genomeIn) {//initialize chunk
 
     iThread=iChunk;
 
@@ -17,7 +19,7 @@ ReadAlignChunk::ReadAlignChunk(Parameters& Pin, Genome &genomeIn, Transcriptome 
         chunkTr=NULL;
     };
 
-    RA = new ReadAlign(P, mapGen, chunkTr, iChunk);//new local copy of RA for each chunk
+    RA = new ReadAlign(P, mapGen, chunkTr, iChunk, libemTr);//new local copy of RA for each chunk
 
     RA->iRead=0;
 

@@ -7,9 +7,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <unordered_set>
-#include <iomanip>
 #include <chrono>
-#include <cstdlib>
 #include <thread>
 #include <atomic>
 #include <mutex>
@@ -85,7 +83,7 @@ static SampleMatrixData filterMatrixByKeepIndices(
     out.nCells = static_cast<uint32_t>(out.barcodes.size());
     out.nUMIperCB.assign(out.nCells, 0);
     out.nGenePerCB.assign(out.nCells, 0);
-    out.countCellGeneUMIindex.assign(out.nCells, 0);
+    out.countCellGeneUMIindex.assign(out.nCells + 1, 0);  // +1 for sentinel
     out.countCellGeneUMI.reserve(totalGeneEntries * out.countMatStride);  // Pre-allocate
     
     uint32_t currentCell = static_cast<uint32_t>(-1);
@@ -112,6 +110,8 @@ static SampleMatrixData filterMatrixByKeepIndices(
             matrixIdx++;
         }
     }
+    // Set sentinel element (final index = total matrix size)
+    out.countCellGeneUMIindex[out.nCells] = matrixIdx * out.countMatStride;
     return out;
 }
 
@@ -485,7 +485,7 @@ SampleMatrixData FlexFilter::filterMatrixToTag(
     tagMatrix.barcodes.reserve(tagMatrix.nCells);
     tagMatrix.nUMIperCB.resize(tagMatrix.nCells, 0);
     tagMatrix.nGenePerCB.resize(tagMatrix.nCells, 0);
-    tagMatrix.countCellGeneUMIindex.resize(tagMatrix.nCells, 0);
+    tagMatrix.countCellGeneUMIindex.resize(tagMatrix.nCells + 1, 0);  // +1 for sentinel
     tagMatrix.countCellGeneUMI.reserve(totalGeneEntries * tagMatrix.countMatStride);
     
     // Second pass: copy data (using pre-identified indices)
@@ -513,6 +513,9 @@ SampleMatrixData FlexFilter::filterMatrixToTag(
             matrixOffset++;
         }
     }
+    
+    // Set sentinel element (final index = total matrix size)
+    tagMatrix.countCellGeneUMIindex[tagMatrix.nCells] = matrixOffset * tagMatrix.countMatStride;
     
     return tagMatrix;
 }
@@ -561,10 +564,11 @@ int FlexFilter::runInternal(
     
     // Debug: Open log file if debug enabled
     ofstream debugLog;
+    string debugLogPath;
     if (config.debugTagLog) {
-        string logPath = config.debugOutputDir.empty() ? "" : (config.debugOutputDir + "/flexfilter_debug.log");
-        if (!logPath.empty()) {
-            debugLog.open(logPath, ios::app);
+        debugLogPath = config.debugOutputDir.empty() ? "" : (config.debugOutputDir + "/flexfilter_debug.log");
+        if (!debugLogPath.empty()) {
+            debugLog.open(debugLogPath, ios::app);
         }
     }
     auto debugOut = [&](const string& msg) {
@@ -621,6 +625,11 @@ int FlexFilter::runInternal(
             }
         }
     };
+    
+    // Emit one-time message about debug log location
+    if (config.debugTagLog && !debugLogPath.empty()) {
+        threadSafeDebugOut("[DEBUG] flexfilter_debug.log=" + debugLogPath + "\n");
+    }
     
     // Worker function for processing a single tag
     auto processTag = [&](size_t i) {
@@ -753,6 +762,8 @@ int FlexFilter::runInternal(
             nGenePerCB_compact.push_back(nCompactGenes);
             nUMIperCB_compact.push_back(rawTagMatrix.nUMIperCB[rawIdx]);
         }
+        // Add final element to countCellGeneUMIindex_compact (cumulative index array needs N+1 elements)
+        countCellGeneUMIindex_compact.push_back(static_cast<uint32_t>(countCellGeneUMI_compact.size()));
         debugOut("  [EmptyDrops] Compact matrix: " + to_string(countCellGeneUMI_compact.size() / 2) + " gene-count pairs\n");
         
         // Step 5: Build compact ambient counts from cells with UMI <= ambientUmiMax WITHIN the retain window
@@ -895,6 +906,40 @@ int FlexFilter::runInternal(
             needsFallback = true;
             fallbackReasons.push_back("empty ambient profile");
         } else {
+            // Invariant checks (debug only)
+            if (config.debugTagLog) {
+                bool invariantFailed = false;
+                string invariantMsg;
+                
+                // Check: countCellGeneUMIindex_compact.size() == retainIndices.size() + 1
+                if (countCellGeneUMIindex_compact.size() != retainIndices.size() + 1) {
+                    invariantFailed = true;
+                    invariantMsg = "countCellGeneUMIindex_compact.size()=" + to_string(countCellGeneUMIindex_compact.size()) + 
+                                   " != retainIndices.size()+1=" + to_string(retainIndices.size() + 1);
+                }
+                
+                // Check: countCellGeneUMI_compact.size() % countMatStride == 0
+                uint32_t countMatStride = 2;
+                if (countCellGeneUMI_compact.size() % countMatStride != 0) {
+                    invariantFailed = true;
+                    if (!invariantMsg.empty()) invariantMsg += "; ";
+                    invariantMsg += "countCellGeneUMI_compact.size()=" + to_string(countCellGeneUMI_compact.size()) + 
+                                    " not divisible by countMatStride=" + to_string(countMatStride);
+                }
+                
+                // Check: ambientForSampler.size() > 0 (using compactAmbProfile.ambProfileLogP as proxy)
+                if (compactAmbProfile.ambProfileLogP.empty()) {
+                    invariantFailed = true;
+                    if (!invariantMsg.empty()) invariantMsg += "; ";
+                    invariantMsg += "compactAmbProfile.ambProfileLogP.size()=0";
+                }
+                
+                if (invariantFailed) {
+                    threadSafeDebugOut("[ED_INVARIANT_FAIL] tag=" + tag + " " + invariantMsg + "\n");
+                    throw runtime_error("[ED_INVARIANT_FAIL] tag=" + tag + " " + invariantMsg);
+                }
+            }
+            
             // Call EmptyDrops with nSimpleCells=0 (all candidates get tested)
             tagResult.emptydropsResults = EmptyDropsMultinomial::computePValues(
                 compactAmbProfile,
@@ -909,7 +954,9 @@ int FlexFilter::runInternal(
                 0,  // nSimpleCells = 0 (no auto-pass, all tested)
                 rawTagMatrix.features,
                 static_cast<uint32_t>(retainIndices.size()),
-                config.debugOutputDir
+                config.debugOutputDir,
+                tag,  // Pass tag name for diagnostics
+                config.enableInvariantChecks  // Enable invariant checks if flag is set
             );
         }
         

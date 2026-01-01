@@ -15,6 +15,10 @@
 #include <vector>
 #include <array>
 #include <unordered_set>
+#include <atomic>
+
+// Forward declaration for library format detector
+class LibFormatDetector;
 
 class Parameters {
 
@@ -334,6 +338,29 @@ class Parameters {
                 int quantVBemInt=0;     // Command-line flag: if 1, use EM instead of VB
                 double vbPrior=0.01;    // Dirichlet prior
                 string outFile;         // Output file path
+                // Gene-level output
+                bool geneOutput=true;   // Output gene-level quant (default: yes)
+                int geneOutputInt=1;    // CLI flag (0/1)
+                string outFileGene;     // Gene output file path
+                
+                // Library format detection and EC building parameters
+                string libType = "A";      // A=auto, IU, ISF, ISR, U
+                int autoDetectWindow = 1000;
+                string traceFile;          // Empty = disabled
+                int traceLimit = 0;        // 0 = unlimited (trace all reads); >0 = limit to N reads
+                int preBurninFrags = 5000; // Pre-burn-in fragment count threshold (Salmon default: 5000)
+                int miniBatchSize = 1000;  // Mini-batch size for processed reads counter (Salmon default: 1000)
+                
+                // Error model mode: auto|cigar|as|off (default: auto)
+                string errorModelMode = "auto";  // auto=use CIGAR if available else AS, cigar=CIGAR only, as=AS only, off=disabled
+                
+                // Internal state (NOT CLI params, NOT LibraryFormat type)
+                uint8_t detectedLibFormatId = 0;  // Stores LibraryFormat::typeId()
+                bool detectionComplete = false;
+                bool inDetectionMode = false;     // True during detection pass
+                
+                // Shared detector instance (created before detection, accessed by TranscriptQuantEC)
+                LibFormatDetector* libFormatDetector = nullptr;  // Raw ptr, owned by STAR.cpp
             } transcriptVB;
 
             struct {
@@ -353,6 +380,12 @@ class Parameters {
             } gene;
           
         } quant;
+        
+        // Global atomic counter for FLD observations (fragments that contribute to FLD)
+        // Used for pre-burn-in gating: only increments when fragment length is valid
+        // and alignment is compatible (matches Salmon's behavior)
+        // Declared at class level because static members can't be in unnamed structs
+        static std::atomic<uint64_t> global_fld_obs_count;
 
         //variation parameters
         struct {

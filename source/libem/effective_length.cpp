@@ -79,6 +79,17 @@ bool EffectiveLengthCalculator::loadFLD(const std::string& fld_path) {
     return true;
 }
 
+void EffectiveLengthCalculator::setFLDPMF(const std::vector<double>& fld_pmf) {
+    fld_ = fld_pmf;
+    // Resize to MAX_FRAG_LEN if needed
+    if (fld_.size() < static_cast<size_t>(2000 + 1)) {
+        fld_.resize(2001, 0.0);
+    }
+    // Build CDF and compute quantile bounds
+    buildCDF();
+    computeQuantileBounds();
+}
+
 void EffectiveLengthCalculator::buildCDF() {
     fld_cdf_.resize(fld_.size());
     if (fld_.empty()) return;
@@ -128,7 +139,7 @@ void EffectiveLengthCalculator::loadGCBias(const std::vector<double>& bias_ratio
 }
 
 double EffectiveLengthCalculator::computeEffectiveLength(
-    const TranscriptSequence& txp, int32_t refLen) const 
+    const libem::TranscriptSequence& txp, int32_t refLen) const 
 {
     if (gc_bias_.empty()) {
         // No GC bias: effective length = raw length
@@ -176,14 +187,14 @@ double EffectiveLengthCalculator::computeEffectiveLength(
 }
 
 std::vector<double> EffectiveLengthCalculator::computeAllEffectiveLengths(
-    const Transcriptome& txome,
+    const libem::Transcriptome& txome,
     const std::vector<double>& raw_lengths) const
 {
     std::vector<double> eff_lengths;
     eff_lengths.reserve(raw_lengths.size());
     
     for (size_t i = 0; i < raw_lengths.size(); ++i) {
-        const TranscriptSequence* txp = txome.getTranscript(static_cast<uint32_t>(i));
+        const libem::TranscriptSequence* txp = txome.getTranscript(static_cast<uint32_t>(i));
         if (!txp) {
             eff_lengths.push_back(raw_lengths[i]);  // Fall back to raw length
             continue;
@@ -192,6 +203,49 @@ std::vector<double> EffectiveLengthCalculator::computeAllEffectiveLengths(
         int32_t raw_len = static_cast<int32_t>(raw_lengths[i]);
         double eff_len = computeEffectiveLength(*txp, raw_len);
         eff_lengths.push_back(eff_len);
+    }
+    
+    return eff_lengths;
+}
+
+std::vector<double> EffectiveLengthCalculator::computeEffectiveLengthsFromPMF(
+    const std::vector<double>& fld_pmf,
+    const std::vector<int32_t>& raw_lengths) const
+{
+    std::vector<double> eff_lengths;
+    eff_lengths.reserve(raw_lengths.size());
+    
+    for (int32_t raw_len : raw_lengths) {
+        if (fld_pmf.empty()) {
+            eff_lengths.push_back(static_cast<double>(raw_len));
+            continue;
+        }
+        
+        // Compute effective length using FLD PMF (Salmon formula)
+        // effLen = sum_{fl} PMF[fl] * max(0, L - fl + 1)
+        // where (L - fl + 1) is the number of valid start positions for fragment length fl
+        double effLen = 0.0;
+        int32_t refLen = raw_len;
+        
+        // Iterate over fragment lengths (within quantile bounds if set, otherwise all)
+        int32_t fl_low = (fld_low_ > 0) ? fld_low_ : 1;  // Start at 1 (min fragment length)
+        int32_t fl_high = (fld_high_ > 0 && fld_high_ < static_cast<int32_t>(fld_pmf.size())) 
+                        ? fld_high_ 
+                        : static_cast<int32_t>(fld_pmf.size() - 1);
+        
+        for (int32_t fl = fl_low; fl <= fl_high && fl < static_cast<int32_t>(fld_pmf.size()); ++fl) {
+            // Number of valid start positions for this fragment length
+            int32_t numStartPositions = refLen - fl + 1;
+            if (numStartPositions > 0) {
+                effLen += fld_pmf[fl] * static_cast<double>(numStartPositions);
+            }
+        }
+        
+        // Clamp to valid range
+        if (effLen < 1.0) effLen = 1.0;
+        if (effLen > raw_len) effLen = static_cast<double>(raw_len);
+        
+        eff_lengths.push_back(effLen);
     }
     
     return eff_lengths;

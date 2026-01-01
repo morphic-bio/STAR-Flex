@@ -1,4 +1,5 @@
 #include <cmath>
+#include <map>
 
 #include "Genome.h"
 
@@ -21,8 +22,11 @@
 #include "streamFuns.h"
 #include "SequenceFuns.h"
 #include "FlexProbeIndex.h"
+#include "CellRangerFormatter.h"
 #include <fstream>
 #include <cstdlib>
+#include <sys/stat.h>
+#include <dirent.h>
 
 
 char* globalG;
@@ -112,7 +116,136 @@ void Genome::genomeGenerate() {
 			P.outLogFileName=logfn;
 		};
 	};
-    if (sjdbOverhang<=0 && (pGe.sjdbFileChrStartEnd.at(0)!="-" || pGe.sjdbGTFfile!="-")) {
+	
+	// Auto-index workflow: check if index exists and handle force flags
+	if (pGe.autoIndexWorkflow.autoIndexBool) {
+	    // Check if index already exists (look for key sentinel files)
+	    bool indexExists = false;
+	    struct stat fileStat;
+	    string genomeFile = pGe.gDir + "/Genome";
+	    string saFile = pGe.gDir + "/SA";
+	    string saIndexFile = pGe.gDir + "/SAindex";
+	    string genomeParamsFile = pGe.gDir + "/genomeParameters.txt";
+	    
+	    // Index exists if all key files are present
+	    if (stat(genomeFile.c_str(), &fileStat) == 0 &&
+	        stat(saFile.c_str(), &fileStat) == 0 &&
+	        stat(saIndexFile.c_str(), &fileStat) == 0 &&
+	        stat(genomeParamsFile.c_str(), &fileStat) == 0) {
+	        indexExists = true;
+	    }
+	    
+	    // If index exists and no force flags, exit successfully
+	    if (indexExists && !pGe.autoIndexWorkflow.forceIndexBool && !pGe.autoIndexWorkflow.forceAllIndexBool) {
+	        P.inOut->logMain << "Index already exists in " << pGe.gDir << ". Skipping index generation.\n";
+	        P.inOut->logMain << "Use --forceIndex Yes to rebuild the index, or --forceAllIndex Yes to re-download and rebuild everything.\n";
+	        *(P.inOut->logStdOut) << "Index already exists in " << pGe.gDir << ". Skipping index generation.\n";
+	        exit(0);
+	    }
+	    
+	    // If forceAllIndex, delete cached downloads and formatted files
+	    if (pGe.autoIndexWorkflow.forceAllIndexBool) {
+	        P.inOut->logMain << "forceAllIndex enabled: cleaning up cached downloads and formatted files...\n";
+	        
+	        string cacheDir = pGe.cellrangerStyle.cacheDir.empty() 
+	                          ? pGe.gDir + "cellranger_ref_cache" 
+	                          : pGe.cellrangerStyle.cacheDir;
+	        
+	        // Delete cache directory contents (but keep the directory)
+	        string rmCmd = "rm -rf \"" + cacheDir + "\"/* \"" + cacheDir + "\"/.* 2>/dev/null || true";
+	        if (system(rmCmd.c_str()) != 0) {
+	            // Ignore errors - cache dir might not exist
+	        }
+	        
+	        // Delete formatted files in genome directory
+	        string formattedFasta = pGe.gDir + "cellranger_ref/genome.fa";
+	        string formattedGtf = pGe.gDir + "cellranger_ref/genes.gtf";
+	        remove(formattedFasta.c_str());
+	        remove(formattedGtf.c_str());
+	        
+	        P.inOut->logMain << "  Cache and formatted files cleaned up.\n";
+	    }
+	    
+	    // Input resolution priority: files -> URLs -> default URLs
+	    bool hasFiles = (pGe.gFastaFiles.size() > 0 && pGe.gFastaFiles.at(0) != "-") && 
+	                    (pGe.sjdbGTFfile != "-");
+	    bool hasUrls = !pGe.cellrangerStyle.faUrl.empty() && pGe.cellrangerStyle.faUrl != "-" &&
+	                   !pGe.cellrangerStyle.gtfUrl.empty() && pGe.cellrangerStyle.gtfUrl != "-";
+	    
+	    // If no files and no URLs, use default URLs based on selected release
+	    if (!hasFiles && !hasUrls) {
+	        // Release mapping table (extensible design)
+	        struct ReleaseUrls {
+	            string release;
+	            string ensemblRelease;
+	            string gencodeRelease;
+	            string faUrl;
+	            string gtfUrl;
+	        };
+	        
+	        static const map<string, ReleaseUrls> releaseMap = {
+	            {"2024-A", {
+	                "2024-A",
+	                "110",
+	                "44",
+	                "ftp://ftp.ensembl.org/pub/release-110/fasta/homo_sapiens/dna/Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz",
+	                "ftp://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_44/gencode.v44.primary_assembly.annotation.gtf.gz"
+	            }},
+	            {"2020-A", {
+	                "2020-A",
+	                "98",
+	                "32",
+	                "ftp://ftp.ensembl.org/pub/release-98/fasta/homo_sapiens/dna/Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz",
+	                "ftp://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_32/gencode.v32.primary_assembly.annotation.gtf.gz"
+	            }}
+	        };
+	        
+	        // Get selected release (default to 2024-A if not set)
+	        string selectedRelease = pGe.cellrangerStyle.refReleaseCanonical.empty() 
+	                                ? "2024-A" 
+	                                : pGe.cellrangerStyle.refReleaseCanonical;
+	        
+	        auto it = releaseMap.find(selectedRelease);
+	        if (it == releaseMap.end()) {
+	            ostringstream errOut;
+	            errOut << "EXITING because of FATAL ERROR: Unknown CellRanger release: " << selectedRelease << "\n";
+	            errOut << "SOLUTION: Use --cellrangerRefRelease with a supported release (2024-A or 2020-A)\n";
+	            exitWithError(errOut.str(), std::cerr, P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
+	        }
+	        
+	        const ReleaseUrls& urls = it->second;
+	        
+	        P.inOut->logMain << "No input files or URLs provided. Using default CellRanger reference release: " << urls.release << "\n";
+	        P.inOut->logMain << "  Release mapping: Ensembl release-" << urls.ensemblRelease 
+	                         << " / GENCODE release-" << urls.gencodeRelease << "\n";
+	        
+	        pGe.cellrangerStyle.faUrl = urls.faUrl;
+	        pGe.cellrangerStyle.gtfUrl = urls.gtfUrl;
+	        
+	        P.inOut->logMain << "  Default FASTA URL: " << pGe.cellrangerStyle.faUrl << "\n";
+	        P.inOut->logMain << "  Default GTF URL: " << pGe.cellrangerStyle.gtfUrl << "\n";
+	        
+	        // Default URLs are trusted, so no need for --allUntrustedUrl
+	        hasUrls = true;
+	    }
+	    
+	    if (hasUrls) {
+	        P.inOut->logMain << "Input resolution: Using URLs for download.\n";
+	    } else if (hasFiles) {
+	        P.inOut->logMain << "Input resolution: Using provided files.\n";
+	    }
+	}
+	
+    // AutoIndex may set URLs without populating sjdbGTFfile yet; treat URL as annotation input.
+    bool hasGtfInput = (pGe.sjdbGTFfile != "-");
+    if (!hasGtfInput && pGe.autoIndexWorkflow.autoIndexBool) {
+        if (!pGe.cellrangerStyle.gtfUrl.empty() && pGe.cellrangerStyle.gtfUrl != "-") {
+            hasGtfInput = true;
+        }
+    }
+    bool hasAnnoInput = (pGe.sjdbFileChrStartEnd.at(0)!="-" || hasGtfInput);
+
+    if (sjdbOverhang<=0 && hasAnnoInput) {
         ostringstream errOut;
         errOut << "EXITING because of FATAL INPUT PARAMETER ERROR: for generating genome with annotations (--sjdbFileChrStartEnd or --sjdbGTFfile options)\n";
         errOut << "you need to specify >0 --sjdbOverhang\n";
@@ -120,7 +253,7 @@ void Genome::genomeGenerate() {
         exitWithError(errOut.str(),std::cerr, P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
     };
 
-    if (pGe.sjdbFileChrStartEnd.at(0)=="-" && pGe.sjdbGTFfile=="-") {
+    if (pGe.sjdbFileChrStartEnd.at(0)=="-" && !hasGtfInput) {
         if (P.parArray.at(P.pGe.sjdbOverhang_par)->inputLevel>0 && sjdbOverhang>0) {
             ostringstream errOut;
             errOut << "EXITING because of FATAL INPUT PARAMETER ERROR: when generating genome without annotations (--sjdbFileChrStartEnd or --sjdbGTFfile options)\n";
@@ -131,13 +264,134 @@ void Genome::genomeGenerate() {
         sjdbOverhang=0;
     };
     
+    // Download if URLs are provided
+    bool hasUrls = !pGe.cellrangerStyle.faUrl.empty() && pGe.cellrangerStyle.faUrl != "-" &&
+                    !pGe.cellrangerStyle.gtfUrl.empty() && pGe.cellrangerStyle.gtfUrl != "-";
+    
+    if (hasUrls) {
+        P.inOut->logMain << "Downloading reference files...\n";
+        
+        string cacheDir = pGe.cellrangerStyle.cacheDir.empty() 
+                          ? pGe.gDir + "cellranger_ref_cache" 
+                          : pGe.cellrangerStyle.cacheDir;
+        
+        // Create cache directory
+        string mkdirCmd = "mkdir -p \"" + cacheDir + "\"";
+        if (system(mkdirCmd.c_str()) != 0) {
+            exitWithError("EXITING because of FATAL ERROR: Could not create cache directory: " + cacheDir + "\n",
+                         std::cerr, P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
+        }
+        
+        string fastaUrl = pGe.cellrangerStyle.faUrl;
+        string gtfUrl = pGe.cellrangerStyle.gtfUrl;
+        
+        // Extract filenames for output paths
+        string fastaFilename = fastaUrl.substr(fastaUrl.find_last_of('/') + 1);
+        string gtfFilename = gtfUrl.substr(gtfUrl.find_last_of('/') + 1);
+        // Remove .gz extension if present
+        if (fastaFilename.length() > 3 && fastaFilename.substr(fastaFilename.length() - 3) == ".gz") {
+            fastaFilename = fastaFilename.substr(0, fastaFilename.length() - 3);
+        }
+        if (gtfFilename.length() > 3 && gtfFilename.substr(gtfFilename.length() - 3) == ".gz") {
+            gtfFilename = gtfFilename.substr(0, gtfFilename.length() - 3);
+        }
+        
+        string downloadedFasta = cacheDir + "/" + fastaFilename;
+        string downloadedGtf = cacheDir + "/" + gtfFilename;
+        
+        // Get expected cksums from EXPECTED_CKSUM map (if available)
+        uint32_t expectedFastaCksum = 0;
+        uint64_t expectedFastaSize = 0;
+        uint32_t expectedGtfCksum = 0;
+        uint64_t expectedGtfSize = 0;
+        
+        // Load cksum cache before downloads
+        CellRangerFormatter::loadCksumCache(cacheDir);
+        
+        string errorMsg;
+        P.inOut->logMain << "    Downloading FASTA from: " << fastaUrl << "\n";
+        if (!CellRangerFormatter::downloadReference(fastaUrl, downloadedFasta, expectedFastaCksum, expectedFastaSize,
+                                                    pGe.cellrangerStyle.allUntrustedUrlBool, cacheDir,
+                                                    pGe.cellrangerStyle.autoCksumUpdateBool, errorMsg)) {
+            exitWithError("EXITING because of FATAL ERROR downloading FASTA: " + errorMsg + "\n",
+                         std::cerr, P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
+        }
+        
+        P.inOut->logMain << "    Downloading GTF from: " << gtfUrl << "\n";
+        if (!CellRangerFormatter::downloadReference(gtfUrl, downloadedGtf, expectedGtfCksum, expectedGtfSize,
+                                                    pGe.cellrangerStyle.allUntrustedUrlBool, cacheDir,
+                                                    pGe.cellrangerStyle.autoCksumUpdateBool, errorMsg)) {
+            exitWithError("EXITING because of FATAL ERROR downloading GTF: " + errorMsg + "\n",
+                         std::cerr, P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
+        }
+        
+        // Update genome files to use downloaded versions
+        pGe.gFastaFiles[0] = downloadedFasta;
+        pGe.sjdbGTFfile = downloadedGtf;
+        P.inOut->logMain << "    Download completed successfully\n";
+        
+        // Exit early if download-only mode
+        if (pGe.cellrangerStyle.downloadOnlyBool) {
+            P.inOut->logMain << "Download-only mode: skipping index generation\n";
+            exit(0);
+        }
+    }
+    
+    // CellRanger-style reference formatting - format FASTA/GTF before indexing
+    if (pGe.cellrangerStyle.indexEnabledBool) {
+        P.inOut->logMain << "CellRanger-style reference formatting enabled...\n";
+        
+        string inputFasta = pGe.gFastaFiles.size() > 0 && pGe.gFastaFiles.at(0) != "-" 
+                            ? pGe.gFastaFiles.at(0) : "";
+        string inputGtf = pGe.sjdbGTFfile != "-" ? pGe.sjdbGTFfile : "";
+        
+        // Validate inputs
+        if (inputFasta.empty()) {
+            exitWithError("EXITING because of FATAL INPUT ERROR: --cellrangerStyleIndex requires either --genomeFastaFiles or --faUrl\n",
+                         std::cerr, P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
+        }
+        if (inputGtf.empty()) {
+            exitWithError("EXITING because of FATAL INPUT ERROR: --cellrangerStyleIndex requires either --sjdbGTFfile or --gtfUrl\n",
+                         std::cerr, P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
+        }
+        
+        // Format files (use cellranger_ref subdirectory to match expected output paths)
+        string formattedFasta = pGe.gDir + "cellranger_ref/genome.fa";
+        string formattedGtf = pGe.gDir + "cellranger_ref/genes.gtf";
+        
+        // Create cellranger_ref directory if it doesn't exist
+        string mkdirCmd = "mkdir -p \"" + pGe.gDir + "cellranger_ref\"";
+        if (system(mkdirCmd.c_str()) != 0) {
+            exitWithError("EXITING because of FATAL ERROR: Could not create cellranger_ref directory: " + pGe.gDir + "cellranger_ref\n",
+                         std::cerr, P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
+        }
+        
+        CellRangerFormatter::Config formatConfig;
+        formatConfig.inputFastaPath = inputFasta;
+        formatConfig.outputFastaPath = formattedFasta;
+        formatConfig.inputGtfPath = inputGtf;
+        formatConfig.outputGtfPath = formattedGtf;
+        
+        P.inOut->logMain << "  Formatting FASTA and GTF files...\n";
+        CellRangerFormatter::Result formatResult = CellRangerFormatter::format(formatConfig);
+        if (!formatResult.success) {
+            exitWithError("EXITING because of FATAL ERROR formatting reference: " + formatResult.errorMessage + "\n",
+                         std::cerr, P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
+        }
+        
+        // Update genome files to use formatted versions
+        pGe.gFastaFiles[0] = formattedFasta;
+        pGe.sjdbGTFfile = formattedGtf;
+        P.inOut->logMain << "  Formatting completed successfully\n";
+    }
+    
     // Flex gene probe processing - generate hybrid reference if enabled
     if (pGe.flexGeneProbe.enabled) {
         P.inOut->logMain << "Flex gene probe processing enabled, generating hybrid reference...\n";
         
         // Validate inputs
         if (pGe.gFastaFiles.size() == 0 || pGe.gFastaFiles.at(0) == "-") {
-            exitWithError("EXITING because of FATAL INPUT ERROR: --flexGeneProbeSet requires --genomeFastaFiles\n",
+            exitWithError("EXITING because of FATAL INPUT ERROR: --flexGeneProbeSet requires either --genomeFastaFiles or --faUrl\n",
                          std::cerr, P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
         }
         if (pGe.sjdbGTFfile == "-") {
@@ -152,6 +406,7 @@ void Genome::genomeGenerate() {
         fpConfig.baseFastaPath = pGe.gFastaFiles.at(0);  // Use first FASTA file
         fpConfig.outputDir = pGe.gDir + "flex_probe_artifacts";
         fpConfig.enforceProbeLength = pGe.flexGeneProbe.enforceLength;
+        fpConfig.removeDeprecated = pGe.flexGeneProbe.removeDeprecatedBool;
         
         // Run FlexProbeIndex
         P.inOut->logMain << "  Probe CSV: " << fpConfig.probeCSVPath << "\n";
@@ -171,7 +426,11 @@ void Genome::genomeGenerate() {
         P.inOut->logMain << "    Output probes: " << fpResult.stats.totalOutput << "\n";
         P.inOut->logMain << "    Unique genes: " << fpResult.stats.uniqueGenes << "\n";
         P.inOut->logMain << "    Dropped (DEPRECATED): " << fpResult.stats.droppedDeprecated << "\n";
+        P.inOut->logMain << "    Dropped (included=FALSE): " << fpResult.stats.droppedIncludedFalse << "\n";
         P.inOut->logMain << "    Dropped (no GTF match): " << fpResult.stats.droppedNoMatch << "\n";
+        if (pGe.flexGeneProbe.removeDeprecatedBool) {
+            P.inOut->logMain << "    Note: Deprecated gene IDs were removed from probe_list.txt (--removeDeprecated enabled)\n";
+        }
         
         // Update genome parameters to use hybrid files
         string hybridFasta = fpConfig.outputDir + "/genome.filtered.fa";

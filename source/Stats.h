@@ -23,12 +23,17 @@ class Stats {
 
         uint chimericAll;
 
-        // Cutadapt-style trimming stats
+        // Cutadapt-style trimming stats (per-read)
         uint64 trimReadsProcessed;
         uint64 trimReadsTrimmed;
         uint64 trimReadsTooShort;
         uint64 trimBasesQualityTrimmed;
         uint64 trimBasesAdapterTrimmed;
+        
+        // Pair-level trimming stats (PE only)
+        uint64 trimPairsProcessed;
+        uint64 trimPairsDropped;
+        uint64 trimPairsKept;
 
         time_t timeStart, timeStartMap, timeFinishMap, timeLastReport, timeFinish;
         

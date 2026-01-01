@@ -309,34 +309,46 @@ void ReadAlign::outputAlignments() {
         
         // Build ECs for transcript quantification (TranscriptVB mode)
         if (P.quant.transcriptVB.yes && unmapType<0 && quantEC != nullptr && alignTrAll != nullptr && nAlignT > 0) {
-            // Collect transcript IDs from transcriptomic alignments
-            std::vector<uint32_t> transcriptIds;
-            std::vector<double> auxProbs;
+            const char* qname = sanitizeQname(readNameMates, readNmates, 0);
             
-            for (uint i = 0; i < nAlignT; i++) {
-                uint32_t trId = alignTrAll[i].Chr;  // Chr field contains transcript ID in transcriptomic alignments
-                // Check if this transcript ID is already in our list
-                bool found = false;
-                for (size_t j = 0; j < transcriptIds.size(); j++) {
-                    if (transcriptIds[j] == trId) {
-                        found = true;
-                        break;
-                    }
-                }
-                if (!found) {
-                    transcriptIds.push_back(trId);
-                }
-            }
+            // Pack read sequences for error model (4-bit BAM encoding)
+            // Pack once per read, not per alignment
+            std::vector<uint8_t> packed_read1, packed_read1_rc, packed_read2, packed_read2_rc;
+            std::vector<char> read1_rc, read2_rc;
+            uint32_t read1_len = 0, read2_len = 0;
             
-            // Compute uniform weight for this read's alignments
-            double uniformWeight = transcriptIds.empty() ? 1.0 : 1.0 / transcriptIds.size();
-            
-            if (!transcriptIds.empty()) {
-                auxProbs.resize(transcriptIds.size(), uniformWeight);
+            if (readNmates > 0 && readLengthOriginal[0] > 0) {
+                read1_len = readLengthOriginal[0];
+                uint32_t packed_len1 = (read1_len + 1) / 2;
+                packed_read1.resize(packed_len1);
+                nuclPackBAM(Read0[0], reinterpret_cast<char*>(packed_read1.data()), read1_len);
                 
-                // Add to EC table
-                quantEC->addReadAlignmentsSimple(transcriptIds, auxProbs);
+                read1_rc.resize(read1_len);
+                revComplementNucleotides(Read0[0], read1_rc.data(), read1_len);
+                packed_read1_rc.resize(packed_len1);
+                nuclPackBAM(read1_rc.data(), reinterpret_cast<char*>(packed_read1_rc.data()), read1_len);
             }
+            
+            if (readNmates > 1 && readLengthOriginal[1] > 0) {
+                read2_len = readLengthOriginal[1];
+                uint32_t packed_len2 = (read2_len + 1) / 2;
+                packed_read2.resize(packed_len2);
+                nuclPackBAM(Read0[1], reinterpret_cast<char*>(packed_read2.data()), read2_len);
+                
+                read2_rc.resize(read2_len);
+                revComplementNucleotides(Read0[1], read2_rc.data(), read2_len);
+                packed_read2_rc.resize(packed_len2);
+                nuclPackBAM(read2_rc.data(), reinterpret_cast<char*>(packed_read2_rc.data()), read2_len);
+            }
+            
+            quantEC->addReadAlignments(alignTrAll, nAlignT, {}, qname,
+                                      packed_read1.empty() ? nullptr : packed_read1.data(),
+                                      packed_read1_rc.empty() ? nullptr : packed_read1_rc.data(), read1_len,
+                                      packed_read2.empty() ? nullptr : packed_read2.data(),
+                                      packed_read2_rc.empty() ? nullptr : packed_read2_rc.data(), read2_len);
+            
+            // Compute uniformWeight for GC bias collection
+            double uniformWeight = (nAlignT > 0) ? 1.0 / nAlignT : 1.0;
             
             // Collect GC observations from properly-paired transcriptomic alignments
             if (P.quant.transcriptVB.gcBias && P.readNmates == 2) {
@@ -362,7 +374,9 @@ void ReadAlign::outputAlignments() {
                     }
                     
                     uint64 fragLen = fragEnd - fragStart;
-                    if (fragLen < 20 || fragLen > 1000) continue;  // Skip unreasonable fragment lengths
+                    // Only truncate very long fragments (Salmon doesn't drop small lengths)
+                    // Keep fragments >= 1 and <= MAX_FRAG_LEN (2000)
+                    if (fragLen == 0 || fragLen > FLDAccumulator::MAX_FRAG_LEN) continue;
                     
                     // Get transcript ID and compute GC from transcript sequence
                     uint32_t trId = aT.Chr;
@@ -401,8 +415,13 @@ void ReadAlign::outputAlignments() {
                                               static_cast<int32_t>(fragEnd), 
                                               gcPct, 
                                               uniformWeight);
+                    
+                    // FLD updates are now done in TranscriptQuantEC::addReadAlignments
+                    // using Salmon-style stochastic acceptance based on exp(aln->logProb)
+                    // (Removed uniform FLD updates for Salmon parity)
                 }
             }
+            // Note: FLD collection without GC bias is also done in TranscriptQuantEC
         }
         
         // Set detected sample token in SoloReadBarcode for tag extraction in inline hash capture

@@ -4,6 +4,9 @@
 
 int alignToTranscript(Transcript &aG, uint trS1, uint8 trStr1, uint32 *exSE1, uint32 *exLenCum1, uint16 exN1, Transcript &aT) {
 
+    // Carry over alignment metadata (score/flags) from the genomic alignment.
+    aT = aG;
+
     //find exon that overlaps beginning of the read
     uint32 g1=aG.exons[0][EX_G]-trS1;//start of the align
     uint32 ex1=binarySearch1<uint32>(g1, exSE1, 2*exN1);

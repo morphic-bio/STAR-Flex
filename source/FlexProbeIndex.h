@@ -35,8 +35,9 @@ struct Config {
     std::string baseFastaPath;      // Base genome FASTA (required)
     std::string outputDir;          // Output directory (required)
     uint32_t enforceProbeLength;    // Expected probe length (default: 50)
+    bool removeDeprecated;          // Remove deprecated gene IDs from probe lists (default: false)
     
-    Config() : enforceProbeLength(50) {}
+    Config() : enforceProbeLength(50), removeDeprecated(false) {}
 };
 
 // Single probe entry
@@ -60,12 +61,13 @@ struct ProbeEntry {
 struct FilterStats {
     uint32_t totalInput;
     uint32_t droppedDeprecated;
+    uint32_t droppedIncludedFalse;
     uint32_t droppedNoMatch;
     uint32_t droppedInvalidSeq;
     uint32_t totalOutput;
     uint32_t uniqueGenes;
     
-    FilterStats() : totalInput(0), droppedDeprecated(0), droppedNoMatch(0),
+    FilterStats() : totalInput(0), droppedDeprecated(0), droppedIncludedFalse(0), droppedNoMatch(0),
                     droppedInvalidSeq(0), totalOutput(0), uniqueGenes(0) {}
 };
 

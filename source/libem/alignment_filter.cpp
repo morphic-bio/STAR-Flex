@@ -83,9 +83,24 @@ std::vector<RawAlignment> filterAndCollectAlignments(
     
     double best_score_d = static_cast<double>(msi.best_score);
     
+    // Apply min_score_fraction threshold (Salmon's score fraction gating)
+    // Only active when min_score_fraction > 0.0 (disabled by default for STAR inline mode)
+    // Set to 0.65 for Salmon-parity mode to drop alignments < 65% of best score
+    int32_t min_score_threshold = invalid_score;
+    if (params.min_score_fraction > 0.0 && msi.best_score != invalid_score) {
+        min_score_threshold = static_cast<int32_t>(best_score_d * params.min_score_fraction);
+    }
+    
     // Filter alignments
     for (auto& aln : alignments) {
+        // Score threshold check
         if (aln.score < filter_threshold) {
+            continue;
+        }
+        
+        // Min score fraction check (only active when min_score_fraction > 0.0)
+        // Default is 0.0 (disabled) to preserve STAR's prior alignment retention behavior
+        if (min_score_threshold != invalid_score && aln.score < min_score_threshold) {
             continue;
         }
         

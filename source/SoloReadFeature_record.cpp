@@ -284,9 +284,14 @@ const ProbeListIndex* getGlobalProbeIndex(const SoloReadFeature* rf) {
     const std::string& path = rf->pSolo.probeListPath;
     if (path.empty() || path == "-") return nullptr;
     ProbeListIndex* idx = new ProbeListIndex();
-    if (!idx->load(path)) {
+    uint32_t deprecatedCount = 0;
+    if (!idx->load(path, rf->pSolo.removeDeprecated, &deprecatedCount)) {
         delete idx;
         return nullptr;
+    }
+    if (rf->pSolo.removeDeprecated && deprecatedCount > 0) {
+        // Note: Cannot log here as we don't have access to logMain in this context
+        // Logging will happen in STAR.cpp initialization
     }
     gProbeIndex = idx;
     return gProbeIndex;

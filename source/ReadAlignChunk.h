@@ -10,6 +10,11 @@
 #include "Quantifications.h"
 #include <memory>
 
+// Forward declaration
+namespace libem {
+    class Transcriptome;
+}
+
 class ReadAlignChunk {//chunk of reads and alignments
 public:
     Parameters& P;
@@ -37,7 +42,8 @@ public:
     int iThread; //current thread
     uint chunkOutBAMtotal; //total number of bytes in the write buffer
 
-    ReadAlignChunk(Parameters& Pin, Genome &genomeIn, Transcriptome *TrIn, int iChunk);
+    ReadAlignChunk(Parameters& Pin, Genome &genomeIn, Transcriptome *TrIn, int iChunk,
+                   const libem::Transcriptome* libemTr = nullptr);
     void processChunks();
     void mapChunk();
     void chunkFstreamOpen(string filePrefix, int iChunk, fstream &fstreamOut);

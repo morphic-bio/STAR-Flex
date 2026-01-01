@@ -8,7 +8,7 @@ AR ?= ar
 # OpenBLAS by default (not used in v1, but ready for future)
 LDFLAGS_BLAS ?= -lopenblas
 
-LIBEM_OBJECTS = ec_loader.o em_engine.o vb_engine.o alignment_filter.o ec_builder.o extended_pruning.o alignment_model.o gc_bias.o effective_length.o
+LIBEM_OBJECTS = ec_loader.o em_engine.o vb_engine.o alignment_filter.o ec_builder.o extended_pruning.o alignment_model.o gc_bias.o effective_length.o effective_length_wrapper.o fld_accumulator.o
 
 all: libem.a
 

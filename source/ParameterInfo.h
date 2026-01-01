@@ -54,6 +54,18 @@ inline void printOneValue <string> (string *value, std::ostream& outStr) {
     };
 };
 
+template <>
+inline uint8 inputOneValue <uint8> (istringstream &streamIn) {
+    int v = 0;
+    streamIn >> v;
+    return static_cast<uint8>(v);
+};
+
+template <>
+inline void printOneValue <uint8> (uint8 *value, std::ostream& outStr) {
+    outStr << static_cast<int>(*value);
+};
+
 template <class parameterType>
 class ParameterInfoScalar : public ParameterInfoBase {
 public:

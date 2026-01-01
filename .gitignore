@@ -1,73 +1,84 @@
-*.o
-run_production.sh
-*log
-Depend.list
+## Local top-level scripts/docs
+/*.sh
+/HANDOFF_DOCUMENT.md
+/TEST_DOCUMENTATION.md
+/*_SUMMARY.md
+/*_FIX*.md
 
+## OS / editor / IDE files
+.DS_Store
 .project
 .kdev4/
 source.kdev4
-
-
-# Don't track intermediary files from building the manual
-extras/doc-latex/*.aux
-extras/doc-latex/*.fdb_latexmk
-extras/doc-latex/*.fls
-extras/doc-latex/*.log
-extras/doc-latex/*.out
-extras/doc-latex/*.gz
-extras/doc-latex/*.toc
-
-# Don't track the STAR binary once it has being built
-source/STAR
-
-# FlexFilter standalone tool
-tools/flexfilter/run_flexfilter_mex
-tools/flexfilter/*.o
-tools/flexfilter/test_output/
-.DS_Store
-*.xcworkspacedata
-*.pbxproj
-*.plist
-*.xcuserstate
-
-#Reference files
-reference/*
-.specstory
-
-# Editor and IDE files
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-# Cursor-specific
 .cursorindexingignore
+.cursor
+*.xcworkspacedata
+*.pbxproj
+*.plist
+*.xcuserstate
 
-#plan
-plans/*
+## Logs
+*log
+Log.out
 
-#bam
-*.bam
-#test outputs
-test_*/
-chr21_probe*/
-bin/*
-# Build artifacts
-/source/*.o
+## Build artifacts
+*.o
+Depend.list
 /source/*.d
+/source/Depend.list
 /source/STAR
 /source/STARlong
-/source/Depend.list
 /source/libem/libem.a
 /source/libflex/libflex.a
 /source/libtrim/libtrim.a
+/tools/flexfilter/run_flexfilter_mex
+/tools/flexfilter/test_output/
+/bin/*
+/a.out
 
-# Test outputs / temp
+## Documentation build outputs
+/extras/doc-latex/*.aux
+/extras/doc-latex/*.fdb_latexmk
+/extras/doc-latex/*.fls
+/extras/doc-latex/*.log
+/extras/doc-latex/*.out
+/extras/doc-latex/*.gz
+/extras/doc-latex/*.toc
+
+## Reference files
+/reference/*
+.specstory
+
+## Plans
+/plans/*
+
+## Data
+*.bam
+
+## Test binaries
+/test/test_*
+!/test/test_*.c
+!/test/test_*.cpp
+
+## Test outputs / temp
+/test_*/
+/chr21_probe*/
+/test/autoindex_pe_flex_mex_output/
+/test/nonflex_mex_smoke_output/
+/test/tmp_*/
+/test/integration/trim/nfcore_real/fastq_comparison/
+/tests/flex_cbub_validation_output/
+/tests/regress_100K_baseline/
+/tests/regress_100K_current/
+/tests/flex_inline_test_output/
 /tests/*/output
 /tests/*/tmp
 /tests/solo_smoke
 /tests/ychrom_test
+/tests/-/
 /tmp/samtools_sorter_test_*
-
-# Logs
-Log.out

@@ -328,6 +328,16 @@ bool parseProbeCSV(const std::string& csvPath, const std::unordered_set<std::str
             continue;
         }
         
+        // Check included column (case-sensitive: must be exactly "TRUE")
+        // Only filter if included column exists; if missing, keep current behavior (do not drop)
+        if (includedCol >= 0 && (size_t)includedCol < fields.size()) {
+            std::string included = trim(fields[includedCol]);
+            if (included != "TRUE") {
+                stats.droppedIncludedFalse++;
+                continue;
+            }
+        }
+        
         // Validate sequence
         std::string seqError;
         if (!validateProbeSeq(probeSeq, enforceLength, seqError)) {
@@ -596,6 +606,21 @@ Result run(const Config& config) {
         for (const auto& probe : probes) {
             uniqueGenes.insert(probe.gene_id);
         }
+        
+        // Filter deprecated gene IDs if removeDeprecated is enabled
+        uint32_t deprecatedCount = 0;
+        if (config.removeDeprecated) {
+            std::set<std::string> filteredGenes;
+            for (const auto& gene : uniqueGenes) {
+                if (containsIgnoreCase(gene, "DEPRECATED")) {
+                    deprecatedCount++;
+                } else {
+                    filteredGenes.insert(gene);
+                }
+            }
+            uniqueGenes = filteredGenes;
+        }
+        
         result.stats.uniqueGenes = uniqueGenes.size();
         
         std::ofstream out(probeList);
@@ -608,6 +633,12 @@ Result run(const Config& config) {
             out << gene << "\n";
         }
         out.close();
+        
+        // Log deprecated removal if enabled
+        if (config.removeDeprecated && deprecatedCount > 0) {
+            // Note: This will be logged by the caller if needed
+            // We could add a deprecatedGenesRemoved field to FilterStats if needed
+        }
     }
     
     // Compute SHA256 hashes
@@ -651,6 +682,7 @@ Result run(const Config& config) {
         out << "  \"filtering\": {\n";
         out << "    \"total_input_probes\": " << result.stats.totalInput << ",\n";
         out << "    \"dropped_deprecated\": " << result.stats.droppedDeprecated << ",\n";
+        out << "    \"dropped_included_false\": " << result.stats.droppedIncludedFalse << ",\n";
         out << "    \"dropped_no_gtf_match\": " << result.stats.droppedNoMatch << ",\n";
         out << "    \"dropped_invalid_seq\": " << result.stats.droppedInvalidSeq << ",\n";
         out << "    \"total_output_probes\": " << result.stats.totalOutput << ",\n";

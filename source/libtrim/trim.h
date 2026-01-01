@@ -13,7 +13,7 @@ struct TrimParams {
     const char* adapter_r2;    // Default: TRUSEQ_ADAPTER_R2
     uint8_t quality_cutoff;    // Default: 20
     uint32_t min_length;       // Default: 20
-    uint32_t min_overlap;      // Default: 3 (cutadapt/Trim Galore default -O 3)
+    uint32_t min_overlap;      // Default: 1 (Trim Galore default --stringency 1)
     double max_error_rate;     // Default: 0.1 (mismatches = floor(overlap * 0.1))
     bool trim_5p_quality;      // Default: false (match Trim Galore)
     // Future hooks (currently unused):

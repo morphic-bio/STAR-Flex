@@ -89,8 +89,14 @@ fi
 echo "✓ TranscriptVB quantification complete"
 echo ""
 
-# Step 4: Compare results
-echo "=== Step 4: Compare Results ==="
+# Check for gene-level output
+if [ -f star_vb_quant.genes.sf ]; then
+    echo "✓ quant.genes.sf generated"
+fi
+echo ""
+
+# Step 4: Compare transcript-level results
+echo "=== Step 4: Compare Transcript-Level Results ==="
 if [ -f "$SCRIPT_DIR/compare_salmon_star.py" ]; then
     python3 "$SCRIPT_DIR/compare_salmon_star.py" salmon_out/quant.sf star_vb_quant.sf --verbose
     RESULT=$?
@@ -121,6 +127,26 @@ else:
     exit(1)
 EOF
     RESULT=$?
+fi
+
+# Step 5: Compare gene-level results (if available)
+if [ -f star_vb_quant.genes.sf ] && [ -f salmon_out/quant.genes.sf ]; then
+    echo ""
+    echo "=== Step 5: Compare Gene-Level Results ==="
+    if [ -f "$SCRIPT_DIR/compare_salmon_star.py" ]; then
+        python3 "$SCRIPT_DIR/compare_salmon_star.py" salmon_out/quant.genes.sf star_vb_quant.genes.sf --verbose --gene
+        GENE_RESULT=$?
+        if [ $GENE_RESULT -ne 0 ]; then
+            RESULT=$GENE_RESULT  # Fail if gene comparison fails
+        fi
+    else
+        echo "compare_salmon_star.py not found, skipping gene-level comparison"
+    fi
+elif [ -f star_vb_quant.genes.sf ]; then
+    echo ""
+    echo "=== Step 5: Gene-Level Output ==="
+    echo "✓ STAR quant.genes.sf generated"
+    echo "  (Salmon quant.genes.sf not found - run Salmon with --geneMap to generate)"
 fi
 
 echo ""

@@ -131,6 +131,30 @@ void ParametersSolo::initialize(Parameters *pPin)
     }
     
     //////////////////////////////////////////////////////////////////////////////////////////////////////
+    /////////////////////////////// Parse removeDeprecated flag (for probe list filtering)
+    // If --soloRemoveDeprecated not explicitly set, inherit from --removeDeprecated (if set)
+    {
+        auto isYes = [](const string &value) -> bool {
+            string normalized = value;
+            std::transform(normalized.begin(), normalized.end(), normalized.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            return (normalized == "yes");
+        };
+        
+        // If soloRemoveDeprecated not explicitly set or set to "auto", inherit from --removeDeprecated
+        string normalized = removeDeprecatedStr;
+        std::transform(normalized.begin(), normalized.end(), normalized.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        
+        if (removeDeprecatedStr.empty() || removeDeprecatedStr == "-" || normalized == "auto") {
+            // Inherit from ParametersGenome.removeDeprecated if available
+            removeDeprecated = isYes(pP->pGe.flexGeneProbe.removeDeprecated);
+        } else {
+            removeDeprecated = isYes(removeDeprecatedStr);
+        }
+    }
+    
+    //////////////////////////////////////////////////////////////////////////////////////////////////////
     /////////////////////////////// Auto-detect probe_gene_list.txt from genome index
     // This runs unconditionally for all modes (raw and cr) when --soloProbeList is not provided
     if (probeListPath.empty() || probeListPath=="-") {
@@ -281,6 +305,28 @@ void ParametersSolo::initialize(Parameters *pPin)
     }
     
     //////////////////////////////////////////////////////////////////////////////////////////////////////
+    /////////////////////////////// Inline Hash Mode
+    {
+        // Parse inlineHashMode: no|yes|auto (default: auto - enabled for Flex, disabled otherwise)
+        string mode = inlineHashModeStr;
+        transform(mode.begin(), mode.end(), mode.begin(), ::tolower);
+        if (mode == "yes") {
+            inlineHashMode = true;
+        } else if (mode == "no") {
+            inlineHashMode = false;
+        } else if (mode == "auto" || mode.empty()) {
+            // Auto mode: enabled for Flex, disabled for non-Flex (will be set in Flex section below)
+            // For now, default to false (will be overridden if Flex is enabled)
+            inlineHashMode = false;
+        } else {
+            ostringstream errOut;
+            errOut << "EXITING because of fatal PARAMETERS error: unrecognized option in --soloInlineHashMode=" << inlineHashModeStr << "\n";
+            errOut << "SOLUTION: use allowed option: no OR yes OR auto\n";
+            exitWithError(errOut.str(), std::cerr, pP->inOut->logMain, EXIT_CODE_PARAMETER, *pP);
+        }
+    }
+    
+    //////////////////////////////////////////////////////////////////////////////////////////////////////
     /////////////////////////////// Flex omnibus mode - sets production defaults for full Flex pipeline
     {
         if (flexModeStr == "yes") {
@@ -297,6 +343,13 @@ void ParametersSolo::initialize(Parameters *pPin)
             if (inlineCBCorrectionStr.empty()) {
                 inlineCBCorrectionStr = "yes";
                 inlineCBCorrection = true;  // Override boolean directly
+            }
+            
+            // Enable inline hash mode (if not explicitly set)
+            // Only override if empty (default) or "auto", respect explicit "no" from user
+            if (inlineHashModeStr.empty() || inlineHashModeStr == "auto") {
+                inlineHashModeStr = "yes";
+                inlineHashMode = true;  // Override boolean directly
             }
             
             // Enable minimal memory mode (if not explicitly set)
@@ -354,6 +407,7 @@ void ParametersSolo::initialize(Parameters *pPin)
             pP->inOut->logMain << "--flex yes: Enabled Flex pipeline with production defaults\n";
             pP->inOut->logMain << "    soloRunFlexFilter=" << runFlexFilterStr << "\n";
             pP->inOut->logMain << "    soloInlineCBCorrection=" << inlineCBCorrectionStr << "\n";
+            pP->inOut->logMain << "    soloInlineHashMode=" << inlineHashModeStr << " (enabled)\n";
             pP->inOut->logMain << "    soloFlexMinimalMemory=" << soloFlexMinimalMemoryStr << "\n";
             pP->inOut->logMain << "    soloMapqMode=" << mapqModeStr << " (enum=" << mapqMode << ")\n";
             pP->inOut->logMain << "    soloMMrateMax=" << mmRateMax << "\n";
@@ -397,6 +451,8 @@ void ParametersSolo::initialize(Parameters *pPin)
         flexFilterDebugTagLog = (flexFilterDebugTagLogStr == "yes");
         flexFilterDisableOccupancy = (flexFilterDisableOccupancyStr == "yes");
         flexFilterUseSimpleED = (flexFilterUseSimpleEDStr == "yes");
+        flexFilterInvariantChecks = (flexFilterInvariantChecksStr == "yes");
+        flexFilterKeepCBTag = (flexFilterKeepCBTagStr == "yes");
         
         // Resolve expected cells: new flags take precedence over deprecated --soloFlexTotalExpected
         if (flexFilterExpectedCellsTotal > 0) {
@@ -423,6 +479,37 @@ void ParametersSolo::initialize(Parameters *pPin)
         // Set default output prefix if not provided
         if (runFlexFilter && flexFilterOutputPrefix.empty()) {
             flexFilterOutputPrefix = pP->outFileNamePrefix + "flexfilter/";
+        }
+    }
+    
+    //////////////////////////////////////////////////////////////////////////////////////////////////////
+    /////////////////////////////// Flex mode probe requirement check
+    // Flex mode requires probe list (after auto-detection and Flex section processing)
+    // Only --flex yes requires probe list; --soloRunFlexFilter yes (filter-only) does not require probe list
+    {
+        // Log note for filter-only mode
+        if (runFlexFilter && !flexMode) {
+            pP->inOut->logMain << "Flex filter-only mode does not require probe list.\n";
+        }
+        
+        // Require probe list only when Flex mapping is enabled (--flex yes)
+        // Filter-only mode (--soloRunFlexFilter yes without --flex yes) does not need probe list
+        if (flexMode) {
+            if (probeListPath.empty() || probeListPath=="-") {
+                ostringstream errOut;
+                errOut << "EXITING because of fatal PARAMETERS error: Flex mode requires probe list.\n";
+                errOut << "SOLUTION: Provide --soloProbeList <path> OR rebuild index with --flexGeneProbeSet <probe CSV>\n";
+                errOut << "  (probe set is not downloaded - must be user-supplied)\n";
+                exitWithError(errOut.str(), std::cerr, pP->inOut->logMain, EXIT_CODE_PARAMETER, *pP);
+            } else {
+                // Log that probe list was found (either from auto-detection or explicit --soloProbeList)
+                string expectedGenomeProbeList = pP->pGe.gDir + "/probe_gene_list.txt";
+                if (probeListPath == expectedGenomeProbeList) {
+                    pP->inOut->logMain << "Flex mode: Using probe list from genome index: " << probeListPath << "\n";
+                } else {
+                    pP->inOut->logMain << "Flex mode: Using probe list: " << probeListPath << "\n";
+                }
+            }
         }
     }
     

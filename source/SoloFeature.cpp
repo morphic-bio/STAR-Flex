@@ -113,8 +113,12 @@ const ProbeListIndex* SoloFeature::getProbeListIndex() const {
         attemptedLoad = true;
         if (!P.pSolo.probeListPath.empty() && P.pSolo.probeListPath != "-") {
             ProbeListIndex *idx = new ProbeListIndex();
-            if (idx->load(P.pSolo.probeListPath)) {
+            uint32_t deprecatedCount = 0;
+            if (idx->load(P.pSolo.probeListPath, P.pSolo.removeDeprecated, &deprecatedCount)) {
                 fallbackProbeIndex = idx;
+                if (P.pSolo.removeDeprecated && deprecatedCount > 0) {
+                    P.inOut->logMain << "[PROBE-LIST] Removed " << deprecatedCount << " deprecated entries from probe list\n";
+                }
             } else {
                 delete idx;
             }

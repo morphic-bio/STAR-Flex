@@ -50,6 +50,9 @@ struct Arguments {
     // FlexFilter config
     FlexFilter::Config config;
     
+    // Output barcode handling
+    bool keepCBTag = false;  // If true, keep full CB+TAG barcodes; if false (default), strip to 16bp
+    
     bool valid = false;
 };
 
@@ -87,6 +90,8 @@ void printUsage(const char* progName) {
     std::cerr << "  --recovery-factor <F>      Recovery factor (default: 0.606)\n";
     std::cerr << "  --occupancy-percentile <F> Percentile (default: 0.999)\n";
     std::cerr << "  --occupancy-sim-gems <N>   Monte Carlo GEMs (default: 1000000)\n";
+    std::cerr << "\nOutput options:\n";
+    std::cerr << "  --keep-cb-tag              Keep full CB+TAG barcodes in output (default: strip to 16bp)\n";
     std::cerr << "\nFlags:\n";
     std::cerr << "  --disable-occupancy        Disable occupancy filter (for testing)\n";
     std::cerr << "  --debug-tag-log            Enable detailed logging\n";
@@ -146,6 +151,8 @@ Arguments parseArguments(int argc, char** argv) {
             args.config.occupancySimulatedGems = static_cast<uint32_t>(std::strtoul(argv[++i], nullptr, 10));
         } else if (arg == "--disable-occupancy") {
             args.config.disableOccupancyFilter = true;
+        } else if (arg == "--keep-cb-tag") {
+            args.keepCBTag = true;
         } else if (arg == "--use-simple-empty-drops") {
             args.config.useSimpleEmptyDrops = true;
             args.config.simpleEmptyDropsParams.disabled = false;
@@ -640,11 +647,14 @@ int main(int argc, char** argv) {
             continue;
         }
         
+        // Per-sample MEX: strip sample tag from barcodes (16bp output) unless --keep-cb-tag
+        int cb_len = args.keepCBTag ? -1 : 16;
         int writeResult = MexWriter::writeMex(
             outputPrefix,
             filteredBarcodes,
             featureList,
-            filteredTriplets
+            filteredTriplets,
+            cb_len
         );
         
         if (writeResult != 0) {

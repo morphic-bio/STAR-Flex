@@ -84,7 +84,7 @@ int main(int argc, char* argv[]) {
     std::vector<double> gc_bias = observed_gc.computeBiasRatio(expected_gc, max_bias_ratio);
     
     // Load transcriptome
-    Transcriptome transcriptome;
+    libem::Transcriptome transcriptome;
     std::cerr << "Loading transcriptome from: " << transcriptome_file << "\n";
     if (!transcriptome.loadFromFasta(transcriptome_file)) {
         std::cerr << "Error: Failed to load transcriptome\n";
@@ -107,7 +107,7 @@ int main(int argc, char* argv[]) {
     raw_lengths.reserve(transcriptome.size());
     
     for (size_t i = 0; i < transcriptome.size(); ++i) {
-        const TranscriptSequence* txp = transcriptome.getTranscript(static_cast<uint32_t>(i));
+        const libem::TranscriptSequence* txp = transcriptome.getTranscript(static_cast<uint32_t>(i));
         if (txp) {
             raw_lengths.push_back(static_cast<double>(txp->length()));
         } else {

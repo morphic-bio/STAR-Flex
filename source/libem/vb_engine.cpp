@@ -56,10 +56,10 @@ double robust_digamma(double x) {
 // Constants matching Salmon's implementation
 constexpr double digammaMin = 1e-10;
 constexpr double minEQClassWeight = std::numeric_limits<double>::min();
-constexpr double minAlpha = 1e-8;
-constexpr double alphaCheckCutoff = 1e-2;
+// Note: minAlpha and alphaCheckCutoff are now configurable via EMParams
+// Defaults: minAlpha = zero_threshold = 1e-8, alphaCheckCutoff = 1e-2
 
-// Compute unique EC counts per transcript (for VB initialization)
+// Compute unique EC counts per transcript (for fallback initialization)
 std::vector<double> compute_unique_counts(const ECTable& ecs) {
     std::vector<double> unique_counts(ecs.n_transcripts, 0.0);
     
@@ -71,6 +71,51 @@ std::vector<double> compute_unique_counts(const ECTable& ecs) {
     }
     
     return unique_counts;
+}
+
+// Compute projected counts from ALL ECs (Salmon-style VB initialization)
+// This distributes multi-mapper counts using EC weights to break symmetry
+std::vector<double> compute_projected_counts(const ECTable& ecs, const std::vector<double>& eff_lengths) {
+    std::vector<double> projected_counts(ecs.n_transcripts, 0.0);
+    
+    for (const EC& ec : ecs.ecs) {
+        if (ec.count <= 0) continue;
+        
+        size_t groupSize = ec.transcript_ids.size();
+        
+        if (groupSize == 1) {
+            // Single-transcript EC: full count
+            projected_counts[ec.transcript_ids[0]] += ec.count;
+        } else {
+            // Multi-transcript EC: distribute by weights
+            // Salmon's combinedWeights = alignmentWeight * probStartPos where probStartPos = 1/effLen
+            // So we need to multiply EC weights by 1/effLen
+            double total_weight = 0.0;
+            std::vector<double> weights(groupSize);
+            
+            for (size_t i = 0; i < groupSize; ++i) {
+                uint32_t tid = ec.transcript_ids[i];
+                double effLen_factor = (eff_lengths[tid] > 0) ? 1.0 / eff_lengths[tid] : 0.0;
+                if (ec.has_weights() && i < ec.weights.size()) {
+                    // EC weights are alignment likelihoods, multiply by 1/effLen
+                    weights[i] = ec.weights[i] * effLen_factor;
+                } else {
+                    // No weights, use 1/effLen only
+                    weights[i] = effLen_factor;
+                }
+                total_weight += weights[i];
+            }
+            
+            if (total_weight > 0) {
+                for (size_t i = 0; i < groupSize; ++i) {
+                    uint32_t tid = ec.transcript_ids[i];
+                    projected_counts[tid] += ec.count * (weights[i] / total_weight);
+                }
+            }
+        }
+    }
+    
+    return projected_counts;
 }
 
 // Check if transcript has unique evidence (appears in single-transcript ECs)
@@ -121,56 +166,38 @@ EMResult run_vb(const ECTable& ecs, TranscriptState& state, const EMParams& para
         }
     }
     
-    // Initialize alpha_i
-    // Option 1 (default, backward compatible): prior + unique_counts_i
-    // Option 2 (Salmon's approach): uniform initialization matching Salmon's uniformPrior
-    // Salmon uses: uniformPrior = totalWeight / numActive, then alpha = uniformPrior (when fracObserved ≈ 0)
-    // When fracObserved ≈ 0: alphas[i] ≈ uniformPrior = totalWeight / numActive
-    // This matches Salmon's behavior when projectedCounts are small relative to numRequiredFragments
-    std::vector<double> alpha(state.n);
-    std::vector<double> unique_counts(state.n, 0.0); // Initialize to zero, compute if needed
-    if (params.use_uniform_init) {
-        // Uniform initialization matching Salmon's uniformPrior approach
-        // Salmon computes: uniformPrior = totalWeight / numActive
-        // where totalWeight = sum(txp.projectedCounts) and numActive = number of transcripts
-        // When fracObserved ≈ 0 (totalWeight << numRequiredFragments), alphas[i] ≈ uniformPrior
-        // 
-        // For em_quant: compute totalWeight from EC counts (equivalent to projectedCounts)
-        // Then set alpha[i] = uniformPrior = totalWeight / numActive
-        double totalWeight = 0.0;
-        for (const EC& ec : ecs.ecs) {
-            totalWeight += ec.count;
-        }
-        
-        // Compute uniformPrior = totalWeight / numActive (Salmon's approach)
-        // If totalWeight is very small, use a small uniform value to match Salmon's behavior
-        // when projectedCounts are near zero
-        double uniformPrior = totalWeight / static_cast<double>(state.n);
-        
-        // For per-nucleotide prior: scale uniformPrior by effective length
-        // For per-transcript prior: use uniformPrior directly
-        if (!params.per_transcript_prior) {
-            // Per-nucleotide prior: scale by effective length
-            for (size_t i = 0; i < state.n; ++i) {
-                alpha[i] = uniformPrior * state.eff_lengths[i];
-            }
-        } else {
-            // Per-transcript prior: uniformPrior is constant per transcript
-            for (size_t i = 0; i < state.n; ++i) {
-                alpha[i] = uniformPrior;
-            }
-        }
-    } else {
-        // Legacy initialization: prior + unique_counts_i
-        // IMPORTANT: No normalization of alpha - alpha values are absolute
-        unique_counts = compute_unique_counts(ecs);
-        for (size_t i = 0; i < state.n; ++i) {
-            // Alpha seed: exactly prior + unique_counts (no normalization)
-            alpha[i] = priorAlphas[i] + unique_counts[i];
-        }
+    // Salmon-style VB initialization using projected counts
+    // This distributes multi-mapper counts using EC weights to break symmetry
+    std::vector<double> projectedCounts = compute_projected_counts(ecs, state.eff_lengths);
+    
+    // Compute total weight (sum of projected counts)
+    // Salmon uses ALL transcripts for numActive, not just those with projected counts > 0
+    double totalWeight = 0.0;
+    size_t numActive = state.n;  // Use all transcripts like Salmon
+    for (size_t i = 0; i < state.n; ++i) {
+        totalWeight += projectedCounts[i];
     }
     
-    // Initialize abundances from alpha (normalized for E-step, but alpha itself is not normalized)
+    // Salmon's fracObserved calculation: min(0.999, totalWeight / numRequiredFragments)
+    double numRequiredFragments = params.num_required_fragments;
+    if (numRequiredFragments <= 0) {
+        numRequiredFragments = 5e6;  // Salmon default
+    }
+    double maxFrac = 0.999;  // Salmon uses 0.999 as max
+    double fracObserved = std::min(maxFrac, totalWeight / numRequiredFragments);
+    
+    // Salmon's uniformPrior: totalWeight / numActive
+    double uniformPrior = (numActive > 0) ? totalWeight / numActive : 0.0;
+    
+    // Initialize alpha: Salmon's formula (NO prior added here!)
+    // alpha[i] = projectedCounts[i] * fracObserved + uniformPrior * (1 - fracObserved)
+    // The prior is added only during digamma calculation, not stored in alpha
+    std::vector<double> alpha(state.n);
+    for (size_t i = 0; i < state.n; ++i) {
+        alpha[i] = projectedCounts[i] * fracObserved + uniformPrior * (1.0 - fracObserved);
+    }
+    
+    // Initialize abundances from alpha (normalized for E-step)
     double total_alpha = 0.0;
     for (size_t i = 0; i < state.n; ++i) {
         total_alpha += alpha[i];
@@ -210,17 +237,18 @@ EMResult run_vb(const ECTable& ecs, TranscriptState& state, const EMParams& para
             }
             // Log initial values (iter -1) - BEFORE first iteration
             if (!debug_indices.empty()) {
-                // Compute logNorm for debug output
+                // Compute logNorm for debug output (add priors like Salmon does)
                 double alphaSum = 0.0;
                 for (size_t i = 0; i < state.n; ++i) {
-                    alphaSum += alpha[i];
+                    alphaSum += alpha[i] + priorAlphas[i];  // Add prior for digamma
                 }
                 double logNorm = robust_digamma(alphaSum);
                 
                 for (size_t idx : debug_indices) {
-                    double expTheta_val = (alpha[idx] > digammaMin) ? std::exp(robust_digamma(alpha[idx]) - logNorm) : 0.0;
+                    double ap = alpha[idx] + priorAlphas[idx];  // Add prior for digamma
+                    double expTheta_val = (ap > digammaMin) ? std::exp(robust_digamma(ap) - logNorm) : 0.0;
                     debug_stream << "-1\t" << state.names[idx] << "\t" 
-                                << alpha[idx] << "\t" << logNorm << "\t"
+                                << ap << "\t" << logNorm << "\t"
                                 << expTheta_val << "\t0.0\n";
                     debug_stream.flush(); // Ensure it's written
                 }
@@ -243,18 +271,21 @@ EMResult run_vb(const ECTable& ecs, TranscriptState& state, const EMParams& para
     
     // VB iterations
     for (uint32_t iter = 0; iter < params.max_iters; ++iter) {
-        // Compute logNorm = digamma(sum of all alphas) ONCE before E-step (Salmon's approach)
+        // Compute logNorm = digamma(sum of all alphas + priors) ONCE before E-step (Salmon's approach)
+        // Salmon adds priors only for digamma calculation, not stored in alpha
         double alphaSum = 0.0;
         for (size_t i = 0; i < state.n; ++i) {
-            alphaSum += alpha[i];
+            alphaSum += alpha[i] + priorAlphas[i];  // Add prior for digamma
         }
         double logNorm = robust_digamma(alphaSum);
         
         // Precompute expTheta vector with digammaMin guard (Salmon's approach)
+        // ap = alpha + prior for digamma computation
         std::vector<double> expTheta(state.n, 0.0);
         for (size_t i = 0; i < state.n; ++i) {
-            if (alpha[i] > digammaMin) {
-                expTheta[i] = std::exp(robust_digamma(alpha[i]) - logNorm);
+            double ap = alpha[i] + priorAlphas[i];  // Add prior for digamma
+            if (ap > digammaMin) {
+                expTheta[i] = std::exp(robust_digamma(ap) - logNorm);
             } else {
                 expTheta[i] = 0.0;  // Zero out very small alphas
             }
@@ -314,10 +345,12 @@ EMResult run_vb(const ECTable& ecs, TranscriptState& state, const EMParams& para
                 uint32_t tid = ec.transcript_ids[i];
                 if (expTheta[tid] > 0.0) {
                     // Use expTheta * aux (Salmon's VBEMOptimizer approach)
-                    // If weights available, use them; otherwise fallback to 1/effLen
+                    // aux = weight * (1/effLen), where weight is alignment likelihood
+                    // Salmon's combinedWeights = weight * probStartPos where probStartPos = 1/effLen
+                    double effLen_factor = (state.eff_lengths[tid] > 0 ? 1.0 / state.eff_lengths[tid] : 0.0);
                     double aux = ec.has_weights() 
-                        ? ec.weights[i] 
-                        : (state.eff_lengths[tid] > 0 ? 1.0 / state.eff_lengths[tid] : 0.0);
+                        ? ec.weights[i] * effLen_factor  // Multiply weight by 1/effLen
+                        : effLen_factor;
                     denom += expTheta[tid] * aux;
                 }
             }
@@ -332,9 +365,11 @@ EMResult run_vb(const ECTable& ecs, TranscriptState& state, const EMParams& para
             for (size_t i = 0; i < groupSize; ++i) {
                 uint32_t tid = ec.transcript_ids[i];
                 if (expTheta[tid] > 0.0) {
+                    // aux = weight * (1/effLen), same as in denom calculation
+                    double effLen_factor = (state.eff_lengths[tid] > 0 ? 1.0 / state.eff_lengths[tid] : 0.0);
                     double aux = ec.has_weights()
-                        ? ec.weights[i]
-                        : (state.eff_lengths[tid] > 0 ? 1.0 / state.eff_lengths[tid] : 0.0);
+                        ? ec.weights[i] * effLen_factor
+                        : effLen_factor;
                     double contribution = expTheta[tid] * aux * invDenom;
                     thread_counts[tid] += contribution;  // No atomic - each thread has its own buffer
                     
@@ -372,10 +407,10 @@ EMResult run_vb(const ECTable& ecs, TranscriptState& state, const EMParams& para
             expected_counts[i] = sum;
         }
         
-        // VB M-step: update alpha = prior + new expected counts
-        // NOTE: Do NOT renormalize alpha - alpha_i = priorAlphas[i] + expected_counts[i] only
+        // VB M-step: update alpha = new expected counts (NO prior added!)
+        // Prior is only added during digamma calculation in E-step (Salmon's approach)
         for (size_t i = 0; i < state.n; ++i) {
-            alpha[i] = priorAlphas[i] + expected_counts[i];
+            alpha[i] = expected_counts[i];
         }
         
         // Normalize abundances from alpha (for ELBO computation and next iteration)
@@ -393,40 +428,60 @@ EMResult run_vb(const ECTable& ecs, TranscriptState& state, const EMParams& para
         // Debug instrumentation: log alpha/weights for selected transcripts
         // Log AFTER M-step (alpha updated) but BEFORE convergence check
         if (debug_stream.is_open()) {
-            // Recompute logNorm and expTheta for debug output
+            // Recompute logNorm and expTheta for debug output (add priors like Salmon)
             double debug_alphaSum = 0.0;
             for (size_t i = 0; i < state.n; ++i) {
-                debug_alphaSum += alpha[i];
+                debug_alphaSum += alpha[i] + priorAlphas[i];  // Add prior
             }
             double debug_logNorm = robust_digamma(debug_alphaSum);
             
             for (size_t idx : debug_indices) {
-                double expTheta_val = (alpha[idx] > digammaMin) ? std::exp(robust_digamma(alpha[idx]) - debug_logNorm) : 0.0;
+                double ap = alpha[idx] + priorAlphas[idx];  // Add prior
+                double expTheta_val = (ap > digammaMin) ? std::exp(robust_digamma(ap) - debug_logNorm) : 0.0;
                 debug_stream << iter << "\t" << state.names[idx] << "\t"
-                            << alpha[idx] << "\t" << debug_logNorm << "\t"
+                            << ap << "\t" << debug_logNorm << "\t"
                             << expTheta_val << "\t" << expected_counts[idx] << "\n";
                 debug_stream.flush();
             }
         }
         
-        // Check convergence using alpha relative difference (Salmon's approach)
-        bool converged = true;
+        // Check convergence using alpha relative difference
+        // Only check after min_iters (Salmon behavior)
+        bool converged = false;
         double maxRelDiff = 0.0;
-        for (size_t i = 0; i < state.n; ++i) {
-            if (alpha[i] > alphaCheckCutoff) {
-                double relDiff = std::abs(alpha[i] - prev_alpha[i]) / alpha[i];
-                maxRelDiff = std::max(maxRelDiff, relDiff);
-                if (relDiff > params.tolerance) {
-                    converged = false;
+        
+        if (iter + 1 >= params.min_iters) {
+            converged = true;
+            double alphaCheckCutoff = params.alpha_check_cutoff;
+            
+            for (size_t i = 0; i < state.n; ++i) {
+                // Salmon checks alpha + prior (called alphaPrime in their code)
+                double alphaPrime = alpha[i];  // In Salmon, this is the expected count
+                // Only check transcripts with alpha above cutoff (Salmon's alphaCheckCutoff)
+                if (alphaPrime > alphaCheckCutoff) {
+                    double relDiff = std::abs(alphaPrime - prev_alpha[i]) / alphaPrime;
+                    maxRelDiff = std::max(maxRelDiff, relDiff);
+                    if (relDiff > params.tolerance) {
+                        converged = false;
+                    }
                 }
             }
+        }
+        
+        // Update prev_alpha for next iteration
+        for (size_t i = 0; i < state.n; ++i) {
             prev_alpha[i] = alpha[i];
         }
         
-        // Compute ELBO for final result (but don't use for convergence)
-        double curr_elbo = compute_elbo(ecs, state.abundances.data(), state.eff_lengths.data(), params.vb_prior);
-        result.final_ll = curr_elbo;
+        // Compute ELBO only at end or for debug (not every iteration - expensive)
+        // Store iteration count
         result.iterations = iter + 1;
+        
+        // Only compute ELBO if converged, at max iterations, or debug mode
+        if (converged || iter + 1 >= params.max_iters || params.debug_trace) {
+            double curr_elbo = compute_elbo(ecs, state.abundances.data(), state.eff_lengths.data(), params.vb_prior);
+            result.final_ll = curr_elbo;
+        }
         
         if (converged) {
             result.converged = true;
@@ -438,28 +493,36 @@ EMResult run_vb(const ECTable& ecs, TranscriptState& state, const EMParams& para
         debug_stream.close();
     }
     
-    // Copy final expected counts: use alpha - priorAlphas (after final M-step)
-    // In VB, alpha[i] = priorAlphas[i] + expected_counts[i], so counts = alpha[i] - priorAlphas[i]
-    for (size_t i = 0; i < state.n; ++i) {
-        result.counts[i] = std::max(0.0, alpha[i] - priorAlphas[i]);
+    // Compute ELBO at end if not already computed (for final result)
+    // ELBO is computed during iterations only if converged, at max_iters, or debug mode
+    // Always compute at end to ensure final_ll is set
+    if (result.final_ll == 0.0) {
+        result.final_ll = compute_elbo(ecs, state.abundances.data(), state.eff_lengths.data(), params.vb_prior);
     }
     
-    // Post-convergence truncation: zero out counts below minAlpha (Salmon's approach)
+    // Copy final expected counts: alpha is now just expected_counts (no prior subtraction needed)
     for (size_t i = 0; i < state.n; ++i) {
-        if (result.counts[i] <= minAlpha) {
+        result.counts[i] = alpha[i];
+    }
+    
+    // Post-convergence truncation: zero out counts below zero_threshold (configurable via EMParams)
+    double zero_threshold = params.zero_threshold;  // Use configurable threshold (default: 1e-8)
+    for (size_t i = 0; i < state.n; ++i) {
+        if (result.counts[i] <= zero_threshold) {
             result.counts[i] = 0.0;
         }
     }
     
-    // Zero out transcripts where alpha_i <= priorAlphas[i] + epsilon AND no unique support
+    // Zero out transcripts where alpha_i <= epsilon AND no unique support
+    // alpha now stores just expected_counts (no prior included)
     // This matches Salmon's implicit zeroing behavior
     std::vector<bool> has_unique = compute_unique_evidence(ecs);
     const double epsilon = 1e-8;
     double total_counts = 0.0;
     
     for (size_t i = 0; i < state.n; ++i) {
-        if (alpha[i] <= priorAlphas[i] + epsilon && !has_unique[i]) {
-            // Zero out: alpha very close to prior AND no unique evidence
+        if (alpha[i] <= epsilon && !has_unique[i]) {
+            // Zero out: very small expected count AND no unique evidence
             result.counts[i] = 0.0;
             state.abundances[i] = 0.0;
         } else {

@@ -57,8 +57,37 @@ public:
     struct {
         string csvFile;           // Path to 50bp gene probe CSV
         uint32 enforceLength;     // Expected probe length (default: 50)
+        string removeDeprecated;  // --removeDeprecated Yes/No (remove deprecated gene IDs from probe lists)
         bool enabled;             // Whether flex gene probe processing is enabled
+        bool removeDeprecatedBool;// Converted from removeDeprecated string
     } flexGeneProbe;
+    
+    // CellRanger-style reference formatting parameters
+    struct {
+        string indexEnabled;   // --cellrangerStyleIndex Yes/No (gates GTF/FASTA formatting)
+        string downloadOnly;    // --cellrangerStyleDownloadOnly Yes/No
+        string cacheDir;       // --cellrangerStyleCacheDir
+        string allUntrustedUrl;// --allUntrustedUrl Yes/No (required for URLs not in trusted table)
+        string faUrl;          // --faUrl <url> (FASTA download URL)
+        string gtfUrl;         // --gtfUrl <url> (GTF download URL)
+        string autoCksumUpdate;// --autoCksumUpdate Yes/No (auto-fill missing cksum from CHECKSUMS files)
+        string refRelease;     // --cellrangerRefRelease (default: 2024-A)
+        string refReleaseCanonical; // Normalized canonical release string (2024-A or 2020-A)
+        bool indexEnabledBool; // Converted from indexEnabled string
+        bool downloadOnlyBool; // Converted from downloadOnly string
+        bool allUntrustedUrlBool;// Converted from allUntrustedUrl string
+        bool autoCksumUpdateBool;// Converted from autoCksumUpdate string
+    } cellrangerStyle;
+    
+    // Auto-index workflow parameters
+    struct {
+        string autoIndex;      // --autoIndex Yes/No (automatically build index unless it exists)
+        string forceIndex;     // --forceIndex Yes/No (rebuild index even if exists)
+        string forceAllIndex;  // --forceAllIndex Yes/No (re-download and rebuild everything)
+        bool autoIndexBool;    // Converted from autoIndex string
+        bool forceIndexBool;   // Converted from forceIndex string
+        bool forceAllIndexBool;// Converted from forceAllIndex string
+    } autoIndexWorkflow;
     
     void initialize(Parameters *Pin);
 

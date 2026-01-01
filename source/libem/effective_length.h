@@ -16,19 +16,29 @@ public:
     // Format: length <tab> count <tab> probability
     bool loadFLD(const std::string& fld_path);
     
+    // Set FLD PMF directly (for use with observed FLD)
+    void setFLDPMF(const std::vector<double>& fld_pmf);
+    
     // Load GC bias ratios (from computeBiasRatio)
     void loadGCBias(const std::vector<double>& bias_ratio);
     
     // Compute GC-corrected effective length for a transcript
     double computeEffectiveLength(
-        const TranscriptSequence& txp,
+        const libem::TranscriptSequence& txp,
         int32_t raw_length
     ) const;
     
     // Compute for all transcripts
     std::vector<double> computeAllEffectiveLengths(
-        const Transcriptome& txome,
+        const libem::Transcriptome& txome,
         const std::vector<double>& raw_lengths
+    ) const;
+    
+    // Compute effective lengths using FLD PMF only (no GC bias, no TranscriptSequence required)
+    // More efficient than computeEffectiveLength when GC bias is disabled
+    std::vector<double> computeEffectiveLengthsFromPMF(
+        const std::vector<double>& fld_pmf,
+        const std::vector<int32_t>& raw_lengths
     ) const;
     
     // Set quantile bounds (default: 0.5% and 99.5%)

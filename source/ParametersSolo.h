@@ -231,6 +231,8 @@ public:
 
     // Probe list and sample detection resources
     string probeListPath;             // path to probe_list.txt
+    string removeDeprecatedStr;      // --removeDeprecated Yes/No (remove deprecated entries from probe lists)
+    bool removeDeprecated;           // Converted from removeDeprecatedStr
     string sampleWhitelistPath;       // path to sample whitelist TSV
     string sampleProbesPath;          // path to sample probes file
     uint32 sampleProbeOffset = 68;    // default offset
@@ -275,12 +277,12 @@ public:
     string inlineCBCorrectionStr = "no";     // raw CLI value: no|yes|auto (default: no)
     bool inlineCBCorrection = false;         // resolved value: true if enabled
 
-    // Inline hash mode (TEMPORARY flag for migration/testing)
+    // Inline hash mode
     // Replaces temp solo* stream files with per-thread khash_t(cg_agg) hash tables
-    // NOTE: This flag is temporary. Once parity passes, inline hash becomes the permanent path
-    // and temp-stream writes are completely removed. The flag will be removed in a future cleanup phase.
-    // CHANGED 2025-11-22: Default is now TRUE (inline hash is the primary path)
-    bool inlineHashMode = true;               // default true, inline hash is now the primary path (temp streams deprecated)
+    // Default behavior: enabled when --flex yes, disabled when --flex no (default)
+    // This ensures non-Flex runs use legacy STARsolo output (MEX format)
+    string inlineHashModeStr = "";            // raw CLI value: yes|no|auto (default: auto - enabled for Flex, disabled otherwise)
+    bool inlineHashMode = false;              // resolved value: true if enabled (gated behind Flex flag by default)
 
     //skip processing
     string skipProcessingStr = "no";//raw CLI value
@@ -336,6 +338,12 @@ public:
     bool flexFilterDebugTagLog = false;          // resolved
     string flexFilterDisableOccupancyStr = "no"; // raw CLI: yes|no
     bool flexFilterDisableOccupancy = false;     // resolved
+    string flexFilterInvariantChecksStr = "no"; // raw CLI: yes|no
+    bool flexFilterInvariantChecks = false;      // resolved
+
+    // Output options
+    string flexFilterKeepCBTagStr = "no";        // raw CLI: yes|no (default: no, strip to 16bp)
+    bool flexFilterKeepCBTag = false;            // resolved: if true, keep full CB+TAG barcodes in per-sample MEX
 
     // Minimal memory mode (inline hash path only)
     string soloFlexMinimalMemoryStr = "no";      // raw CLI: yes|no (default: no)

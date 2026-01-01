@@ -92,6 +92,8 @@ public:
     //   - params: EmptyDrops parameters
     //   - nSimpleCells: number of simple cells (first nSimpleCells candidates) to skip simulation (default 0)
     //   - featureNames, nTotalCells, debugOutputDir: kept for backward compatibility, now unused
+    //   - tagName: tag name for diagnostics (default empty)
+    //   - enableInvariantChecks: if true, run invariant checks and throw on failure (default false)
     // Returns: vector of EmptyDropsResult with p-values and FDR
     static vector<EmptyDropsResult> computePValues(
         const AmbientProfile& ambProfile,
@@ -106,7 +108,9 @@ public:
         uint32 nSimpleCells = 0,
         const vector<string>& featureNames = vector<string>(),
         uint32 nTotalCells = 0,
-        const string& debugOutputDir = string()
+        const string& debugOutputDir = string(),
+        const string& tagName = string(),
+        bool enableInvariantChecks = false
     );
     
     // Helper: compute log factorial table

@@ -97,6 +97,12 @@ public:
         // Debug flags
         bool debugTagLog = false;
         string debugOutputDir;
+        
+        // Invariant check flag (for testing/debugging)
+        bool enableInvariantChecks = false;  // Enable EmptyDrops invariant checks (default: off for production)
+        
+        // Output options
+        bool keepCBTag = false;  // If true, keep full CB+TAG barcodes in per-sample MEX (default: strip to 16bp)
     };
     
     // Type alias for backwards compatibility

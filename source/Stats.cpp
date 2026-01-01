@@ -9,6 +9,7 @@ void Stats::resetN() {//zero all counters
     chimericAll = 0;
     trimReadsProcessed = 0; trimReadsTrimmed = 0; trimReadsTooShort = 0;
     trimBasesQualityTrimmed = 0; trimBasesAdapterTrimmed = 0;
+    trimPairsProcessed = 0; trimPairsDropped = 0; trimPairsKept = 0;
     splicesNsjdb=0;
     for (uint ii=0; ii<SJ_MOTIF_SIZE; ii++) {
         splicesN[ii]=0;
@@ -29,6 +30,7 @@ void Stats::addStats(Stats &S) {//add S to Stats
     chimericAll += S.chimericAll;
     trimReadsProcessed += S.trimReadsProcessed; trimReadsTrimmed += S.trimReadsTrimmed; trimReadsTooShort += S.trimReadsTooShort;
     trimBasesQualityTrimmed += S.trimBasesQualityTrimmed; trimBasesAdapterTrimmed += S.trimBasesAdapterTrimmed;
+    trimPairsProcessed += S.trimPairsProcessed; trimPairsDropped += S.trimPairsDropped; trimPairsKept += S.trimPairsKept;
 
     splicesNsjdb += S.splicesNsjdb;
     for (uint ii=0; ii<SJ_MOTIF_SIZE; ii++) {
@@ -119,7 +121,7 @@ void Stats::reportFinal(ofstream &streamOut) {
                <<setw(w1)<< "Average mapped length |\t"                        << (mappedReadsU>0 ? double(mappedBases)/double(mappedReadsU) : 0) <<"\n";
 
     // Add trimming stats if trimming was enabled
-    // Note: Stats count individual reads (not pairs), so paired-end data shows 2x the number of pairs
+    // Note: Per-read stats count individual reads; pair-level stats count pairs
     if (trimReadsProcessed > 0) {
         streamOut << "\n" \
                   <<setw(w1)<< "                        TRIMMING (cutadapt-style) |\n" \
@@ -128,6 +130,13 @@ void Stats::reportFinal(ofstream &streamOut) {
                   <<setw(w1)<< "     Reads dropped (below minimum length) |\t" << trimReadsTooShort << "\n" \
                   <<setw(w1)<< "                    Bases quality-trimmed |\t" << trimBasesQualityTrimmed << "\n" \
                   <<setw(w1)<< "                    Bases adapter-trimmed |\t" << trimBasesAdapterTrimmed << "\n";
+        // Pair-level stats (PE only) for direct comparison with Trim Galore
+        if (trimPairsProcessed > 0) {
+            streamOut \
+                  <<setw(w1)<< "              Pairs processed for trimming |\t" << trimPairsProcessed << "\n" \
+                  <<setw(w1)<< "      Pairs dropped (below minimum length) |\t" << trimPairsDropped << "\n" \
+                  <<setw(w1)<< "                               Pairs kept |\t" << trimPairsKept << "\n";
+        }
     }
 
     streamOut  <<setw(w1)<< "Number of splices: Total |\t"                     << splicesN[0]+splicesN[1]+splicesN[2]+splicesN[3]+splicesN[4]+splicesN[5]+splicesN[6]<< "\n" \

@@ -85,11 +85,13 @@ Uses cutadapt's semiglobal alignment algorithm (exact port from cutadapt v5.1):
 
 - **Algorithm**: Semiglobal dynamic programming with edit distance (Levenshtein)
 - **Source**: Ported verbatim from `cutadapt v5.1` (`_align.pyx`, `Aligner.locate()` method)
-- **Minimum overlap**: 3 bases (cutadapt/Trim Galore default `-O 3`)
+- **Minimum overlap**: 1 base (Trim Galore default `--stringency 1`)
 - **Maximum error rate**: 0.1 (10% errors allowed)
 - **Error threshold**: `floor(aligned_adapter_length × 0.1)` where `aligned_adapter_length` is the adapter portion actually matched
 - **Scoring**: `MATCH=+1, MISMATCH=-1, INSERTION=-2, DELETION=-2`
 - **Flags**: `QUERY_START | QUERY_STOP | REFERENCE_END` (allows adapter to start anywhere in read, end early, and read suffix can be skipped)
+
+**Note on adapter overlap**: The default minimum overlap of 1 base matches Trim Galore's `--stringency 1` setting. This ensures that even single-base adapter matches are trimmed, providing maximum parity with Trim Galore output. Increasing the overlap threshold (e.g., to 3 bases) would be less aggressive and may retain additional bases in edge cases where only 1-2 bases match the adapter sequence.
 
 **Note**: The adapter matching implementation in `source/libtrim/adapter_trim.cpp` is synchronized with cutadapt v5.1. If cutadapt is upgraded, parity tests (`make test_trim_parity`) must be re-run to verify compatibility.
 

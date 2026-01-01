@@ -69,6 +69,8 @@ void Parameters::samAttributes(){//everything related to SAM attributes
         } else if (vAttr1.at(ii)== "AS") {
             outSAMattrOrder.push_back(ATTR_AS);
             outSAMattrPresent.AS=true;
+            outSAMattrOrderQuant.push_back(ATTR_AS);
+            outSAMattrPresentQuant.AS=true;
         } else if (vAttr1.at(ii)== "NM") {
             outSAMattrOrder.push_back(ATTR_NM);
             outSAMattrPresent.NM=true;

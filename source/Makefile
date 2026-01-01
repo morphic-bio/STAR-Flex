@@ -69,7 +69,7 @@ endif
 OBJECTS = systemFunctions.o funPrimaryAlignMark.o \
 	SoloFeature_loadRawMatrix.o SoloFeature_emptyDrops_CR.o soloInputFeatureUMI.o SoloFeature_countSmartSeq.o SoloFeature_redistributeReadsByCB.o \
 	SoloFeature_quantTranscript.o SoloFeature_sumThreads.o SoloFeature_countVelocyto.o SoloFeature_countCBgeneUMI.o \
-	SoloFeature_collapseUMI_Graph.o SoloFeature_collapseUMIall.o SoloFeature_collapseUMI_fromHash.o SoloFeature_umiCorrection.o SoloFeature_materializeFromHash.o SoloFeature_metricsOutput.o SoloFeature_writeMexFromInlineHashDedup.o SoloFeature_flexfilter.o SoloFeature_addBAMtags.o \
+	SoloFeature_collapseUMI_Graph.o SoloFeature_collapseUMIall.o SoloFeature_collapseUMI_fromHash.o SoloFeature_umiCorrection.o SoloFeature_materializeFromHash.o SoloFeature_metricsOutput.o SoloFeature_writeMexFromInlineHashDedup.o SoloFeature_flexfilter.o SoloFeature_addBAMtags.o SoloFeature_writeTagTable.o \
 	MexWriter.o MexWriterUtil.o \
 	UMICorrector.o \
 	ParametersClip_initialize.o ClipMate_clip.o ClipCR4.o opal/opal.o ClipMate_clipChunk.o ClipMate_initialize.o \
@@ -87,7 +87,7 @@ OBJECTS = systemFunctions.o funPrimaryAlignMark.o \
 	SpliceGraph_findSuperTr.o sjAlignSplit.o \
 	GTF.o GTF_transcriptGeneSJ.o GTF_superTranscript.o SuperTranscriptome.o \
 	ReadAlign_outputAlignments.o ReadAlign_resolveAmbiguousCBs.o \
-	ReadAlign.o STAR.o TranscriptQuantEC.o TranscriptQuantOutput.o \
+	ReadAlign.o STAR.o TranscriptQuantEC.o LibFormatDetection.o TranscriptQuantOutput.o \
 	SharedMemory.o PackedArray.o SuffixArrayFuns.o Parameters.o Parameters_samAttributes.o InOutStreams.o SequenceFuns.o Genome.o ParametersGenome.o Stats.o \
 	Transcript.o Transcript_alignScore.o Transcript_generateCigarP.o Chain.o \
 	Transcript_variationAdjust.o Variation.o ReadAlign_waspMap.o \
@@ -116,7 +116,8 @@ OBJECTS = systemFunctions.o funPrimaryAlignMark.o \
 	SampleDetector.o \
 	SoloBamParsing.o \
 	ZGZXTags.o \
-	FlexProbeIndex.o
+	FlexProbeIndex.o \
+	CellRangerFormatter.o
 
 SOURCES := $(wildcard *.cpp) $(wildcard *.c)
 
@@ -148,6 +149,38 @@ test_packed_readinfo:
 .PHONY: test_flex_probe_index
 test_flex_probe_index: FlexProbeIndex.o
 	$(CXX) -std=c++11 -I./ $(CPPFLAGS) $(CXXFLAGS) ../test/test_flex_probe_index.cpp FlexProbeIndex.o -lssl -lcrypto -o ../test/test_flex_probe_index
+
+.PHONY: test_cellranger_format
+test_cellranger_format: CellRangerFormatter.o
+	$(CXX) -std=c++11 -I./ $(CPPFLAGS) $(CXXFLAGS) ../test/test_cellranger_format.cpp CellRangerFormatter.o -Lhtslib -lhts -lz -o ../test/test_cellranger_format
+
+.PHONY: test_cellranger_parity
+test_cellranger_parity: test_cellranger_format
+	../test/run_cellranger_format_parity.sh
+
+.PHONY: test_cellranger_golden
+test_cellranger_golden: test_cellranger_format
+	../test/test_cellranger_format \
+		../test/fixtures/cellranger_format/test_genome.fa \
+		../test/fixtures/cellranger_format/test_genes.gtf \
+		/tmp/cpp_genome.fa /tmp/cpp_genes.gtf
+	diff ../test/fixtures/cellranger_format/expected_genome.fa /tmp/cpp_genome.fa
+	diff ../test/fixtures/cellranger_format/expected_genes.gtf /tmp/cpp_genes.gtf
+
+.PHONY: test_cksum
+test_cksum: CellRangerFormatter.o
+	$(CXX) -std=c++11 -I./ $(CPPFLAGS) $(CXXFLAGS) ../test/test_cksum.cpp CellRangerFormatter.o -Lhtslib -lhts -lz -o ../test/test_cksum
+	../test/test_cksum
+
+.PHONY: test_download_untrusted
+test_download_untrusted: CellRangerFormatter.o
+	$(CXX) -std=c++11 -I./ $(CPPFLAGS) $(CXXFLAGS) ../test/test_download_untrusted.cpp CellRangerFormatter.o -Lhtslib -lhts -lz -o ../test/test_download_untrusted
+	../test/test_download_untrusted
+
+.PHONY: test_autocksum
+test_autocksum: CellRangerFormatter.o
+	$(CXX) -std=c++11 -I./ $(CPPFLAGS) $(CXXFLAGS) ../test/test_autocksum.cpp CellRangerFormatter.o -Lhtslib -lhts -lz -o ../test/test_autocksum
+	../test/test_autocksum
 
 .PHONY: test_SoloReadInfoBaseline
 # NOTE: This target links against most STAR objects (excluding STAR.o) which is heavy for a tiny harness.

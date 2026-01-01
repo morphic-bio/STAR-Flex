@@ -70,6 +70,78 @@ flexGeneProbeSet            -
                             When provided during genomeGenerate, filters probes to match GTF genes and creates hybrid reference
 flexGeneProbeLength         50
     int>0:                  expected probe sequence length in bases. Fails if any probe has different length.
+removeDeprecated            No
+    string:                 Yes|No (default No)
+                            Yes         ... remove deprecated gene IDs from probe lists (probe_list.txt / probe_gene_list.txt)
+                            No          ... keep deprecated entries (default, maintains backward compatibility)
+                            When enabled, filters out gene IDs containing "DEPRECATED" (case-insensitive) from:
+                            - probe list generation in FlexProbeIndex (probe_list.txt / probe_gene_list.txt)
+                            - user-supplied --soloProbeList (load-time filtering)
+                            Logs count of removed entries when enabled.
+
+### CellRanger-Style Reference Formatting
+cellrangerStyleIndex            No
+    string:                     Yes/No - format FASTA/GTF using CellRanger-style rules
+                                (chr renaming in FASTA, biotype filtering, version stripping)
+                                Gates the GTF/FASTA alteration - independent of download flags
+
+cellrangerStyleDownloadOnly     No
+    string:                     Yes/No - download only, skip index build
+                                Requires --faUrl and --gtfUrl to be set
+
+cellrangerStyleCacheDir         -
+    string:                     directory for downloaded/formatted reference files
+
+allUntrustedUrl                 No
+    string:                     Yes/No - required for URLs not in trusted Ensembl FTP URL table
+                                WARNING: Disables integrity checking. Only use with trusted sources.
+                                URLs in trusted table do not require this flag.
+
+faUrl                           -
+    string:                     URL for FASTA download
+                                Must be provided together with --gtfUrl
+                                If URL is not in trusted Ensembl FTP URL table, --allUntrustedUrl Yes is required
+
+gtfUrl                          -
+    string:                     URL for GTF download
+                                Must be provided together with --faUrl
+                                If URL is not in trusted Ensembl FTP URL table, --allUntrustedUrl Yes is required
+
+autoCksumUpdate                 No
+    string:                     Yes/No - automatically fill missing cksum values from CHECKSUMS files
+                                When enabled, trusted Ensembl/GENCODE URLs missing cksum will automatically
+                                download the CHECKSUMS file, extract the cksum for the target filename, and
+                                save it to the cksum cache. This allows trusted URLs to work without manual
+                                cksum configuration. Safe to enable: only affects trusted URLs, only downloads
+                                CHECKSUMS (small text files), and only fills missing cksums (does not override
+                                existing values).
+
+cellrangerRefRelease            2024-A
+    string:                     CellRanger reference release to use for default URLs when no explicit inputs provided
+                                Only applies when --autoIndex Yes and no --genomeFastaFiles/--sjdbGTFfile or --faUrl/--gtfUrl provided
+                                Supported releases:
+                                2024-A (default) ... Ensembl release-110 / GENCODE release-44
+                                2020-A          ... Ensembl release-98 / GENCODE release-32
+                                Aliases (case-insensitive): 2024-A, 2024A, 2024 and 2020-A, 2020A, 2020
+                                Explicit inputs (--faUrl/--gtfUrl or --genomeFastaFiles/--sjdbGTFfile) always override this setting
+
+### Auto-Index Workflow Parameters - only used with --runMode genomeGenerate
+
+autoIndex                       No
+    string:                     Yes/No - automatically build index in --genomeDir unless it already exists
+                                If Yes, checks for existing index and builds if missing
+                                Uses input resolution priority: files -> URLs -> default URLs
+                                Default URLs: Ensembl GRCh38 release-110 primary assembly (FASTA) and GENCODE release-44 primary assembly (GTF)
+
+forceIndex                      No
+    string:                     Yes/No - rebuild index even if it exists
+                                Preserves existing downloaded/formatted outputs unless --forceAllIndex is also set
+                                Only rebuilds the index files, not the input files
+
+forceAllIndex                   No
+    string:                     Yes/No - re-download and overwrite all input files (FA/GTF, formatted outputs, cache) and rebuild index
+                                Wipes cached downloads and formatted files before re-downloading
+                                Use with caution - will delete existing cache and formatted files
 
 ### Genome Indexing Parameters - only used with --runMode genomeGenerate
 genomeChrBinNbits           18
@@ -790,6 +862,9 @@ quantMode                   -
 quantTranscriptomeBAMcompression    1
     int: -2 to 10  transcriptome BAM compression level
                             -2  ... no BAM output
+                            -1  ... default compression (6?)
+                             0  ... no compression
+                            10  ... maximum compression
 
 quantVBgcBias                        0
     int: 0/1 - enable GC bias correction for transcript quantification (TranscriptVB mode)
@@ -799,9 +874,31 @@ quantVBprior                         0.01
 
 quantVBem                            0
     int: 0/1 - use EM instead of VB for transcript quantification (TranscriptVB mode)
-                            -1  ... default compression (6?)
-                             0  ... no compression
-                             10 ... maximum compression
+
+quantVBgenes                         1
+    int: 0 or 1
+
+quantVBLibType                        A
+    string: Library format for EC building: A=auto-detect, IU=inward unstranded, ISF=inward stranded forward, ISR=inward stranded reverse, U=single-end unstranded
+
+quantVBAutoDetectWindow              1000
+    int: Number of reads to use for library format auto-detection (when quantVBLibType=A)
+
+quantVBTrace                          -
+    string: Base filename for trace output (empty=disabled). Per-thread files will be <base>.<threadId>.tsv
+
+quantVBTraceLimit                     0
+    int: Maximum number of reads to trace per thread (0=unlimited)
+        0 ... do not output gene-level quantification
+        1 ... output quant.genes.sf with gene-level TPM and counts (default)
+        Gene-level metrics are aggregated from transcript results using TPM-weighted averaging.
+
+quantVBErrorModel                     auto
+    string: Error model mode for TranscriptVB
+            auto ... use CIGAR if available, otherwise AS
+            cigar ... use CIGAR only
+            as   ... use AS only
+            off  ... disable error model
 
 quantTranscriptomeSAMoutput BanSingleEnd_BanIndels_ExtendSoftclip
     string: alignment filtering for TranscriptomeSAM output
@@ -996,6 +1093,15 @@ soloKeysCompat              raw
 soloProbeList               -
     string:                 path to probe_list.txt used to derive 1-based gene indices (15-bit cap)
                             If not provided, will auto-detect probe_gene_list.txt from genome index directory
+                            REQUIRED when Flex mode is enabled (--flex yes or --soloRunFlexFilter yes)
+                            Probe sets are not downloaded - must be user-supplied via --flexGeneProbeSet during index build
+soloRemoveDeprecated        -
+    string:                 Yes|No|auto (default auto, inherits from --removeDeprecated)
+                            Yes         ... remove deprecated entries from --soloProbeList at load time
+                            No          ... keep deprecated entries
+                            auto        ... inherit from --removeDeprecated flag (default)
+                            When enabled, filters out lines containing "DEPRECATED" (case-insensitive) when loading probe list.
+                            Logs count of removed entries. If not set, inherits value from --removeDeprecated.
 
 soloSampleWhitelist         -
     string:                 optional path to sample whitelist TSV (enables sample detection)
@@ -1073,14 +1179,26 @@ soloInlineCBCorrection       no
                             auto         ... auto-enable when skipProcessing && writeKeysBin
                             Note: Inline CB correction replaces Solo's CB/UB data structures with streaming correction during R1 parsing.
 
+soloInlineHashMode           auto
+    string:                 no|yes|auto (default auto)
+                            no           ... disable inline hash mode, use legacy Solo temp stream files (produces standard MEX output)
+                            yes          ... enable inline hash mode (replaces temp streams with per-thread hash tables)
+                            auto         ... auto-enable when --flex yes, disabled when --flex no (default)
+                            Note: Inline hash mode replaces temp solo* stream files with per-thread khash_t(cg_agg) hash tables.
+                            When disabled (default for non-Flex), STARsolo uses legacy path and produces standard MEX output
+                            (matrix.mtx, barcodes.tsv, features.tsv). When enabled (default for Flex), uses inline-hash pipeline.
+
 flex                         no
     string:                 yes|no (default no)
                             yes         ... enable full Flex pipeline with production defaults:
                                             soloRunFlexFilter=yes, soloInlineCBCorrection=yes,
-                                            soloFlexMinimalMemory=yes, soloMapqMode=genomic,
-                                            soloMMrateMax=0.1, soloBarcodesObservedOnly=yes,
-                                            soloUMICorrection=clique
-                            no          ... use individual flag settings (default)
+                                            soloInlineHashMode=yes, soloFlexMinimalMemory=yes,
+                                            soloMapqMode=genomic, soloMMrateMax=0.1,
+                                            soloBarcodesObservedOnly=yes, soloUMICorrection=clique
+                            no          ... use individual flag settings (default, inline hash mode disabled)
+                            NOTE: Flex mode requires a probe list. Provide --soloProbeList <path> OR
+                            rebuild index with --flexGeneProbeSet <probe CSV>. Probe sets are not
+                            downloaded - must be user-supplied.
 
 soloRunFlexFilter            no
     string:                 yes|no (default no)
@@ -1164,6 +1282,16 @@ soloFlexDebugTagLog           no
 soloFlexDisableOccupancy      no
     string:                 yes|no (default no)
                             yes         ... disable occupancy filter (for testing)
+
+soloFlexInvariantChecks       no
+    string:                 yes|no (default no)
+                            yes         ... enable EmptyDrops invariant checks (for testing/debugging)
+                            no          ... disable invariant checks (default for production)
+
+soloFlexKeepCBTag             no
+    string:                 yes|no (default no)
+                            yes         ... keep full CB+TAG (24bp) barcodes in per-sample MEX outputs
+                            no          ... strip sample tag, output 16bp CB barcodes (default)
 
 soloFlexMinimalMemory         no
     string:                 yes|no (default no)

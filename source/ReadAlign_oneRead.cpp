@@ -5,6 +5,13 @@
 #include "ErrorWarning.h"
 #include "GlobalVariables.h"
 #include "libtrim/trim.h"
+#include <cstdlib>
+#include <atomic>
+
+// Static counter for debug logging (guarded by STAR_TRIM_DEBUG_N env var)
+// Use atomic for thread-safety when debug logging is enabled
+static atomic<uint64_t> g_trimDebugCount(0);
+static atomic<int64_t> g_trimDebugMax(-1);  // -1 means not initialized
 
 int ReadAlign::oneRead() {//process one read: load, map, write
 
@@ -29,6 +36,79 @@ int ReadAlign::oneRead() {//process one read: load, map, write
     statsRA.readN++;
     statsRA.readBases += readLength[0] + (P.readNmates == 2 ? readLength[1] : 0);
     
+    // Quality encoding debug check (BEFORE trimming) - guarded by STAR_TRIM_DEBUG_N env var
+    int64_t debugMax = g_trimDebugMax.load();
+    if (debugMax == -1) {
+        const char* debugEnv = getenv("STAR_TRIM_DEBUG_N");
+        int64_t newMax = debugEnv ? atol(debugEnv) : 0;
+        int64_t expected = -1;
+        if (g_trimDebugMax.compare_exchange_strong(expected, newMax)) {
+            debugMax = newMax;
+        } else {
+            debugMax = g_trimDebugMax.load();
+        }
+    }
+    uint64_t debugCount = g_trimDebugCount.fetch_add(1);
+    if (debugMax > 0 && debugCount < (uint64_t)debugMax && P.trimCutadapt == "Yes") {
+        // Log quality encoding for first N pairs before trimming
+        uint32_t checkLen1 = min((uint32_t)readLength[0], 10u);
+        uint32_t checkLen2 = (P.readNmates == 2) ? min((uint32_t)readLength[1], 10u) : 0;
+        
+        // Find min/max quality bytes
+        uint8_t minQual1 = 255, maxQual1 = 0;
+        uint8_t minQual2 = 255, maxQual2 = 0;
+        for (uint32_t i = 0; i < readLength[0]; i++) {
+            uint8_t q = (uint8_t)Qual0[0][i];
+            if (q < minQual1) minQual1 = q;
+            if (q > maxQual1) maxQual1 = q;
+        }
+        if (P.readNmates == 2) {
+            for (uint32_t i = 0; i < readLength[1]; i++) {
+                uint8_t q = (uint8_t)Qual0[1][i];
+                if (q < minQual2) minQual2 = q;
+                if (q > maxQual2) maxQual2 = q;
+            }
+        }
+        
+        P.inOut->logMain << "QUAL_CHECK: " << readNameMates[0]
+                         << " len=" << readLength[0] << "," << readLength[1]
+                         << " qual1_first10=\"";
+        for (uint32_t i = 0; i < checkLen1; i++) {
+            P.inOut->logMain << Qual0[0][i];
+        }
+        P.inOut->logMain << "\" qual1_bytes=";
+        for (uint32_t i = 0; i < checkLen1; i++) {
+            P.inOut->logMain << (uint32_t)(uint8_t)Qual0[0][i];
+            if (i < checkLen1 - 1) P.inOut->logMain << ",";
+        }
+        P.inOut->logMain << " qual1_phred=";
+        for (uint32_t i = 0; i < checkLen1; i++) {
+            int phred = (int)(uint8_t)Qual0[0][i] - 33;
+            P.inOut->logMain << phred;
+            if (i < checkLen1 - 1) P.inOut->logMain << ",";
+        }
+        P.inOut->logMain << " qual1_min=" << (uint32_t)minQual1 << " qual1_max=" << (uint32_t)maxQual1;
+        if (P.readNmates == 2) {
+            P.inOut->logMain << " qual2_first10=\"";
+            for (uint32_t i = 0; i < checkLen2; i++) {
+                P.inOut->logMain << Qual0[1][i];
+            }
+            P.inOut->logMain << "\" qual2_bytes=";
+            for (uint32_t i = 0; i < checkLen2; i++) {
+                P.inOut->logMain << (uint32_t)(uint8_t)Qual0[1][i];
+                if (i < checkLen2 - 1) P.inOut->logMain << ",";
+            }
+            P.inOut->logMain << " qual2_phred=";
+            for (uint32_t i = 0; i < checkLen2; i++) {
+                int phred = (int)(uint8_t)Qual0[1][i] - 33;
+                P.inOut->logMain << phred;
+                if (i < checkLen2 - 1) P.inOut->logMain << ",";
+            }
+            P.inOut->logMain << " qual2_min=" << (uint32_t)minQual2 << " qual2_max=" << (uint32_t)maxQual2;
+        }
+        P.inOut->logMain << endl;
+    }
+    
     // Cutadapt-style trimming (if enabled)
     if (P.trimCutadapt == "Yes") {
         if (P.readNmates == 2) {
@@ -52,6 +132,8 @@ int ReadAlign::oneRead() {//process one read: load, map, write
         struct TrimResult result1, result2;
         uint32_t len1 = (uint32_t)readLength[0];
         uint32_t len2 = (uint32_t)readLength[1];
+        uint32_t origLen1 = len1;  // Save original lengths for debug logging
+        uint32_t origLen2 = len2;
         trim_pair(Read0[0], Qual0[0], &len1,
                   Read0[1], Qual0[1], &len2,
                   &params, &result1, &result2);
@@ -70,12 +152,49 @@ int ReadAlign::oneRead() {//process one read: load, map, write
         statsRA.trimBasesQualityTrimmed += trimStats.bases_quality_trimmed;
         statsRA.trimBasesAdapterTrimmed += trimStats.bases_adapter_trimmed;
         
+        // Pair-level counters (for direct comparison with Trim Galore)
+        statsRA.trimPairsProcessed++;
+        
+            // Debug logging (guarded by STAR_TRIM_DEBUG_N env var)
+        // Use same counter value from start of function (already incremented)
+        if (debugMax > 0 && debugCount < (uint64_t)debugMax) {
+            P.inOut->logMain << "TRIM_DEBUG: " << readNameMates[0]
+                             << " params{quality_cutoff=" << static_cast<int>(params.quality_cutoff)
+                             << " min_length=" << params.min_length << "}"
+                             << " origLen=" << origLen1 << "," << origLen2
+                             << " postLen=" << len1 << "," << len2
+                             << " R1{dropped=" << result1.dropped
+                             << " new_length=" << result1.new_length
+                             << " qual3p=" << result1.qual_trimmed_3p 
+                             << " qual5p=" << result1.qual_trimmed_5p 
+                             << " adapter=" << result1.adapter_trimmed << "}"
+                             << " R2{dropped=" << result2.dropped
+                             << " new_length=" << result2.new_length
+                             << " qual3p=" << result2.qual_trimmed_3p 
+                             << " qual5p=" << result2.qual_trimmed_5p 
+                             << " adapter=" << result2.adapter_trimmed << "}"
+                             << endl;
+            // Counter already incremented at start of function
+        }
+        
         // Handle dropped reads
         if (result1.dropped || result2.dropped) {
             readFilter = 'Y';  // Fail QC - same as other filters
+            statsRA.trimPairsDropped++;
+            
+            // Debug log dropped pairs (use same counter value from start of function)
+            if (debugMax > 0 && debugCount < (uint64_t)debugMax) {
+                P.inOut->logMain << "TRIM_DROP: " << readNameMates[0]
+                                 << " reason=minLength postLen=" << len1 << "," << len2
+                                 << " minLen=" << params.min_length << endl;
+            }
+            
             // Skip mapping for this pair (readN already incremented above)
             return 0;
         }
+        
+        // Pair kept after trimming
+        statsRA.trimPairsKept++;
         
         // Update original lengths after trimming
         readLengthOriginal[0] = readLength[0];

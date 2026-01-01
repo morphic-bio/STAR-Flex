@@ -334,7 +334,8 @@ void writeFilteredMexForTag(
     const CompositeMexData& mexData,
     CreateDirectoryFunc createDir,
     mode_t runDirPerm,
-    MexWriteResult& result)
+    MexWriteResult& result,
+    int cb_len)
 {
     result.success = false;
     result.cellsWritten = 0;
@@ -419,8 +420,8 @@ void writeFilteredMexForTag(
         samplePrefix.push_back('/');
     }
     
-    // Write MEX
-    int writeResult = MexWriter::writeMex(samplePrefix, filteredBarcodes, mexData.features, filteredTriplets);
+    // Write MEX (cb_len controls barcode truncation: 16 = strip tag, -1 = keep full)
+    int writeResult = MexWriter::writeMex(samplePrefix, filteredBarcodes, mexData.features, filteredTriplets, cb_len);
     
     if (writeResult != 0) {
         result.errorMessage = "MexWriter failed for " + sampleLabel;
