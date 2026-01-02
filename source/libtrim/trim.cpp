@@ -2,11 +2,28 @@
 #include <cstring>
 #include <algorithm>
 #include <climits>
+#include <cstdlib>
 // #region agent log
 #include <fstream>
 #include <string>
 static const char* DEBUG_LOG_PATH = "/mnt/pikachu/STAR-Flex/.cursor/debug.log";
+static bool debug_log_enabled() {
+    static int enabled = -1;
+    if (enabled != -1) {
+        return enabled == 1;
+    }
+    const char* v = getenv("STAR_TRIM_DEBUG_LOG");
+    if (!v || v[0] == '\0' || v[0] == '0' || v[0] == 'N' || v[0] == 'n') {
+        enabled = 0;
+    } else {
+        enabled = 1;
+    }
+    return enabled == 1;
+}
 static void debug_log(const char* hyp, const char* loc, const char* msg, const std::string& data) {
+    if (!debug_log_enabled()) {
+        return;
+    }
     std::ofstream f(DEBUG_LOG_PATH, std::ios::app);
     if (f) f << "{\"hypothesisId\":\"" << hyp << "\",\"location\":\"" << loc << "\",\"message\":\"" << msg << "\",\"data\":" << data << "}\n";
 }
@@ -87,7 +104,7 @@ struct TrimResult trim_read(char* seq, char* qual, uint32_t len,
     
     // #region agent log
     // Log when any trimming occurred (H1: quality, H2/H3/H4: adapter)
-    if (result.qual_trimmed_3p > 0 || result.adapter_trimmed > 0) {
+    if (debug_log_enabled() && (result.qual_trimmed_3p > 0 || result.adapter_trimmed > 0)) {
         std::string seq_prefix(seq, std::min(len, 30u));
         std::string last10 = (orig_len > 10) ? std::string(seq + orig_len - 10, 10) : std::string(seq, orig_len);
         debug_log("H1-H4", "trim.cpp:trim_read", "trim_applied", 

@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
+#include <cstdlib>
 extern "C" {
 #include "htslib/htslib/hfile.h"
 }
@@ -32,6 +33,164 @@ static const std::set<std::string> ALLOWED_BIOTYPES = {
     "TR_C_gene", "TR_D_gene", "TR_J_gene", "TR_V_gene",
     "TR_V_pseudogene", "TR_J_pseudogene"
 };
+
+static const std::string GENE_ID_KEY = "gene_id \"";
+static const std::string TRANSCRIPT_ID_KEY = "transcript_id \"";
+static const std::string EXON_ID_KEY = "exon_id \"";
+static const std::string GENE_PREFIX = "ENSG";
+static const std::string TRANSCRIPT_PREFIX = "ENST";
+static const std::string EXON_PREFIX = "ENSE";
+
+static bool parseGeneIdPass1(const std::string& attrs, std::string& geneId) {
+    size_t pos = attrs.find(GENE_ID_KEY);
+    if (pos == std::string::npos) {
+        return false;
+    }
+    pos += GENE_ID_KEY.size();
+    if (attrs.compare(pos, GENE_PREFIX.size(), GENE_PREFIX) != 0) {
+        return false;
+    }
+    size_t idStart = pos;
+    pos += GENE_PREFIX.size();
+    size_t digitsStart = pos;
+    while (pos < attrs.size() && std::isdigit(static_cast<unsigned char>(attrs[pos]))) {
+        ++pos;
+    }
+    if (pos == digitsStart) {
+        return false;
+    }
+    if (pos >= attrs.size() || attrs[pos] != '.') {
+        return false;
+    }
+    geneId.assign(attrs, idStart, pos - idStart);
+    return true;
+}
+
+static bool parseIdWithVersion(const std::string& attrs, const std::string& key,
+                               const std::string& prefix, std::string& id, std::string& version) {
+    size_t pos = attrs.find(key);
+    if (pos == std::string::npos) {
+        return false;
+    }
+    pos += key.size();
+    if (attrs.compare(pos, prefix.size(), prefix) != 0) {
+        return false;
+    }
+    size_t idStart = pos;
+    pos += prefix.size();
+    size_t digitsStart = pos;
+    while (pos < attrs.size() && std::isdigit(static_cast<unsigned char>(attrs[pos]))) {
+        ++pos;
+    }
+    if (pos == digitsStart) {
+        return false;
+    }
+    if (pos >= attrs.size() || attrs[pos] != '.') {
+        return false;
+    }
+    id.assign(attrs, idStart, pos - idStart);
+    ++pos; // skip '.'
+    size_t verStart = pos;
+    while (pos < attrs.size() && std::isdigit(static_cast<unsigned char>(attrs[pos]))) {
+        ++pos;
+    }
+    if (pos == verStart) {
+        return false;
+    }
+    version.assign(attrs, verStart, pos - verStart);
+    return true;
+}
+
+static std::string replaceExonIdVersions(const std::string& attrs) {
+    size_t match = attrs.find(EXON_ID_KEY);
+    if (match == std::string::npos) {
+        return attrs;
+    }
+
+    std::string out;
+    out.reserve(attrs.size() + 64);
+    size_t pos = 0;
+
+    while (match != std::string::npos) {
+        out.append(attrs, pos, match - pos);
+        size_t idStart = match + EXON_ID_KEY.size();
+        size_t cursor = idStart;
+
+        bool replaced = false;
+        if (attrs.compare(cursor, EXON_PREFIX.size(), EXON_PREFIX) == 0) {
+            cursor += EXON_PREFIX.size();
+            size_t digitsStart = cursor;
+            while (cursor < attrs.size() && std::isdigit(static_cast<unsigned char>(attrs[cursor]))) {
+                ++cursor;
+            }
+            if (cursor > digitsStart && cursor < attrs.size() && attrs[cursor] == '.') {
+                std::string exonId = attrs.substr(idStart, cursor - idStart);
+                ++cursor; // skip '.'
+                size_t verStart = cursor;
+                while (cursor < attrs.size() && std::isdigit(static_cast<unsigned char>(attrs[cursor]))) {
+                    ++cursor;
+                }
+                if (cursor > verStart && cursor < attrs.size() && attrs[cursor] == '"') {
+                    std::string version = attrs.substr(verStart, cursor - verStart);
+                    ++cursor; // consume closing quote
+                    out.append(EXON_ID_KEY);
+                    out.append(exonId);
+                    out.append("\"; exon_version \"");
+                    out.append(version);
+                    out.append("\"");
+                    pos = cursor;
+                    replaced = true;
+                }
+            }
+        }
+
+        if (!replaced) {
+            out.append(attrs, match, EXON_ID_KEY.size());
+            pos = idStart;
+        }
+        match = attrs.find(EXON_ID_KEY, pos);
+    }
+
+    out.append(attrs, pos, std::string::npos);
+    return out;
+}
+
+static uint64_t gtfLogEvery() {
+    static uint64_t cached = []() -> uint64_t {
+        const char* env = std::getenv("CELLRANGER_GTF_LOG_EVERY");
+        if (!env || !*env) {
+            return 0;
+        }
+        char* end = nullptr;
+        unsigned long long value = std::strtoull(env, &end, 10);
+        if (end == env || value == 0) {
+            return 0;
+        }
+        return static_cast<uint64_t>(value);
+    }();
+    return cached;
+}
+
+static void logGtfProgress(const char* phase, uint64_t lineCount, uint64_t outCount,
+                           const std::string& inputPath, const std::string& outputPath) {
+    uint64_t every = gtfLogEvery();
+    if (every == 0) {
+        return;
+    }
+    if (lineCount % every == 0) {
+        std::cerr << "[CellRangerFormatter] " << phase << " progress: lines=" << lineCount;
+        if (outCount > 0) {
+            std::cerr << " written=" << outCount;
+        }
+        if (!inputPath.empty()) {
+            std::cerr << " input=" << inputPath;
+        }
+        if (!outputPath.empty()) {
+            std::cerr << " output=" << outputPath;
+        }
+        std::cerr << std::endl;
+    }
+}
 
 // Helper: Create directory recursively
 static bool createDirectoryRecursive(const string& path) {
@@ -173,6 +332,8 @@ Result formatFasta(const string& inputPath, const string& outputPath) {
 // GTF Pass 1: Generate filter for GTF (build allowed gene_id set)
 static bool generateFilterForGTF(const string& gtfPath, unordered_set<string>& goodGenes, string& errorMsg) {
     bool isGzip = (gtfPath.length() > 3 && gtfPath.substr(gtfPath.length() - 3) == ".gz");
+
+    goodGenes.reserve(200000);
     
     gzFile gzFilePtr = nullptr;
     ifstream inFileStream;
@@ -194,6 +355,7 @@ static bool generateFilterForGTF(const string& gtfPath, unordered_set<string>& g
     
     char lineBuf[65536];
     string line;
+    uint64_t lineCount = 0;
     
     while (true) {
         if (isGzip) {
@@ -204,6 +366,9 @@ static bool generateFilterForGTF(const string& gtfPath, unordered_set<string>& g
             if (!getline(inFileStream, line)) break;
             line += "\n"; // getline removes newline, add it back to match Perl behavior
         }
+        
+        ++lineCount;
+        logGtfProgress("GTF pass1", lineCount, 0, gtfPath, "");
         
         // Chomp newline only (like Perl's chomp) - don't trim whitespace
         line = chomp(line);
@@ -222,13 +387,10 @@ static bool generateFilterForGTF(const string& gtfPath, unordered_set<string>& g
             if (infoParts.empty()) continue;
             
             // Match ENSG[0-9]+\. pattern
-            regex geneIdRegex(R"(gene_id\s+"(ENSG[0-9]+)\.)");
-            smatch match;
-            if (!regex_search(infoParts[0], match, geneIdRegex) || match.size() < 2) {
+            string geneID;
+            if (!parseGeneIdPass1(infoParts[0], geneID)) {
                 continue;
             }
-            
-            string geneID = match[1].str();
             if (goodGenes.find(geneID) != goodGenes.end()) {
                 continue; // Already processed
             }
@@ -262,6 +424,11 @@ static bool generateFilterForGTF(const string& gtfPath, unordered_set<string>& g
         gzclose(gzFilePtr);
     } else {
         inFileStream.close();
+    }
+    if (gtfLogEvery() > 0) {
+        std::cerr << "[CellRangerFormatter] GTF pass1 complete: lines=" << lineCount
+                  << " genes=" << goodGenes.size()
+                  << " input=" << gtfPath << std::endl;
     }
     return true;
 }
@@ -304,6 +471,11 @@ Result formatGtf(const string& inputPath, const string& outputPath) {
         }
     }
     
+    if (gtfLogEvery() > 0) {
+        std::cerr << "[CellRangerFormatter] GTF pass2 start: input=" << inputPath
+                  << " output=" << outputPath << std::endl;
+    }
+
     string tempPath = outputPath + ".tmp";
     ofstream outFile(tempPath);
     if (!outFile.is_open()) {
@@ -318,6 +490,8 @@ Result formatGtf(const string& inputPath, const string& outputPath) {
     
     char lineBuf[65536];
     string line;
+    uint64_t lineCount = 0;
+    uint64_t outCount = 0;
     
     while (true) {
         if (isGzip) {
@@ -329,9 +503,13 @@ Result formatGtf(const string& inputPath, const string& outputPath) {
             line += "\n"; // getline removes newline, add it back to match Perl behavior
         }
         
+        ++lineCount;
+        logGtfProgress("GTF pass2", lineCount, outCount, inputPath, outputPath);
+        
         // Preserve comment lines verbatim (with newline)
         if (line.empty() || line[0] == '#') {
             outFile << line;
+            ++outCount;
             continue;
         }
         
@@ -352,14 +530,11 @@ Result formatGtf(const string& inputPath, const string& outputPath) {
         if (infoParts.empty()) continue;
         
         // Extract gene_id from first attribute (must match ENSG pattern)
-        regex geneIdRegex(R"(gene_id\s+"(ENSG[0-9]+)\.([0-9]+))");
-        smatch match;
-        if (!regex_search(infoParts[0], match, geneIdRegex) || match.size() < 3) {
+        string geneID;
+        string geneVersion;
+        if (!parseIdWithVersion(infoParts[0], GENE_ID_KEY, GENE_PREFIX, geneID, geneVersion)) {
             continue;
         }
-        
-        string geneID = match[1].str();
-        string geneVersion = match[2].str();
         
         // Only keep if gene_id is in goodGenes set
         if (goodGenes.find(geneID) == goodGenes.end()) {
@@ -374,17 +549,16 @@ Result formatGtf(const string& inputPath, const string& outputPath) {
         // Rewrite transcript_id if present in second attribute (matches Perl behavior)
         // Perl only checks infoParts[1], not searching all attributes
         if (infoParts.size() > 1) {
-            regex transcriptRegex(R"(\s*transcript_id\s+"(ENST[0-9]+)\.([0-9]+))");
-            smatch transMatch;
-            if (regex_search(infoParts[1], transMatch, transcriptRegex) && transMatch.size() >= 3) {
-                string transcriptID = transMatch[1].str();
-                string transcriptVersion = transMatch[2].str();
+            string transcriptID;
+            string transcriptVersion;
+            if (parseIdWithVersion(infoParts[1], TRANSCRIPT_ID_KEY, TRANSCRIPT_PREFIX, transcriptID, transcriptVersion)) {
                 infoParts[1] = " transcript_id \"" + transcriptID + "\"; transcript_version \"" + transcriptVersion + "\"";
             }
         }
         
         // Join all attributes
         string joinedAttrs = "";
+        joinedAttrs.reserve(parts[8].size() + 64);
         for (size_t i = 0; i < infoParts.size(); i++) {
             if (i > 0) joinedAttrs += ";";
             joinedAttrs += infoParts[i];
@@ -392,8 +566,9 @@ Result formatGtf(const string& inputPath, const string& outputPath) {
         
         // Replace exon_id pattern in joined string (matches Perl regex replace)
         // Pattern: (exon_id "ENSE[0-9]+).([0-9]+") -> $1"; exon_version "$2
-        regex exonRegex(R"((exon_id\s+"ENSE[0-9]+)\.([0-9]+"))");
-        joinedAttrs = regex_replace(joinedAttrs, exonRegex, "$1\"; exon_version \"$2");
+        if (joinedAttrs.find("exon_id") != string::npos) {
+            joinedAttrs = replaceExonIdVersions(joinedAttrs);
+        }
         
         parts[8] = joinedAttrs;
         
@@ -403,6 +578,7 @@ Result formatGtf(const string& inputPath, const string& outputPath) {
             outFile << parts[i];
         }
         outFile << ";\n";
+        ++outCount;
     }
     
     if (isGzip) {
@@ -411,6 +587,12 @@ Result formatGtf(const string& inputPath, const string& outputPath) {
         inFileStream.close();
     }
     outFile.close();
+
+    if (gtfLogEvery() > 0) {
+        std::cerr << "[CellRangerFormatter] GTF pass2 complete: lines=" << lineCount
+                  << " written=" << outCount
+                  << " output=" << outputPath << std::endl;
+    }
     
     if (!outFile.good() && !outFile.eof()) {
         remove(tempPath.c_str());
@@ -1578,4 +1760,3 @@ bool autoFillCksumFromChecksums(const string& url, const string& cacheDir,
 }
 
 } // namespace CellRangerFormatter
-

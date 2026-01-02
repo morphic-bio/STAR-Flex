@@ -83,6 +83,11 @@ Parameters::Parameters() {//initalize parameters info
     parArray.push_back(new ParameterInfoScalar <string> (-1, -1, "autoIndex", &pGe.autoIndexWorkflow.autoIndex));
     parArray.push_back(new ParameterInfoScalar <string> (-1, -1, "forceIndex", &pGe.autoIndexWorkflow.forceIndex));
     parArray.push_back(new ParameterInfoScalar <string> (-1, -1, "forceAllIndex", &pGe.autoIndexWorkflow.forceAllIndex));
+    
+    // Transcriptome FASTA generation parameters
+    parArray.push_back(new ParameterInfoScalar <string> (-1, -1, "genomeGenerateTranscriptome", &pGe.transcriptomeGen.generateTranscriptome));
+    parArray.push_back(new ParameterInfoScalar <string> (-1, -1, "genomeGenerateTranscriptomeFasta", &pGe.transcriptomeGen.transcriptomeFastaPath));
+    parArray.push_back(new ParameterInfoScalar <string> (-1, -1, "genomeGenerateTranscriptomeOverwrite", &pGe.transcriptomeGen.overwrite));
 
     //read
     parArray.push_back(new ParameterInfoVector <string> (-1, -1, "readFilesType", &readFilesType));

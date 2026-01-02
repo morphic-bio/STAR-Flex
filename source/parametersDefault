@@ -147,6 +147,27 @@ forceAllIndex                   No
                                 Wipes cached downloads and formatted files before re-downloading
                                 Use with caution - will delete existing cache and formatted files
 
+### Transcriptome FASTA Generation Parameters - only used with --runMode genomeGenerate
+
+genomeGenerateTranscriptome      No
+    string:                     Yes/No - generate transcriptome.fa during index creation
+                                No          ... do not generate transcriptome FASTA
+                                Yes         ... generate transcriptome FASTA from GTF annotations
+                                Output path defaults to ${genomeDir}/transcriptome.fa
+                                For CellRanger-style index, also writes to ${genomeDir}/cellranger_ref/transcriptome.fa
+
+genomeGenerateTranscriptomeFasta -
+    string:                     Path for transcriptome FASTA output
+                                -           ... use default: ${genomeDir}/transcriptome.fa
+                                <path>      ... write transcriptome FASTA to specified path
+                                Only used when --genomeGenerateTranscriptome Yes
+
+genomeGenerateTranscriptomeOverwrite No
+    string:                     Yes/No - overwrite existing transcriptome.fa file
+                                No          ... skip generation if file exists (default)
+                                Yes         ... overwrite existing file
+                                Also overwrites if --forceAllIndex Yes is set
+
 ### Genome Indexing Parameters - only used with --runMode genomeGenerate
 genomeChrBinNbits           18
     int: =log2(chrBin), where chrBin is the size of the bins for genome storage: each chromosome will occupy an integer number of bins. For a genome with large number of contigs, it is recommended to scale this parameter as min(18, log2[max(GenomeLength/NumberOfReferences,ReadLength)]).

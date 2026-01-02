@@ -23,6 +23,7 @@
 #include "SequenceFuns.h"
 #include "FlexProbeIndex.h"
 #include "CellRangerFormatter.h"
+#include "TranscriptomeFasta.h"
 #include <fstream>
 #include <cstdlib>
 #include <sys/stat.h>
@@ -495,6 +496,35 @@ void Genome::genomeGenerate() {
 
     chrBinFill();//chrBin is first used in the transcriptGeneSJ below
     mainGTF.transcriptGeneSJ(pGe.gDir);
+    
+    // Generate transcriptome FASTA if enabled
+    if (pGe.transcriptomeGen.generateTranscriptomeBool) {
+        P.inOut->logMain << "Generating transcriptome FASTA...\n";
+        
+        // Determine output path
+        string transcriptomePath = pGe.transcriptomeGen.transcriptomeFastaPath;
+        
+        // Check overwrite flag (also allow forceAllIndex to overwrite)
+        bool overwrite = pGe.transcriptomeGen.overwriteBool || pGe.autoIndexWorkflow.forceAllIndexBool;
+        
+        // Generate standard transcriptome
+        TranscriptomeFasta::writeTranscriptomeFasta(*this, mainGTF, transcriptomePath, P, 70, overwrite);
+        
+        // For CellRanger-style index, also write to cellranger_ref subdirectory
+        // This is independent of the standard output - each has its own overwrite check
+        if (pGe.cellrangerStyle.indexEnabledBool) {
+            string cellrangerPath = pGe.gDir + "cellranger_ref/transcriptome.fa";
+            P.inOut->logMain << "Also generating transcriptome FASTA for CellRanger-style reference...\n";
+            
+            // Create cellranger_ref directory if it doesn't exist
+            string mkdirCmd = "mkdir -p \"" + pGe.gDir + "cellranger_ref\"";
+            if (system(mkdirCmd.c_str()) != 0) {
+                P.inOut->logMain << "WARNING: Could not create cellranger_ref directory: " << pGe.gDir << "cellranger_ref\n";
+            } else {
+                TranscriptomeFasta::writeTranscriptomeFasta(*this, mainGTF, cellrangerPath, P, 70, overwrite);
+            }
+        }
+    }
     
     sjdbLoadFromFiles(P,sjdbLoci);//this will not be transformed. TODO prevent this parameter combination
 

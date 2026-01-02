@@ -91,6 +91,15 @@ public:
         bool forceAllIndexBool;// Converted from forceAllIndex string
     } autoIndexWorkflow;
     
+    // Transcriptome FASTA generation parameters (index-time)
+    struct {
+        string generateTranscriptome;      // --genomeGenerateTranscriptome Yes/No (generate transcriptome.fa at index time)
+        string transcriptomeFastaPath;     // --genomeGenerateTranscriptomeFasta <path> (output path, default: ${genomeDir}/transcriptome.fa)
+        string overwrite;                  // --genomeGenerateTranscriptomeOverwrite Yes/No (overwrite existing file)
+        bool generateTranscriptomeBool;   // Converted from generateTranscriptome string
+        bool overwriteBool;                // Converted from overwrite string
+    } transcriptomeGen;
+    
     void initialize(Parameters *Pin);
 
 private:

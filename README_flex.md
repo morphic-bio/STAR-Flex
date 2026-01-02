@@ -31,6 +31,10 @@ This fork adds several features beyond upstream STAR:
 
 - **[Y-Chromosome BAM Split](docs/Y_CHROMOSOME_BAM_SPLIT.md)**: Split BAMs by Y-chromosome alignment. Developed for **Morphic requirements for KOLF cell lines** (not connected to Flex pipeline). Works with both bulk and single-cell workflows.
 
+### Index-Time Features
+
+- **[Transcriptome FASTA Generation](#transcriptome-fasta-generation)**: Generate `transcriptome.fa` during index creation for Salmon quantification parity and TranscriptVB error modeling. Eliminates the need to run gffread/rsem-prepare-reference separately.
+
 ### Flex-Specific Features
 
 - **[Flex Pipeline](docs/flex_methodology.md)**: Inline hash pipeline for 10x Genomics Flex (Fixed RNA Profiling) samples.
@@ -272,6 +276,72 @@ STAR \
   ... # other flex parameters
   # --soloProbeList is auto-detected from probe_gene_list.txt in the index directory
 ```
+
+## Transcriptome FASTA Generation
+
+STAR-Flex can generate `transcriptome.fa` during index creation, eliminating the need for separate gffread/rsem-prepare-reference runs. This is required for:
+- **Salmon quantification** (identical output for parity)
+- **TranscriptVB error modeling** (fragment length distribution estimation)
+
+### Basic Usage
+
+```bash
+STAR --runMode genomeGenerate \
+  --genomeDir /path/to/index \
+  --genomeFastaFiles /path/to/genome.fa \
+  --sjdbGTFfile /path/to/genes.gtf \
+  --sjdbOverhang 100 \
+  --genomeGenerateTranscriptome Yes \
+  --runThreadN 8
+```
+
+This produces `${genomeDir}/transcriptome.fa` alongside the standard index files.
+
+### Parameters
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--genomeGenerateTranscriptome` | `No` | Enable transcriptome FASTA generation (`Yes`/`No`) |
+| `--genomeGenerateTranscriptomeFasta` | `-` | Custom output path (default: `${genomeDir}/transcriptome.fa`) |
+| `--genomeGenerateTranscriptomeOverwrite` | `No` | Overwrite existing file (`Yes`/`No`) |
+
+### CellRanger-Style Index
+
+When combined with `--cellrangerStyleIndex Yes`, the transcriptome is written to both:
+- `${genomeDir}/transcriptome.fa` (standard path)
+- `${genomeDir}/cellranger_ref/transcriptome.fa` (CellRanger-compatible path)
+
+```bash
+STAR --runMode genomeGenerate \
+  --genomeDir /path/to/index \
+  --genomeFastaFiles /path/to/genome.fa \
+  --sjdbGTFfile /path/to/genes.gtf \
+  --sjdbOverhang 100 \
+  --genomeGenerateTranscriptome Yes \
+  --cellrangerStyleIndex Yes \
+  --runThreadN 8
+```
+
+### Output Format
+
+The transcriptome FASTA follows Salmon conventions:
+- **Headers**: Transcript IDs without version suffixes (e.g., `>ENST00000456328` not `>ENST00000456328.2`)
+- **Line width**: 70 characters
+- **Ordering**: Matches `transcriptInfo.tab` for Salmon parity
+- **Negative strand**: Exons concatenated in genomic order, then reverse-complemented
+
+### Verification
+
+Test with the included chr21+chr22 subset:
+
+```bash
+./test/run_transcriptome_generation.sh --all
+```
+
+This runs:
+1. **Synthetic tests**: Basic transcriptome generation with small fixtures
+2. **Default path tests**: Validates `${genomeDir}/transcriptome.fa` output
+3. **CellRanger tests**: Real GENCODE chr21+chr22 with CellRanger filtering
 
 ## Standalone FlexFilter Tool
 

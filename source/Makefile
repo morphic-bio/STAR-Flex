@@ -85,7 +85,7 @@ OBJECTS = systemFunctions.o funPrimaryAlignMark.o \
 	twoPassRunPass1.o samHeaders.o Genome_genomeLoad.o Genome_genomeOutLoad.o Transcript_transformGenome.o ReadAlign_outputSpliceGraphSAM.o \
 	ReadAlign_mapOneReadSpliceGraph.o SpliceGraph.o SpliceGraph_swScoreSpliced.o SpliceGraph_swTraceBack.o \
 	SpliceGraph_findSuperTr.o sjAlignSplit.o \
-	GTF.o GTF_transcriptGeneSJ.o GTF_superTranscript.o SuperTranscriptome.o \
+	GTF.o GTF_transcriptGeneSJ.o GTF_superTranscript.o SuperTranscriptome.o TranscriptomeFasta.o \
 	ReadAlign_outputAlignments.o ReadAlign_resolveAmbiguousCBs.o \
 	ReadAlign.o STAR.o TranscriptQuantEC.o LibFormatDetection.o TranscriptQuantOutput.o \
 	SharedMemory.o PackedArray.o SuffixArrayFuns.o Parameters.o Parameters_samAttributes.o InOutStreams.o SequenceFuns.o Genome.o ParametersGenome.o Stats.o \
@@ -153,6 +153,10 @@ test_flex_probe_index: FlexProbeIndex.o
 .PHONY: test_cellranger_format
 test_cellranger_format: CellRangerFormatter.o
 	$(CXX) -std=c++11 -I./ $(CPPFLAGS) $(CXXFLAGS) ../test/test_cellranger_format.cpp CellRangerFormatter.o -Lhtslib -lhts -lz -o ../test/test_cellranger_format
+
+.PHONY: test_transcriptome_fasta
+test_transcriptome_fasta: TranscriptomeFasta.o Genome.o GTF.o GTF_transcriptGeneSJ.o Parameters.o ParametersGenome.o InOutStreams.o SequenceFuns.o ErrorWarning.o streamFuns.o serviceFuns.o
+	$(CXX) -std=c++11 -I./ $(CPPFLAGS) $(CXXFLAGS) ../test/test_transcriptome_fasta.cpp TranscriptomeFasta.o Genome.o GTF.o GTF_transcriptGeneSJ.o Parameters.o ParametersGenome.o InOutStreams.o SequenceFuns.o ErrorWarning.o streamFuns.o serviceFuns.o -Lhtslib -lhts -lz -o ../test/test_transcriptome_fasta
 
 .PHONY: test_cellranger_parity
 test_cellranger_parity: test_cellranger_format
@@ -401,13 +405,13 @@ POSIXSHARED : Depend.list parametersDefault.xxd $(OBJECTS)
 
 gdb : CXXFLAGS := $(CXXFLAGSextra) $(CXXFLAGS_gdb) $(CXXFLAGS)
 gdb : LDFLAGS := $(LDFLAGSextra) $(LDFLAGS_gdb) $(LDFLAGS) $(shell pkg-config --libs glib-2.0 2>/dev/null || echo "")
-gdb : Depend.list parametersDefault.xxd $(OBJECTS)
-	$(CXX) -o STAR $(CXXFLAGS) $(OBJECTS) $(LDFLAGS)
+gdb : Depend.list parametersDefault.xxd $(OBJECTS) libflex libtrim libem
+	$(CXX) -o STAR $(CXXFLAGS) $(OBJECTS) libflex/libflex.a libtrim/libtrim.a libem/libem.a $(LDFLAGS)
 
 gdb-long : CXXFLAGS := $(CXXFLAGSextra) $(CXXFLAGS_gdb) -D'COMPILE_FOR_LONG_READS' $(CXXFLAGS)
 gdb-long : LDFLAGS := $(LDFLAGSextra) $(LDFLAGS_gdb) $(LDFLAGS) $(shell pkg-config --libs glib-2.0 2>/dev/null || echo "")
-gdb-long : Depend.list parametersDefault.xxd $(OBJECTS)
-	$(CXX) -o STARlong $(CXXFLAGS) $(OBJECTS) $(LDFLAGS)
+gdb-long : Depend.list parametersDefault.xxd $(OBJECTS) libflex libtrim libem
+	$(CXX) -o STARlong $(CXXFLAGS) $(OBJECTS) libflex/libflex.a libtrim/libtrim.a libem/libem.a $(LDFLAGS)
 
 STARforMacStatic : CXXFLAGS := $(CXXFLAGSextra) $(CXXFLAGS_main) -D'COMPILE_FOR_MAC' $(CXXFLAGS)
 STARforMacStatic : LDFLAGS := $(LDFLAGSextra) $(LDFLAGS_Mac_static) $(LDFLAGS)

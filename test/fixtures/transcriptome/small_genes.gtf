@@ -1,0 +1,33 @@
+# Synthetic GTF for transcriptome FASTA generation testing
+# Uses simple IDs (not Ensembl format) - for basic transcriptome generation tests
+# CellRanger-style tests use gencode_subset/ with real GENCODE data
+#
+# Test cases:
+# 1. TR_SINGLE_PLUS - Single exon, plus strand
+# 2. TR_MULTI_PLUS - Multi-exon, plus strand  
+# 3. TR_MULTI_MINUS - Multi-exon, minus strand (tests revcomp)
+# 4. TR_LONG - Long transcript for 70bp line wrapping
+# 5. TR_MISSING - Transcript on missing contig (should be skipped)
+
+# TR_SINGLE_PLUS: chr1:1-20 (+), sequence = ACGTACGTACGTACGTACGT
+chr1	test	exon	1	20	.	+	.	gene_id "GENE1"; transcript_id "TR_SINGLE_PLUS";
+
+# TR_MULTI_PLUS: chr1:31-40 and chr1:51-60 (+), starts at position 31
+# Exon 1: positions 31-40 = GTACGTACGT
+# Exon 2: positions 51-60 = GTACGTACGT
+# Expected: GTACGTACGTGTACGTACGT
+chr1	test	exon	31	40	.	+	.	gene_id "GENE2"; transcript_id "TR_MULTI_PLUS";
+chr1	test	exon	51	60	.	+	.	gene_id "GENE2"; transcript_id "TR_MULTI_PLUS";
+
+# TR_MULTI_MINUS: chr1:101-110 and chr1:121-130 (-), starts at position 101
+# Concatenated in genomic order then reverse complemented
+# Expected: GTACGTACGTGTACGTACGT
+chr1	test	exon	101	110	.	-	.	gene_id "GENE3"; transcript_id "TR_MULTI_MINUS";
+chr1	test	exon	121	130	.	-	.	gene_id "GENE3"; transcript_id "TR_MULTI_MINUS";
+
+# TR_LONG: chr2:1-140 (+), tests 70bp line wrapping
+# Sequence: 70 A's + 70 C's = 140 bases total
+chr2	test	exon	1	140	.	+	.	gene_id "GENE4"; transcript_id "TR_LONG";
+
+# TR_MISSING: chr3:1-50 (+), chromosome doesn't exist, should be skipped
+chr3	test	exon	1	50	.	+	.	gene_id "GENE5"; transcript_id "TR_MISSING";

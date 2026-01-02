@@ -68,6 +68,7 @@ Validates TranscriptVB against Salmon using the same input alignments.
 **Requirements**:
 - Salmon installed and in PATH
 - Transcriptome FASTA file
+- Optional gene map file for gene-level parity (use `make_gene_map_from_gtf.sh`)
 
 **Runtime**: ~5 minutes
 
@@ -215,4 +216,3 @@ May need to update golden references:
 ```bash
 ./regression_test.sh update
 ```
-

@@ -158,4 +158,13 @@ void ParametersGenome::initialize(Parameters *pPin)
         errOut << "EXITING because of FATAL PARAMETER ERROR: --cellrangerStyleDownloadOnly requires --faUrl and --gtfUrl\n";
         exitWithError(errOut.str(), std::cerr, pP->inOut->logMain, EXIT_CODE_PARAMETER, *pP);
     }
+    
+    // Initialize transcriptome generation settings (case-insensitive Yes/No)
+    transcriptomeGen.generateTranscriptomeBool = isYes(transcriptomeGen.generateTranscriptome);
+    transcriptomeGen.overwriteBool = isYes(transcriptomeGen.overwrite);
+    
+    // Set default transcriptome FASTA path if not provided
+    if (transcriptomeGen.transcriptomeFastaPath.empty() || transcriptomeGen.transcriptomeFastaPath == "-") {
+        transcriptomeGen.transcriptomeFastaPath = gDir + "transcriptome.fa";
+    }
 };
