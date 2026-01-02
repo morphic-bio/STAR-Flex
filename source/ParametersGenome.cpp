@@ -77,6 +77,7 @@ void ParametersGenome::initialize(Parameters *pPin)
     cellrangerStyle.downloadOnlyBool = isYes(cellrangerStyle.downloadOnly);
     cellrangerStyle.allUntrustedUrlBool = isYes(cellrangerStyle.allUntrustedUrl);
     cellrangerStyle.autoCksumUpdateBool = isYes(cellrangerStyle.autoCksumUpdate);
+    cellrangerStyle.replaceUnverifiableFilesBool = isYes(cellrangerStyle.replaceUnverifiableFiles);
     
     if (cellrangerStyle.cacheDir.empty() || cellrangerStyle.cacheDir == "-") {
         cellrangerStyle.cacheDir = "";

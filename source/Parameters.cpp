@@ -76,6 +76,7 @@ Parameters::Parameters() {//initalize parameters info
     parArray.push_back(new ParameterInfoScalar <string> (-1, -1, "faUrl", &pGe.cellrangerStyle.faUrl));
     parArray.push_back(new ParameterInfoScalar <string> (-1, -1, "gtfUrl", &pGe.cellrangerStyle.gtfUrl));
     parArray.push_back(new ParameterInfoScalar <string> (-1, -1, "autoCksumUpdate", &pGe.cellrangerStyle.autoCksumUpdate));
+    parArray.push_back(new ParameterInfoScalar <string> (-1, -1, "replaceUnverifiableFiles", &pGe.cellrangerStyle.replaceUnverifiableFiles));
     parArray.push_back(new ParameterInfoScalar <string> (-1, -1, "cellrangerRefRelease", &pGe.cellrangerStyle.refRelease));
     
     // Auto-index workflow parameters

@@ -18,7 +18,7 @@ int main() {
     std::string outputPath = "/tmp/test_download_output.txt";
     std::string cacheDir = ""; // Empty cache dir for this test
     
-    bool result1 = CellRangerFormatter::downloadReference(testUrl, outputPath, 0, 0, false, cacheDir, false, errorMsg);
+    bool result1 = CellRangerFormatter::downloadReference(testUrl, outputPath, 0, 0, false, cacheDir, false, false, errorMsg);
     if (result1) {
         std::cerr << "✗ FAILED: Should have failed without cksum when allowUntrusted=false\n";
         return 1;

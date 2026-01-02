@@ -312,7 +312,8 @@ void Genome::genomeGenerate() {
         P.inOut->logMain << "    Downloading FASTA from: " << fastaUrl << "\n";
         if (!CellRangerFormatter::downloadReference(fastaUrl, downloadedFasta, expectedFastaCksum, expectedFastaSize,
                                                     pGe.cellrangerStyle.allUntrustedUrlBool, cacheDir,
-                                                    pGe.cellrangerStyle.autoCksumUpdateBool, errorMsg)) {
+                                                    pGe.cellrangerStyle.autoCksumUpdateBool,
+                                                    pGe.cellrangerStyle.replaceUnverifiableFilesBool, errorMsg)) {
             exitWithError("EXITING because of FATAL ERROR downloading FASTA: " + errorMsg + "\n",
                          std::cerr, P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
         }
@@ -320,7 +321,8 @@ void Genome::genomeGenerate() {
         P.inOut->logMain << "    Downloading GTF from: " << gtfUrl << "\n";
         if (!CellRangerFormatter::downloadReference(gtfUrl, downloadedGtf, expectedGtfCksum, expectedGtfSize,
                                                     pGe.cellrangerStyle.allUntrustedUrlBool, cacheDir,
-                                                    pGe.cellrangerStyle.autoCksumUpdateBool, errorMsg)) {
+                                                    pGe.cellrangerStyle.autoCksumUpdateBool,
+                                                    pGe.cellrangerStyle.replaceUnverifiableFilesBool, errorMsg)) {
             exitWithError("EXITING because of FATAL ERROR downloading GTF: " + errorMsg + "\n",
                          std::cerr, P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
         }

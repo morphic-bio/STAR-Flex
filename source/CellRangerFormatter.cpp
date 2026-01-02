@@ -104,9 +104,11 @@ Result formatFasta(const string& inputPath, const string& outputPath) {
         return result;
     }
     
-    ofstream outFile(outputPath);
+    string tempPath = outputPath + ".tmp";
+    ofstream outFile(tempPath);
     if (!outFile.is_open()) {
-        result.errorMessage = "Could not open output FASTA: " + outputPath;
+        inFile.close();
+        result.errorMessage = "Could not open temporary output FASTA: " + tempPath;
         return result;
     }
     
@@ -150,6 +152,19 @@ Result formatFasta(const string& inputPath, const string& outputPath) {
     
     inFile.close();
     outFile.close();
+    
+    if (!outFile.good() && !outFile.eof()) {
+        remove(tempPath.c_str());
+        result.errorMessage = "Error writing to temporary output FASTA: " + tempPath;
+        return result;
+    }
+    
+    // Atomic rename
+    if (rename(tempPath.c_str(), outputPath.c_str()) != 0) {
+        remove(tempPath.c_str());
+        result.errorMessage = "Could not rename temporary file to final output: " + outputPath;
+        return result;
+    }
     
     result.success = true;
     return result;
@@ -289,9 +304,10 @@ Result formatGtf(const string& inputPath, const string& outputPath) {
         }
     }
     
-    ofstream outFile(outputPath);
+    string tempPath = outputPath + ".tmp";
+    ofstream outFile(tempPath);
     if (!outFile.is_open()) {
-        result.errorMessage = "Could not open output GTF: " + outputPath;
+        result.errorMessage = "Could not open temporary output GTF: " + tempPath;
         if (isGzip) {
             gzclose(gzFilePtr);
         } else {
@@ -395,6 +411,19 @@ Result formatGtf(const string& inputPath, const string& outputPath) {
         inFileStream.close();
     }
     outFile.close();
+    
+    if (!outFile.good() && !outFile.eof()) {
+        remove(tempPath.c_str());
+        result.errorMessage = "Error writing to temporary output GTF: " + tempPath;
+        return result;
+    }
+    
+    // Atomic rename
+    if (rename(tempPath.c_str(), outputPath.c_str()) != 0) {
+        remove(tempPath.c_str());
+        result.errorMessage = "Could not rename temporary file to final output: " + outputPath;
+        return result;
+    }
     
     result.success = true;
     return result;
@@ -564,7 +593,11 @@ bool loadCksumCache(const string& cacheDir) {
 
 // Save cksum entry to cache file
 // Format: url<TAB>crc<TAB>size (append mode)
-bool saveCksumToCache(const string& cacheDir, const string& url, uint32_t crc, uint64_t size) {
+// allowOverwrite: if true, update existing entry; if false, skip if already exists
+bool saveCksumToCache(const string& cacheDir, const string& url, uint32_t crc, uint64_t size, bool allowOverwrite) {
+    if (cacheDir.empty()) {
+        return false; // No cache directory specified
+    }
     if (crc == 0 || size == 0) {
         return false; // Don't save invalid cksums
     }
@@ -580,20 +613,48 @@ bool saveCksumToCache(const string& cacheDir, const string& url, uint32_t crc, u
         return false;
     }
     
-    // Check if entry already exists (avoid duplicates)
-    if (runtimeCksumCache.find(url) != runtimeCksumCache.end()) {
+    // Check if entry already exists
+    bool exists = (runtimeCksumCache.find(url) != runtimeCksumCache.end());
+    if (exists && !allowOverwrite) {
         file.close();
-        return true; // Already in cache
+        return true; // Already in cache, skip update
     }
     
-    // Write entry
+    // Write entry (always append to file for audit trail)
     file << url << "\t" << crc << "\t" << size << "\n";
     file.close();
     
-    // Update runtime cache
+    // Update runtime cache (overwrites if allowOverwrite is true)
     runtimeCksumCache[url] = CksumValue(crc, size);
     
     return true;
+}
+
+// Generate decompressed cache key
+static string getDecompressedKey(const string& url) {
+    return url + "|decompressed";
+}
+
+// Get decompressed cksum for URL (from cache)
+bool getDecompressedCksumForUrl(const string& url, uint32_t& crc, uint64_t& size) {
+    string key = getDecompressedKey(url);
+    auto cacheIt = runtimeCksumCache.find(key);
+    if (cacheIt != runtimeCksumCache.end() && cacheIt->second.isValid()) {
+        crc = cacheIt->second.crc;
+        size = cacheIt->second.size;
+        return true;
+    }
+    return false;
+}
+
+// Save decompressed cksum entry to cache file
+// Allows overwrite to update cache when files are re-decompressed (e.g., after truncation fix)
+bool saveDecompressedCksumToCache(const string& cacheDir, const string& url, uint32_t crc, uint64_t size) {
+    if (cacheDir.empty()) {
+        return false; // No cache directory specified
+    }
+    string key = getDecompressedKey(url);
+    return saveCksumToCache(cacheDir, key, crc, size, true); // Allow overwrite for decompressed checksums
 }
 
 // Compute POSIX cksum of a file (CRC-32 XOR file size)
@@ -630,9 +691,11 @@ bool computeCksumFile(const string& filePath, uint32_t& crc, uint64_t& size) {
 // Download reference file using FTP/HTTP with optional cksum verification
 // cacheDir: directory for cksum cache file (empty string to disable cache)
 // autoCksumUpdate: if true, attempt to auto-fill missing cksum from CHECKSUMS file for trusted URLs
+// replaceUnverifiableFiles: if true, replace existing final files that cannot be verified
 bool downloadReference(const string& url, const string& outputPath, 
                        uint32_t expectedCksum, uint64_t expectedSize, bool allowUntrusted, 
-                       const string& cacheDir, bool autoCksumUpdate, string& errorMsg) {
+                       const string& cacheDir, bool autoCksumUpdate, bool replaceUnverifiableFiles,
+                       string& errorMsg) {
     // Load cksum cache if cacheDir is provided and not already loaded
     if (!cacheDir.empty() && !cksumCacheLoaded) {
         loadCksumCache(cacheDir);
@@ -642,6 +705,7 @@ bool downloadReference(const string& url, const string& outputPath,
     bool isGzip = (url.length() > 3 && url.substr(url.length() - 3) == ".gz");
     string tempGzPath = outputPath + ".gz";
     string finalPath = outputPath;
+    string backupPath = "";  // Backup path for existing file (restore on failure)
     
     // Extract expected filename from URL for verification
     string expectedFilename = url.substr(url.find_last_of('/') + 1);
@@ -737,52 +801,109 @@ bool downloadReference(const string& url, const string& outputPath,
                 cerr << "  File: " << tempGzPath << "\n";
                 cerr << "  cksum: " << existingCksum << " size: " << existingSize << "\n";
                 
-                // Decompress only if final file is missing
-                if (stat(finalPath.c_str(), &fileStat) == 0) {
-                    cerr << "  Final file already exists. Skipping decompression.\n";
-                    return true;
+                // Check if final file exists and verify decompressed checksum
+                bool finalExists = (stat(finalPath.c_str(), &fileStat) == 0);
+                bool needDecompress = false;
+                
+                if (finalExists) {
+                    uint32_t decompCrc;
+                    uint64_t decompSize;
+                    if (getDecompressedCksumForUrl(url, decompCrc, decompSize)) {
+                        uint32_t existingDecompCrc;
+                        uint64_t existingDecompSize;
+                        if (computeCksumFile(finalPath, existingDecompCrc, existingDecompSize)) {
+                            if (existingDecompCrc == decompCrc && existingDecompSize == decompSize) {
+                                cerr << "  Final file exists and decompressed checksum matches. Skipping decompression.\n";
+                                return true;
+                            } else {
+                                errorMsg = "Final file exists but decompressed checksum mismatch: " + finalPath + "\n"
+                                          "  Expected: cksum=" + to_string(decompCrc) + " size=" + to_string(decompSize) + "\n"
+                                          "  Found: cksum=" + to_string(existingDecompCrc) + " size=" + to_string(existingDecompSize) + "\n"
+                                          "Checksum mismatches are hard errors. Please delete the file and re-download, or remove the cache entry if you want to accept a modified file.";
+                                return false;
+                            }
+                        } else {
+                            if (replaceUnverifiableFiles) {
+                                cerr << "  Final file exists but could not compute checksum. Re-decompressing...\n";
+                                needDecompress = true;
+                            } else {
+                                cerr << "WARNING: Final file exists but could not compute checksum: " << finalPath << "\n";
+                                cerr << "  Keeping existing file. Use --replaceUnverifiableFiles Yes to replace it.\n";
+                                return true;
+                            }
+                        }
+                    } else {
+                        if (replaceUnverifiableFiles) {
+                            cerr << "  Final file exists but no decompressed checksum available. Re-decompressing to ensure integrity...\n";
+                            needDecompress = true;
+                        } else {
+                            cerr << "WARNING: Final file exists but cannot be verified (no decompressed checksum available): " << finalPath << "\n";
+                            cerr << "  Keeping existing file. Use --replaceUnverifiableFiles Yes to replace it.\n";
+                            return true;
+                        }
+                    }
+                } else {
+                    needDecompress = true;
                 }
                 
-                cerr << "  Decompressing to final file...\n";
-                
-                // Decompress the existing .gz file
-                gzFile gzIn = gzopen(tempGzPath.c_str(), "rb");
-                if (!gzIn) {
-                    errorMsg = "Could not open gzipped file for decompression: " + tempGzPath;
-                    return false;
-                }
-                
-                ofstream finalFile(finalPath, ios::binary);
-                if (!finalFile.is_open()) {
-                    gzclose(gzIn);
-                    errorMsg = "Could not create final output file: " + finalPath;
-                    return false;
-                }
-                
-                char gzBuffer[65536];
-                int gzBytesRead;
-                while ((gzBytesRead = gzread(gzIn, gzBuffer, sizeof(gzBuffer))) > 0) {
-                    finalFile.write(gzBuffer, gzBytesRead);
-                    if (!finalFile.good()) {
-                        gzclose(gzIn);
-                        finalFile.close();
-                        remove(finalPath.c_str());
-                        errorMsg = "Error writing decompressed data to: " + finalPath;
+                if (needDecompress) {
+                    cerr << "  Decompressing to final file...\n";
+                    
+                    string tempPath = finalPath + ".tmp";
+                    
+                    // Decompress the existing .gz file to temp
+                    gzFile gzIn = gzopen(tempGzPath.c_str(), "rb");
+                    if (!gzIn) {
+                        errorMsg = "Could not open gzipped file for decompression: " + tempGzPath;
                         return false;
                     }
+                    
+                    ofstream tempFile(tempPath, ios::binary);
+                    if (!tempFile.is_open()) {
+                        gzclose(gzIn);
+                        errorMsg = "Could not create temporary output file: " + tempPath;
+                        return false;
+                    }
+                    
+                    char gzBuffer[65536];
+                    int gzBytesRead;
+                    while ((gzBytesRead = gzread(gzIn, gzBuffer, sizeof(gzBuffer))) > 0) {
+                        tempFile.write(gzBuffer, gzBytesRead);
+                        if (!tempFile.good()) {
+                            gzclose(gzIn);
+                            tempFile.close();
+                            remove(tempPath.c_str());
+                            errorMsg = "Error writing decompressed data to: " + tempPath;
+                            return false;
+                        }
+                    }
+                    
+                    gzclose(gzIn);
+                    tempFile.close();
+                    
+                    if (gzBytesRead < 0) {
+                        remove(tempPath.c_str());
+                        errorMsg = "Error decompressing file: " + tempGzPath;
+                        return false;
+                    }
+                    
+                    // Atomic rename
+                    if (rename(tempPath.c_str(), finalPath.c_str()) != 0) {
+                        remove(tempPath.c_str());
+                        errorMsg = "Could not rename temporary file to final output: " + finalPath;
+                        return false;
+                    }
+                    
+                    // Compute and cache decompressed checksum
+                    uint32_t decompCrc;
+                    uint64_t decompSize;
+                    if (computeCksumFile(finalPath, decompCrc, decompSize)) {
+                        saveDecompressedCksumToCache(cacheDir, url, decompCrc, decompSize);
+                    }
+                    
+                    cerr << "✓ Decompression completed successfully.\n";
+                    return true;
                 }
-                
-                gzclose(gzIn);
-                finalFile.close();
-                
-                if (gzBytesRead < 0) {
-                    remove(finalPath.c_str());
-                    errorMsg = "Error decompressing file: " + tempGzPath;
-                    return false;
-                }
-                
-                cerr << "✓ Decompression completed successfully.\n";
-                return true;
             } else {
                 errorMsg = "Existing compressed file cksum mismatch!\n"
                            "  File: " + tempGzPath + "\n"
@@ -792,51 +913,108 @@ bool downloadReference(const string& url, const string& outputPath,
                 return false;
             }
         } else {
-            // No cksum available but allowUntrusted is true - decompress if final missing
-            if (stat(finalPath.c_str(), &fileStat) == 0) {
-                cerr << "  Final file already exists. Skipping decompression.\n";
-                return true;
+            // No cksum available but allowUntrusted is true - decompress if final missing or verify if exists
+            bool finalExists = (stat(finalPath.c_str(), &fileStat) == 0);
+            bool needDecompress = false;
+            
+            if (finalExists) {
+                uint32_t decompCrc;
+                uint64_t decompSize;
+                if (getDecompressedCksumForUrl(url, decompCrc, decompSize)) {
+                    uint32_t existingDecompCrc;
+                    uint64_t existingDecompSize;
+                    if (computeCksumFile(finalPath, existingDecompCrc, existingDecompSize)) {
+                        if (existingDecompCrc == decompCrc && existingDecompSize == decompSize) {
+                            cerr << "  Final file exists and decompressed checksum matches. Skipping decompression.\n";
+                            return true;
+                        } else {
+                            errorMsg = "Final file exists but decompressed checksum mismatch: " + finalPath + "\n"
+                                      "  Expected: cksum=" + to_string(decompCrc) + " size=" + to_string(decompSize) + "\n"
+                                      "  Found: cksum=" + to_string(existingDecompCrc) + " size=" + to_string(existingDecompSize) + "\n"
+                                      "Checksum mismatches are hard errors. Please delete the file and re-download, or remove the cache entry if you want to accept a modified file.";
+                            return false;
+                        }
+                    } else {
+                        if (replaceUnverifiableFiles) {
+                            cerr << "  Final file exists but could not compute checksum. Re-decompressing...\n";
+                            needDecompress = true;
+                        } else {
+                            cerr << "WARNING: Final file exists but could not compute checksum: " << finalPath << "\n";
+                            cerr << "  Keeping existing file. Use --replaceUnverifiableFiles Yes to replace it.\n";
+                            return true;
+                        }
+                    }
+                } else {
+                    if (replaceUnverifiableFiles) {
+                        cerr << "  Final file exists but no decompressed checksum available. Re-decompressing to ensure integrity...\n";
+                        needDecompress = true;
+                    } else {
+                        cerr << "WARNING: Final file exists but cannot be verified (no decompressed checksum available): " << finalPath << "\n";
+                        cerr << "  Keeping existing file. Use --replaceUnverifiableFiles Yes to replace it.\n";
+                        return true;
+                    }
+                }
+            } else {
+                needDecompress = true;
             }
             
-            cerr << "  Decompressing to final file...\n";
-            
-            // Decompress the existing .gz file
-            gzFile gzIn = gzopen(tempGzPath.c_str(), "rb");
-            if (!gzIn) {
-                errorMsg = "Could not open gzipped file for decompression: " + tempGzPath;
-                return false;
-            }
-            
-            ofstream finalFile(finalPath, ios::binary);
-            if (!finalFile.is_open()) {
-                gzclose(gzIn);
-                errorMsg = "Could not create final output file: " + finalPath;
-                return false;
-            }
-            
-            char gzBuffer[65536];
-            int gzBytesRead;
-            while ((gzBytesRead = gzread(gzIn, gzBuffer, sizeof(gzBuffer))) > 0) {
-                finalFile.write(gzBuffer, gzBytesRead);
-                if (!finalFile.good()) {
-                    gzclose(gzIn);
-                    finalFile.close();
-                    remove(finalPath.c_str());
-                    errorMsg = "Error writing decompressed data to: " + finalPath;
+            if (needDecompress) {
+                cerr << "  Decompressing to final file...\n";
+                
+                string tempPath = finalPath + ".tmp";
+                
+                // Decompress the existing .gz file to temp
+                gzFile gzIn = gzopen(tempGzPath.c_str(), "rb");
+                if (!gzIn) {
+                    errorMsg = "Could not open gzipped file for decompression: " + tempGzPath;
                     return false;
                 }
+                
+                ofstream tempFile(tempPath, ios::binary);
+                if (!tempFile.is_open()) {
+                    gzclose(gzIn);
+                    errorMsg = "Could not create temporary output file: " + tempPath;
+                    return false;
+                }
+                
+                char gzBuffer[65536];
+                int gzBytesRead;
+                while ((gzBytesRead = gzread(gzIn, gzBuffer, sizeof(gzBuffer))) > 0) {
+                    tempFile.write(gzBuffer, gzBytesRead);
+                    if (!tempFile.good()) {
+                        gzclose(gzIn);
+                        tempFile.close();
+                        remove(tempPath.c_str());
+                        errorMsg = "Error writing decompressed data to: " + tempPath;
+                        return false;
+                    }
+                }
+                
+                gzclose(gzIn);
+                tempFile.close();
+                
+                if (gzBytesRead < 0) {
+                    remove(tempPath.c_str());
+                    errorMsg = "Error decompressing file: " + tempGzPath;
+                    return false;
+                }
+                
+                // Atomic rename
+                if (rename(tempPath.c_str(), finalPath.c_str()) != 0) {
+                    remove(tempPath.c_str());
+                    errorMsg = "Could not rename temporary file to final output: " + finalPath;
+                    return false;
+                }
+                
+                // Compute and cache decompressed checksum
+                uint32_t decompCrc;
+                uint64_t decompSize;
+                if (computeCksumFile(finalPath, decompCrc, decompSize)) {
+                    saveDecompressedCksumToCache(cacheDir, url, decompCrc, decompSize);
+                }
+                
+                return true;
             }
-            
-            gzclose(gzIn);
-            finalFile.close();
-            
-            if (gzBytesRead < 0) {
-                remove(finalPath.c_str());
-                errorMsg = "Error decompressing file: " + tempGzPath;
-                return false;
-            }
-            
-            return true;
         }
     }
     
@@ -851,47 +1029,99 @@ bool downloadReference(const string& url, const string& outputPath,
                  << ", found: " << outputFilename << "\n";
         }
         
-        cerr << "Checking cksum to verify integrity...\n";
-        
-        // Get expected cksum
-        uint32_t cksumToVerify = expectedCksum;
-        uint64_t sizeToVerify = expectedSize;
-        
-        // If expectedCksum is 0, check EXPECTED_CKSUM map and cache
-        if (cksumToVerify == 0 || sizeToVerify == 0) {
-            getCksumForUrl(url, cksumToVerify, sizeToVerify);
+        // For gzipped URLs, check decompressed checksum if available
+        bool skipExistingFileCheck = false;
+        if (isGzip) {
+            uint32_t decompCrc;
+            uint64_t decompSize;
+            if (getDecompressedCksumForUrl(url, decompCrc, decompSize)) {
+                uint32_t existingDecompCrc;
+                uint64_t existingDecompSize;
+                if (computeCksumFile(finalPath, existingDecompCrc, existingDecompSize)) {
+                    if (existingDecompCrc == decompCrc && existingDecompSize == decompSize) {
+                        cerr << "✓ File exists and decompressed checksum matches. Skipping download.\n";
+                        return true;
+                    } else {
+                        errorMsg = "File exists but decompressed checksum mismatch: " + finalPath + "\n"
+                                  "  Expected: cksum=" + to_string(decompCrc) + " size=" + to_string(decompSize) + "\n"
+                                  "  Found: cksum=" + to_string(existingDecompCrc) + " size=" + to_string(existingDecompSize) + "\n"
+                                  "Checksum mismatches are hard errors. Please delete the file and re-download, or remove the cache entry if you want to accept a modified file.";
+                        return false;
+                    }
+                } else {
+                    if (replaceUnverifiableFiles) {
+                        cerr << "Could not compute checksum of existing file. Re-downloading...\n";
+                        skipExistingFileCheck = true;
+                    } else {
+                        cerr << "WARNING: File exists but could not compute checksum: " << finalPath << "\n";
+                        cerr << "  Keeping existing file. Use --replaceUnverifiableFiles Yes to replace it.\n";
+                        return true;
+                    }
+                }
+            } else {
+                // No decompressed checksum available
+                if (replaceUnverifiableFiles) {
+                    cerr << "File exists but no decompressed checksum available. Re-downloading...\n";
+                    skipExistingFileCheck = true;
+                } else {
+                    cerr << "WARNING: File exists but cannot be verified (no decompressed checksum available): " << finalPath << "\n";
+                    cerr << "  Keeping existing file. Use --replaceUnverifiableFiles Yes to replace it.\n";
+                    return true;
+                }
+            }
         }
         
-        bool isTrusted = isTrustedUrl(url);
-        bool hasKnown = hasKnownCksum(url);
-        
-        // If we have an expected cksum, verify the existing file
-        if (cksumToVerify != 0 && sizeToVerify != 0) {
-            uint32_t existingCksum;
-            uint64_t existingSize;
-            if (!computeCksumFile(finalPath, existingCksum, existingSize)) {
-                errorMsg = "Could not compute cksum of existing file: " + finalPath;
+        if (skipExistingFileCheck) {
+            // Skip existing file verification and proceed to download
+            // Backup existing file instead of deleting (restore on failure)
+            backupPath = finalPath + ".bak";
+            if (rename(finalPath.c_str(), backupPath.c_str()) != 0) {
+                errorMsg = "Could not backup existing file: " + finalPath;
                 return false;
+            }
+            cerr << "  Backed up existing file to: " << backupPath << "\n";
+        } else {
+            cerr << "Checking cksum to verify integrity...\n";
+            
+            // Get expected cksum
+            uint32_t cksumToVerify = expectedCksum;
+            uint64_t sizeToVerify = expectedSize;
+            
+            // If expectedCksum is 0, check EXPECTED_CKSUM map and cache
+            if (cksumToVerify == 0 || sizeToVerify == 0) {
+                getCksumForUrl(url, cksumToVerify, sizeToVerify);
             }
             
-            if (existingCksum == cksumToVerify && existingSize == sizeToVerify) {
-                cerr << "✓ Correct file exists (cksum matches). Skipping download.\n";
-                cerr << "  File: " << finalPath << "\n";
-                cerr << "  cksum: " << existingCksum << " size: " << existingSize << "\n";
-                return true;
+            bool isTrusted = isTrustedUrl(url);
+            bool hasKnown = hasKnownCksum(url);
+            
+            // If we have an expected cksum, verify the existing file
+            if (cksumToVerify != 0 && sizeToVerify != 0) {
+                uint32_t existingCksum;
+                uint64_t existingSize;
+                if (!computeCksumFile(finalPath, existingCksum, existingSize)) {
+                    errorMsg = "Could not compute cksum of existing file: " + finalPath;
+                    return false;
+                }
+                
+                if (existingCksum == cksumToVerify && existingSize == sizeToVerify) {
+                    cerr << "✓ Correct file exists (cksum matches). Skipping download.\n";
+                    cerr << "  File: " << finalPath << "\n";
+                    cerr << "  cksum: " << existingCksum << " size: " << existingSize << "\n";
+                    return true;
+                } else {
+                    errorMsg = "Existing file cksum mismatch!\n"
+                               "  File: " + finalPath + "\n"
+                               "  Expected cksum: " + to_string(cksumToVerify) + " size: " + to_string(sizeToVerify) + "\n"
+                               "  Existing file cksum: " + to_string(existingCksum) + " size: " + to_string(existingSize) + "\n"
+                               "The existing file does not match the expected file. Please remove it or use a different output path.";
+                    return false;
+                }
             } else {
-                errorMsg = "Existing file cksum mismatch!\n"
-                           "  File: " + finalPath + "\n"
-                           "  Expected cksum: " + to_string(cksumToVerify) + " size: " + to_string(sizeToVerify) + "\n"
-                           "  Existing file cksum: " + to_string(existingCksum) + " size: " + to_string(existingSize) + "\n"
-                           "The existing file does not match the expected file. Please remove it or use a different output path.";
-                return false;
-            }
-        } else {
-            // No cksum available
-            if (isTrusted || hasKnown) {
-                // Trusted URLs or URLs with known cksum require cksum - attempt auto-fill if enabled
-                if (autoCksumUpdate && isTrusted) {
+                // No cksum available
+                if (isTrusted || hasKnown) {
+                    // Trusted URLs or URLs with known cksum require cksum - attempt auto-fill if enabled
+                    if (autoCksumUpdate && isTrusted) {
                     cerr << "Trusted URL missing cksum. Computing cksum of existing file...\n";
                     uint32_t autoCrc = 0;
                     uint64_t autoSize = 0;
@@ -966,6 +1196,7 @@ bool downloadReference(const string& url, const string& outputPath,
                 cerr << "WARNING: Untrusted URLs disable integrity checking. Use only with trusted sources.\n";
                 cerr << "  File: " << finalPath << "\n";
                 return true;
+                }
             }
         }
     }
@@ -979,6 +1210,11 @@ bool downloadReference(const string& url, const string& outputPath,
     
     // Create output directory
     if (!createDirectoryRecursive(outputPath)) {
+        // Restore backup if download fails
+        if (!backupPath.empty()) {
+            rename(backupPath.c_str(), finalPath.c_str());
+            cerr << "  Restored backup file: " << finalPath << "\n";
+        }
         errorMsg = "Could not create output directory for " + outputPath;
         return false;
     }
@@ -986,6 +1222,11 @@ bool downloadReference(const string& url, const string& outputPath,
     // Open URL with htslib
     hFILE* hfile = hopen(url.c_str(), "r");
     if (!hfile) {
+        // Restore backup if download fails
+        if (!backupPath.empty()) {
+            rename(backupPath.c_str(), finalPath.c_str());
+            cerr << "  Restored backup file: " << finalPath << "\n";
+        }
         errorMsg = "Could not open URL: " + url + "\n"
                    "Please check your network connection and ensure the URL is accessible.";
         return false;
@@ -995,6 +1236,11 @@ bool downloadReference(const string& url, const string& outputPath,
     ofstream outFile(tempGzPath, ios::binary);
     if (!outFile.is_open()) {
         (void)hclose(hfile);
+        // Restore backup if download fails
+        if (!backupPath.empty()) {
+            rename(backupPath.c_str(), finalPath.c_str());
+            cerr << "  Restored backup file: " << finalPath << "\n";
+        }
         errorMsg = "Could not create output file: " + tempGzPath;
         return false;
     }
@@ -1008,6 +1254,11 @@ bool downloadReference(const string& url, const string& outputPath,
             (void)hclose(hfile);
             outFile.close();
             remove(tempGzPath.c_str());
+            // Restore backup if download fails
+            if (!backupPath.empty()) {
+                rename(backupPath.c_str(), finalPath.c_str());
+                cerr << "  Restored backup file: " << finalPath << "\n";
+            }
             errorMsg = "Error writing to file: " + tempGzPath;
             return false;
         }
@@ -1018,6 +1269,11 @@ bool downloadReference(const string& url, const string& outputPath,
     
     if (bytesRead < 0) {
         remove(tempGzPath.c_str());
+        // Restore backup if download fails
+        if (!backupPath.empty()) {
+            rename(backupPath.c_str(), finalPath.c_str());
+            cerr << "  Restored backup file: " << finalPath << "\n";
+        }
         errorMsg = "Error reading from URL: " + url;
         return false;
     }
@@ -1058,6 +1314,11 @@ bool downloadReference(const string& url, const string& outputPath,
             } else {
                 cerr << "WARNING: Auto-fill failed: " << autoError << "\n";
                 remove(tempGzPath.c_str());
+                // Restore backup if download fails
+                if (!backupPath.empty()) {
+                    rename(backupPath.c_str(), finalPath.c_str());
+                    cerr << "  Restored backup file: " << finalPath << "\n";
+                }
                 errorMsg = "FATAL: URL requires cksum but none is configured: " + url + "\n"
                            "FTP downloads require embedded cksum verification for integrity.\n"
                            "Auto-fill from CHECKSUMS failed: " + autoError + "\n"
@@ -1067,6 +1328,11 @@ bool downloadReference(const string& url, const string& outputPath,
             }
         } else {
             remove(tempGzPath.c_str());
+            // Restore backup if download fails
+            if (!backupPath.empty()) {
+                rename(backupPath.c_str(), finalPath.c_str());
+                cerr << "  Restored backup file: " << finalPath << "\n";
+            }
             errorMsg = "FATAL: URL requires cksum but none is configured: " + url + "\n"
                        "FTP downloads require embedded cksum verification for integrity.\n"
                        "Please update EXPECTED_CKSUM map in CellRangerFormatter.cpp with the cksum value.\n"
@@ -1080,6 +1346,11 @@ bool downloadReference(const string& url, const string& outputPath,
     if (!isTrusted && !hasKnown && (cksumToVerify == 0 || sizeToVerify == 0)) {
         if (!allowUntrusted) {
             remove(tempGzPath.c_str());
+            // Restore backup if download fails
+            if (!backupPath.empty()) {
+                rename(backupPath.c_str(), finalPath.c_str());
+                cerr << "  Restored backup file: " << finalPath << "\n";
+            }
             errorMsg = "FATAL: URL is not in trusted Ensembl FTP URL table and has no known cksum: " + url + "\n"
                        "Untrusted URLs require --allUntrustedUrl Yes flag.\n"
                        "WARNING: Using untrusted URLs disables integrity checking. Only use with trusted sources.";
@@ -1120,12 +1391,22 @@ bool downloadReference(const string& url, const string& outputPath,
         uint64_t computedSize;
         if (!computeCksumFile(tempGzPath, computedCksum, computedSize)) {
             remove(tempGzPath.c_str());
+            // Restore backup if download fails
+            if (!backupPath.empty()) {
+                rename(backupPath.c_str(), finalPath.c_str());
+                cerr << "  Restored backup file: " << finalPath << "\n";
+            }
             errorMsg = "Could not compute cksum of downloaded file: " + tempGzPath;
             return false;
         }
         
         if (computedCksum != cksumToVerify || computedSize != sizeToVerify) {
             remove(tempGzPath.c_str());
+            // Restore backup if download fails
+            if (!backupPath.empty()) {
+                rename(backupPath.c_str(), finalPath.c_str());
+                cerr << "  Restored backup file: " << finalPath << "\n";
+            }
             errorMsg = "cksum mismatch for downloaded file!\n"
                        "  URL: " + url + "\n"
                        "  Expected cksum: " + to_string(cksumToVerify) + " size: " + to_string(sizeToVerify) + "\n"
@@ -1144,51 +1425,112 @@ bool downloadReference(const string& url, const string& outputPath,
     
     // Decompress if needed (only after cksum verification passes)
     if (isGzip) {
+        string tempPath = finalPath + ".tmp";
+        
         gzFile gzIn = gzopen(tempGzPath.c_str(), "rb");
         if (!gzIn) {
             remove(tempGzPath.c_str());
+            // Restore backup if decompression fails
+            if (!backupPath.empty()) {
+                rename(backupPath.c_str(), finalPath.c_str());
+                cerr << "  Restored backup file: " << finalPath << "\n";
+            }
             errorMsg = "Could not open gzipped file for decompression: " + tempGzPath;
             return false;
         }
         
-        ofstream finalFile(finalPath, ios::binary);
-        if (!finalFile.is_open()) {
+        ofstream tempFile(tempPath, ios::binary);
+        if (!tempFile.is_open()) {
             gzclose(gzIn);
             remove(tempGzPath.c_str());
-            errorMsg = "Could not create final output file: " + finalPath;
+            // Restore backup if decompression fails
+            if (!backupPath.empty()) {
+                rename(backupPath.c_str(), finalPath.c_str());
+                cerr << "  Restored backup file: " << finalPath << "\n";
+            }
+            errorMsg = "Could not create temporary output file: " + tempPath;
             return false;
         }
         
         char gzBuffer[65536];
         int gzBytesRead;
         while ((gzBytesRead = gzread(gzIn, gzBuffer, sizeof(gzBuffer))) > 0) {
-            finalFile.write(gzBuffer, gzBytesRead);
-            if (!finalFile.good()) {
+            tempFile.write(gzBuffer, gzBytesRead);
+            if (!tempFile.good()) {
                 gzclose(gzIn);
-                finalFile.close();
+                tempFile.close();
                 remove(tempGzPath.c_str());
-                remove(finalPath.c_str());
-                errorMsg = "Error writing decompressed data to: " + finalPath;
+                remove(tempPath.c_str());
+                // Restore backup if decompression fails
+                if (!backupPath.empty()) {
+                    rename(backupPath.c_str(), finalPath.c_str());
+                    cerr << "  Restored backup file: " << finalPath << "\n";
+                }
+                errorMsg = "Error writing decompressed data to: " + tempPath;
                 return false;
             }
         }
         
         gzclose(gzIn);
-        finalFile.close();
+        tempFile.close();
+        
+        if (gzBytesRead < 0) {
+            remove(tempGzPath.c_str());
+            remove(tempPath.c_str());
+            // Restore backup if decompression fails
+            if (!backupPath.empty()) {
+                rename(backupPath.c_str(), finalPath.c_str());
+                cerr << "  Restored backup file: " << finalPath << "\n";
+            }
+            errorMsg = "Error decompressing file: " + tempGzPath;
+            return false;
+        }
+        
+        // Atomic rename
+        if (rename(tempPath.c_str(), finalPath.c_str()) != 0) {
+            remove(tempGzPath.c_str());
+            remove(tempPath.c_str());
+            // Restore backup if decompression fails
+            if (!backupPath.empty()) {
+                rename(backupPath.c_str(), finalPath.c_str());
+                cerr << "  Restored backup file: " << finalPath << "\n";
+            }
+            errorMsg = "Could not rename temporary file to final output: " + finalPath;
+            return false;
+        }
+        
         // Keep .gz file in cache (do not delete)
         // remove(tempGzPath.c_str()); // REMOVED: Keep .gz for future reuse
         
-        if (gzBytesRead < 0) {
-            remove(finalPath.c_str());
-            errorMsg = "Error decompressing file: " + tempGzPath;
-            return false;
+        // Compute and cache decompressed checksum
+        uint32_t decompCrc;
+        uint64_t decompSize;
+        if (computeCksumFile(finalPath, decompCrc, decompSize)) {
+            saveDecompressedCksumToCache(cacheDir, url, decompCrc, decompSize);
+        }
+        
+        // Remove backup file only after successful decompression
+        if (!backupPath.empty()) {
+            remove(backupPath.c_str());
+            cerr << "  Removed backup file: " << backupPath << "\n";
         }
     } else {
         // Not gzipped, just rename
         if (rename(tempGzPath.c_str(), finalPath.c_str()) != 0) {
             remove(tempGzPath.c_str());
+            // Restore backup if rename fails
+            if (!backupPath.empty()) {
+                rename(backupPath.c_str(), finalPath.c_str());
+                cerr << "  Restored backup file: " << finalPath << "\n";
+            }
             errorMsg = "Could not rename temporary file to final output: " + finalPath;
             return false;
+        }
+        
+        // Remove backup file only after successful rename
+        if (!backupPath.empty()) {
+            remove(backupPath.c_str());
+            cerr << "  Removed backup file: " << backupPath << "\n";
         }
     }
     

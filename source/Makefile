@@ -177,6 +177,11 @@ test_download_untrusted: CellRangerFormatter.o
 	$(CXX) -std=c++11 -I./ $(CPPFLAGS) $(CXXFLAGS) ../test/test_download_untrusted.cpp CellRangerFormatter.o -Lhtslib -lhts -lz -o ../test/test_download_untrusted
 	../test/test_download_untrusted
 
+.PHONY: test_replace_unverifiable
+test_replace_unverifiable: CellRangerFormatter.o
+	$(CXX) -std=c++11 -I./ $(CPPFLAGS) $(CXXFLAGS) ../test/test_replace_unverifiable.cpp CellRangerFormatter.o -Lhtslib -lhts -lz -o ../test/test_replace_unverifiable
+	../test/test_replace_unverifiable
+
 .PHONY: test_autocksum
 test_autocksum: CellRangerFormatter.o
 	$(CXX) -std=c++11 -I./ $(CPPFLAGS) $(CXXFLAGS) ../test/test_autocksum.cpp CellRangerFormatter.o -Lhtslib -lhts -lz -o ../test/test_autocksum

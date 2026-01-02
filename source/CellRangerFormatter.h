@@ -53,7 +53,8 @@ Result formatGtf(const std::string& inputPath, const std::string& outputPath);
 // autoCksumUpdate: if true, attempt to auto-fill missing cksum from CHECKSUMS file for trusted URLs
 bool downloadReference(const std::string& url, const std::string& outputPath, 
                        uint32_t expectedCksum, uint64_t expectedSize, bool allowUntrusted,
-                       const std::string& cacheDir, bool autoCksumUpdate, std::string& errorMsg);
+                       const std::string& cacheDir, bool autoCksumUpdate, bool replaceUnverifiableFiles,
+                       std::string& errorMsg);
 
 // Check if URL is in trusted Ensembl FTP URL table
 bool isTrustedUrl(const std::string& url);
@@ -69,8 +70,9 @@ bool isTrustedOrHasKnownCksum(const std::string& url);
 bool loadCksumCache(const std::string& cacheDir);
 
 // Save cksum entry to cache file
+// allowOverwrite: if true, update existing entry; if false, skip if already exists
 // Returns true on success, false on error
-bool saveCksumToCache(const std::string& cacheDir, const std::string& url, uint32_t crc, uint64_t size);
+bool saveCksumToCache(const std::string& cacheDir, const std::string& url, uint32_t crc, uint64_t size, bool allowOverwrite = false);
 
 // Compute POSIX cksum of a file (CRC-32 XOR file size)
 // Returns true on success, false on error
@@ -84,6 +86,14 @@ bool computeCksumFile(const std::string& filePath, uint32_t& crc, uint64_t& size
 // On success, crc and size are filled with extracted values
 bool autoFillCksumFromChecksums(const std::string& url, const std::string& cacheDir, 
                                   uint32_t& crc, uint64_t& size, std::string& errorMsg);
+
+// Get decompressed cksum for URL (from cache)
+// Returns true if found and valid, false otherwise
+bool getDecompressedCksumForUrl(const std::string& url, uint32_t& crc, uint64_t& size);
+
+// Save decompressed cksum entry to cache file
+// Returns true on success, false on error
+bool saveDecompressedCksumToCache(const std::string& cacheDir, const std::string& url, uint32_t crc, uint64_t size);
 
 } // namespace CellRangerFormatter
 

@@ -1,0 +1,17 @@
+# Synthetic GTF for CellRangerFormatter parity
+# Note: Uses chr-prefixed chromosomes to match formatted FASTA output
+chr1	HAVANA	gene	100	200	.	+	.	gene_id "ENSG00000000001.1"; gene_name "GOOD1"; gene_type "protein_coding";
+chr1	HAVANA	transcript	100	200	.	+	.	gene_id "ENSG00000000001.1"; transcript_id "ENST00000000001.2"; gene_type "protein_coding"; transcript_type "protein_coding";
+chr1	HAVANA	exon	100	150	.	+	.	gene_id "ENSG00000000001.1"; transcript_id "ENST00000000001.2"; exon_id "ENSE00000000001.3"; gene_type "protein_coding"; transcript_type "protein_coding";
+chr1	HAVANA	transcript	120	180	.	+	.	gene_id "ENSG00000000001.1"; gene_name "GOOD1"; transcript_id "ENST00000000001.3"; gene_type "protein_coding"; transcript_type "protein_coding";
+chr1	HAVANA	gene	300	400	.	-	.	gene_id "ENSG00000000002.1"; gene_name "GOOD2"; gene_type "lncRNA";
+chr1	HAVANA	transcript	300	400	.	-	.	gene_id "ENSG00000000002.1"; transcript_id "ENST00000000002.1"; gene_type "lncRNA"; transcript_type "lncRNA";
+chr1	HAVANA	exon	300	350	.	-	.	gene_id "ENSG00000000002.1"; transcript_id "ENST00000000002.1"; exon_id "ENSE00000000002.1"; gene_type "lncRNA"; transcript_type "lncRNA";
+chr1	HAVANA	gene	500	600	.	+	.	gene_id "ENSG00000000003.1"; gene_name "READTHROUGH"; gene_type "protein_coding";
+chr1	HAVANA	transcript	500	600	.	+	.	gene_id "ENSG00000000003.1"; transcript_id "ENST00000000003.1"; gene_type "protein_coding"; transcript_type "protein_coding"; tag "readthrough_transcript";
+chr1	HAVANA	exon	500	520	.	+	.	gene_id "ENSG00000000003.1"; transcript_id "ENST00000000003.1"; exon_id "ENSE00000000003.1"; gene_type "protein_coding"; transcript_type "protein_coding"; tag "readthrough_transcript";
+chr1	HAVANA	gene	700	800	.	+	.	gene_id "ENSG00000000004.1"; gene_name "BAD_BIOTYPE"; gene_type "pseudogene";
+chr1	HAVANA	transcript	700	800	.	+	.	gene_id "ENSG00000000004.1"; transcript_id "ENST00000000004.1"; gene_type "pseudogene"; transcript_type "pseudogene";
+chrY	HAVANA	gene	100	200	.	+	.	gene_id "ENSG00000000005.1"; gene_name "PAR_GENE"; gene_type "protein_coding"; tag "PAR";
+chrY	HAVANA	transcript	100	200	.	+	.	gene_id "ENSG00000000005.1"; transcript_id "ENST00000000005.1"; gene_type "protein_coding"; transcript_type "protein_coding"; tag "PAR";
+chrY	HAVANA	exon	100	150	.	+	.	gene_id "ENSG00000000005.1"; transcript_id "ENST00000000005.1"; exon_id "ENSE00000000005.1"; gene_type "protein_coding"; transcript_type "protein_coding"; tag "PAR";

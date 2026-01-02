@@ -112,9 +112,13 @@ autoCksumUpdate                 No
                                 When enabled, trusted Ensembl/GENCODE URLs missing cksum will automatically
                                 download the CHECKSUMS file, extract the cksum for the target filename, and
                                 save it to the cksum cache. This allows trusted URLs to work without manual
-                                cksum configuration. Safe to enable: only affects trusted URLs, only downloads
-                                CHECKSUMS (small text files), and only fills missing cksums (does not override
-                                existing values).
+                                cksum configuration.
+
+replaceUnverifiableFiles        No
+    string:                     Yes/No - replace existing final files that cannot be verified
+                                No          ... keep existing unverifiable files (warn only)
+                                Yes         ... re-decompress/re-download and overwrite unverifiable files
+                                Checksum mismatches always error (ignore this flag)
 
 cellrangerRefRelease            2024-A
     string:                     CellRanger reference release to use for default URLs when no explicit inputs provided
