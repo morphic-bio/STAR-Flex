@@ -72,12 +72,36 @@ LibraryFormat LibFormatDetector::finalizeOrFail(std::ostream& logStream) {
     }
     
     // formatName() is defined in the same module (LibFormatDetection.cpp)
+    int unknown_votes = 0;
     logStream << "Library format votes: ";
     for (const auto& kv : format_votes_) {
-        logStream << formatName(LibraryFormat::formatFromID(kv.first)) 
-                  << "=" << kv.second << " ";
+        LibraryFormat fmt = LibraryFormat::formatFromID(kv.first);
+        const std::string name = formatName(fmt);
+        if (name == "UNKNOWN") {
+            unknown_votes += kv.second;
+        }
+        logStream << name << "(" << static_cast<int>(kv.first) << ")="
+                  << kv.second << " ";
     }
     logStream << "\n";
+
+    const double winner_frac = static_cast<double>(max_votes) / static_cast<double>(total_votes_);
+    const double unknown_frac = static_cast<double>(unknown_votes) / static_cast<double>(total_votes_);
+    LibraryFormat winner_fmt = LibraryFormat::formatFromID(winner_id);
+    if (winner_frac < 0.85) {
+        logStream << "WARNING: Auto-detect winner is weak (" << max_votes << "/"
+                  << total_votes_ << " = " << winner_frac << ").\n";
+    }
+    if (winner_fmt.orientation == ReadOrientation::AWAY ||
+        winner_fmt.orientation == ReadOrientation::SAME ||
+        formatName(winner_fmt) == "UNKNOWN") {
+        logStream << "WARNING: Auto-detected library format is outward/same-strand ("
+                  << formatName(winner_fmt) << "). Check mate order and library prep.\n";
+    }
+    if (unknown_frac > 0.15) {
+        logStream << "WARNING: UNKNOWN-format votes are high (" << unknown_votes << "/"
+                  << total_votes_ << " = " << unknown_frac << ").\n";
+    }
     
     return LibraryFormat::formatFromID(winner_id);
 }
@@ -215,4 +239,3 @@ LibraryFormat parseLibFormat(const std::string& s) {
               << "'. This should have been caught during parameter validation.\n";
     exit(1);
 }
-

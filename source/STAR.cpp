@@ -383,7 +383,8 @@ int main(int argInN, char *argIn[])
         P.quant.transcriptVB.inDetectionMode = false;  // Detection done
         
         // formatName() is defined in LibFormatDetection.h (see Section 9)
-        P.inOut->logMain << "Detected library format: " << formatName(detected) 
+        P.inOut->logMain << "Detected library format: " << formatName(detected)
+                         << " (formatID=" << static_cast<int>(detected.typeId()) << ")"
                          << " from " << P.iReadAll << " reads\n" << flush;
         
         // Clean up detector (no longer needed)

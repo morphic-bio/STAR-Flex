@@ -341,29 +341,35 @@ void TranscriptQuantEC::addReadAlignments(Transcript* trMult, uint nTr, const st
     if (P_.quant.transcriptVB.inDetectionMode && 
         P_.quant.transcriptVB.libFormatDetector != nullptr) {
         
-        // Only vote on primary alignments (skip secondary/supplementary)
-        // Find first primary alignment that is a proper PE pair
+        // Prefer primary alignments, but do not require them for detection.
+        // primaryFlag is only set when TranscriptomeSAM output is enabled.
+        Transcript* vote_tr = nullptr;
         for (uint i = 0; i < nTr; ++i) {
             Transcript* tr = &trMult[i];
-            // Skip secondary/supplementary alignments
-            if (!tr->primaryFlag) {
+            if (tr->readNmates != 2) {
                 continue;
             }
-            
-            if (tr->readNmates == 2) {
-                // Find mate boundary
-                bool proper = false;
-                for (uint j = 0; j < tr->nExons - 1; j++) {
-                    if (tr->canonSJ[j] == -3) {
-                        proper = (tr->exons[0][EX_iFrag] != tr->exons[tr->nExons-1][EX_iFrag]);
-                        break;
-                    }
-                }
-                if (proper) {
-                    P_.quant.transcriptVB.libFormatDetector->vote(tr);
-                    break;  // Only vote once per read (use first primary proper pair)
+            // Find mate boundary
+            bool proper = false;
+            for (uint j = 0; j < tr->nExons - 1; j++) {
+                if (tr->canonSJ[j] == -3) {
+                    proper = (tr->exons[0][EX_iFrag] != tr->exons[tr->nExons-1][EX_iFrag]);
+                    break;
                 }
             }
+            if (!proper) {
+                continue;
+            }
+            if (tr->primaryFlag) {
+                vote_tr = tr;
+                break;  // Use first primary proper pair if present
+            }
+            if (vote_tr == nullptr) {
+                vote_tr = tr;  // Fallback to first proper pair
+            }
+        }
+        if (vote_tr != nullptr) {
+            P_.quant.transcriptVB.libFormatDetector->vote(vote_tr);
         }
     }
     
