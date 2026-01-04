@@ -35,6 +35,9 @@ uint32_t quality_trim_5p(const char* qual, uint32_t len, uint8_t cutoff);
 uint32_t find_adapter_3p(const char* seq, uint32_t seq_len,
                         const char* adapter, uint32_t adapter_len,
                         uint32_t min_overlap, double max_error_rate);
+uint32_t find_adapter_3p_compat3(const char* seq, uint32_t seq_len,
+                                 const char* adapter, uint32_t adapter_len,
+                                 uint32_t min_overlap, double max_error_rate);
 
 // Initialize params with Trim Galore defaults
 void trim_params_init(struct TrimParams* params) {
@@ -45,6 +48,7 @@ void trim_params_init(struct TrimParams* params) {
     params->min_overlap = 1;  // Trim Galore default (--stringency 1)
     params->max_error_rate = 0.1;
     params->trim_5p_quality = false;
+    params->compat_mode = TRIM_COMPAT_OFF;  // Default: cutadapt 5.1 parity
 }
 
 // Single read trimming (in-place modification of seq/qual buffers)
@@ -87,8 +91,14 @@ struct TrimResult trim_read(char* seq, char* qual, uint32_t len,
     uint32_t adapter_pos = len;
     if (adapter != nullptr && strlen(adapter) > 0) {
         uint32_t adapter_len = strlen(adapter);
-        adapter_pos = find_adapter_3p(seq, len, adapter, adapter_len,
-                                               params->min_overlap, params->max_error_rate);
+        // Switch adapter matching algorithm based on compatibility mode
+        if (params->compat_mode == TRIM_COMPAT_CUTADAPT3) {
+            adapter_pos = find_adapter_3p_compat3(seq, len, adapter, adapter_len,
+                                                 params->min_overlap, params->max_error_rate);
+        } else {
+            adapter_pos = find_adapter_3p(seq, len, adapter, adapter_len,
+                                          params->min_overlap, params->max_error_rate);
+        }
         if (adapter_pos < len) {
             result.adapter_trimmed = len - adapter_pos;
             len = adapter_pos;

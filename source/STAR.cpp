@@ -623,7 +623,7 @@ int main(int argInN, char *argIn[])
         // 5. Write quant.sf
         writeQuantSF(result, state, P.quant.transcriptVB.outFile);
         
-        // 6. Write quant.genes.sf (gene-level aggregation)
+        // 6. Write quant.genes.sf (gene-level aggregation, Legacy mode)
         if (P.quant.transcriptVB.geneOutput) {
             int geneResult = writeQuantGeneSF(result, state, *transcriptomeMain, 
                                                P.quant.transcriptVB.outFileGene);
@@ -640,6 +640,20 @@ int main(int argInN, char *argIn[])
                     // MissingGeneID warning
                     P.inOut->logMain << "WARNING: transcripts with MissingGeneID were aggregated "
                                      << "to a single gene entry in quant.genes.sf\n";
+                }
+            }
+            
+            // 6b. Write tximport-style gene output if enabled
+            if (P.quant.transcriptVB.genesTximport) {
+                int tximportResult = writeQuantGeneSFTximport(result, state, *transcriptomeMain,
+                                                              P.quant.transcriptVB.outFileGeneTximport);
+                
+                if (tximportResult == 1) {
+                    P.inOut->logMain << "ERROR: Failed to open tximport gene output file: "
+                                     << P.quant.transcriptVB.outFileGeneTximport << "\n";
+                } else {
+                    P.inOut->logMain << "Gene quantification (tximport mode) written to: "
+                                     << P.quant.transcriptVB.outFileGeneTximport << "\n";
                 }
             }
         }

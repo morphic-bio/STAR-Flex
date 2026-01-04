@@ -22,11 +22,16 @@
 void printUsage(const char* progName) {
     std::cerr << "Usage: " << progName << " -1 <R1.fastq> -2 <R2.fastq> "
               << "-o1 <out_R1.fastq> -o2 <out_R2.fastq> [options]\n";
+    std::cerr << "   or: " << progName << " --single --adapter <seq> [options]\n";
     std::cerr << "\nOptions:\n";
     std::cerr << "  --quality <int>     Quality threshold (default: 20)\n";
     std::cerr << "  --length <int>      Minimum read length (default: 20)\n";
     std::cerr << "  --adapter-r1 <seq>  R1 adapter sequence (default: TruSeq R1)\n";
     std::cerr << "  --adapter-r2 <seq>  R2 adapter sequence (default: TruSeq R2)\n";
+    std::cerr << "  --adapter <seq>     Adapter for single-read mode\n";
+    std::cerr << "  --min-overlap <int> Minimum adapter overlap (default: 1)\n";
+    std::cerr << "  --compat <mode>     Compatibility mode: Off (default) or Cutadapt3\n";
+    std::cerr << "  --single            Single-read mode (reads seq+qual from stdin, outputs trimmed)\n";
     std::cerr << "\n";
 }
 
@@ -60,6 +65,8 @@ void writeFastqRecord(std::ofstream& out, const FastqRecord& rec) {
 
 int main(int argc, char** argv) {
     std::string r1_in, r2_in, r1_out, r2_out;
+    std::string single_adapter;
+    bool single_mode = false;
     struct TrimParams params;
     trim_params_init(&params);
     
@@ -81,6 +88,23 @@ int main(int argc, char** argv) {
             params.adapter_r1 = argv[++i];
         } else if (strcmp(argv[i], "--adapter-r2") == 0 && i + 1 < argc) {
             params.adapter_r2 = argv[++i];
+        } else if (strcmp(argv[i], "--adapter") == 0 && i + 1 < argc) {
+            single_adapter = argv[++i];
+        } else if (strcmp(argv[i], "--min-overlap") == 0 && i + 1 < argc) {
+            params.min_overlap = (uint32_t)atoi(argv[++i]);
+        } else if (strcmp(argv[i], "--single") == 0) {
+            single_mode = true;
+        } else if (strcmp(argv[i], "--compat") == 0 && i + 1 < argc) {
+            std::string compat = argv[++i];
+            if (compat == "Cutadapt3") {
+                params.compat_mode = TRIM_COMPAT_CUTADAPT3;
+            } else if (compat == "Off" || compat == "-") {
+                params.compat_mode = TRIM_COMPAT_OFF;
+            } else {
+                std::cerr << "Error: Invalid compat mode: " << compat << "\n";
+                std::cerr << "Valid options: Off, Cutadapt3\n";
+                return 1;
+            }
         } else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
             printUsage(argv[0]);
             return 0;
@@ -89,6 +113,43 @@ int main(int argc, char** argv) {
             printUsage(argv[0]);
             return 1;
         }
+    }
+    
+    // Single-read mode: read seq and qual from stdin, output trimmed to stdout
+    if (single_mode) {
+        if (single_adapter.empty()) {
+            std::cerr << "Error: --single mode requires --adapter\n";
+            return 1;
+        }
+        
+        std::string seq, qual;
+        if (!std::getline(std::cin, seq) || !std::getline(std::cin, qual)) {
+            std::cerr << "Error: Expected seq and qual on stdin\n";
+            return 1;
+        }
+        
+        // Trim the read
+        const size_t max_len = 1000;
+        char seq_buf[max_len + 1], qual_buf[max_len + 1];
+        uint32_t len = seq.length();
+        
+        if (len > max_len) {
+            std::cerr << "Error: Read length exceeds " << max_len << "\n";
+            return 1;
+        }
+        
+        memcpy(seq_buf, seq.c_str(), len);
+        memcpy(qual_buf, qual.c_str(), len);
+        
+        struct TrimResult result = trim_read(seq_buf, qual_buf, len, single_adapter.c_str(), &params);
+        
+        // Output trimmed sequence
+        std::cout << "Trimmed: " << std::string(seq_buf, result.new_length) << "\n";
+        std::cout << "TrimPos: " << result.new_length << "\n";
+        std::cout << "AdapterTrimmed: " << result.adapter_trimmed << "\n";
+        std::cout << "QualityTrimmed: " << result.qual_trimmed_3p << "\n";
+        
+        return 0;
     }
     
     if (r1_in.empty() || r2_in.empty() || r1_out.empty() || r2_out.empty()) {

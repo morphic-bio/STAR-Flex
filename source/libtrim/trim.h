@@ -8,6 +8,12 @@
 #define TRUSEQ_ADAPTER_R1 "AGATCGGAAGAGCACACGTCTGAACTCCAGTCA"
 #define TRUSEQ_ADAPTER_R2 "AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT"
 
+// Compatibility mode enum for adapter matching
+enum TrimCompatMode {
+    TRIM_COMPAT_OFF = 0,      // Default: cutadapt 5.1 parity
+    TRIM_COMPAT_CUTADAPT3 = 1 // cutadapt 3.x compatibility mode
+};
+
 struct TrimParams {
     const char* adapter_r1;    // Default: TRUSEQ_ADAPTER_R1
     const char* adapter_r2;    // Default: TRUSEQ_ADAPTER_R2
@@ -16,6 +22,7 @@ struct TrimParams {
     uint32_t min_overlap;      // Default: 1 (Trim Galore default --stringency 1)
     double max_error_rate;     // Default: 0.1 (mismatches = floor(overlap * 0.1))
     bool trim_5p_quality;      // Default: false (match Trim Galore)
+    enum TrimCompatMode compat_mode; // Default: TRIM_COMPAT_OFF (cutadapt 5.1)
     // Future hooks (currently unused):
     // bool trim_5p_adapter;   // Reserved for 5' adapter trimming
     // const char** extra_adapters; // Reserved for multiple adapter support

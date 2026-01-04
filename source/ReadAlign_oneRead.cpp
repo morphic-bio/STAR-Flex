@@ -116,6 +116,12 @@ int ReadAlign::oneRead() {//process one read: load, map, write
         trim_params_init(&params);
         params.quality_cutoff = P.trimCutadaptQuality;
         params.min_length = P.trimCutadaptMinLength;
+        // Set compatibility mode
+        if (P.trimCutadaptCompat == "Cutadapt3") {
+            params.compat_mode = TRIM_COMPAT_CUTADAPT3;
+        } else {
+            params.compat_mode = TRIM_COMPAT_OFF;  // Default: "-" or "Off"
+        }
         // Set adapters if custom (validate exactly 2 adapters)
         if (P.trimCutadaptAdapter.size() == 2 && P.trimCutadaptAdapter[0] != "-" && P.trimCutadaptAdapter[1] != "-") {
             params.adapter_r1 = P.trimCutadaptAdapter[0].c_str();

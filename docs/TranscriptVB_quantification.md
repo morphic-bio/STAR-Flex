@@ -58,8 +58,19 @@ STAR --runMode alignReads \
 | `--quantMode TranscriptVB` | - | Enable TranscriptVB quantification |
 | `--quantVBgcBias` | 0 | Enable GC bias collection (0/1) |
 | `--quantVBem` | 0 | Use EM instead of VB (0/1) |
+| `--quantVBLibType` | A | Library format for compatibility (A=auto-detect, IU/ISF/ISR/U fixed) |
+| `--quantVBAutoDetectWindow` | 1000 | Number of reads used for auto-detect (when `--quantVBLibType A`) |
 | `--quantVBprior` | 0.01 | Dirichlet prior for VB algorithm |
 | `--quantVBgenes` | 1 | Output gene-level quantification (0/1) |
+
+### Library Format Auto-Detect Warnings
+
+When `--quantVBLibType A` is used, STAR logs format votes and may emit warnings in these cases:
+- Winner is weak (<85% of votes).
+- Winner is outward/same-strand (OSF/OSR/MSF/MSR) or labeled UNKNOWN.
+- UNKNOWN votes exceed 15% of total.
+
+These warnings often indicate mate order issues (R1/R2 swapped) or unexpected library prep. If you see them, verify mate order (for these pipelines STAR expects R2 then R1) or set `--quantVBLibType` explicitly.
 
 ## Output Files
 
@@ -222,4 +233,3 @@ TranscriptVB was validated against Salmon using the same STAR alignment BAM file
 - Salmon: Patro et al. (2017) "Salmon provides fast and bias-aware quantification of transcript expression"
 - STAR: Dobin et al. (2013) "STAR: ultrafast universal RNA-seq aligner"
 - Variational Bayes for RNA-seq: Based on collapsed VB inference for Dirichlet-Multinomial models
-

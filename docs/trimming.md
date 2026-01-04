@@ -12,6 +12,7 @@ STAR-Flex includes an optional cutadapt-parity trimming feature that matches Tri
 | `--trimCutadaptQuality` | `20` | Quality threshold (Phred scale) |
 | `--trimCutadaptMinLength` | `20` | Minimum read length after trimming |
 | `--trimCutadaptAdapter` | `-` | Custom R1/R2 adapters (space-separated) or `-` for TruSeq defaults |
+| `--trimCutadaptCompat` | `-` | Compatibility mode (`-`/`Off`/`Cutadapt3`). Default uses cutadapt 5.1 parity. `Cutadapt3` enables cutadapt 3.x compatibility mode. |
 
 **Important**: When `--trimCutadapt Yes` is enabled, all `clip*` parameters are ignored and ClipMate clipping is bypassed.
 
@@ -59,6 +60,19 @@ Custom adapter sequences for R1 and R2 (space-separated).
 - **Default**: `-` (uses default TruSeq adapters)
 - **Format**: Two adapter sequences separated by space
 - **Example**: `AGATCGGAAGAGCACACGTCTGAACTCCAGTCA AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT`
+
+### `--trimCutadaptCompat`
+
+Compatibility mode for adapter matching algorithm.
+
+- **Default**: `-` or `Off` (cutadapt 5.1 parity)
+- **Options**:
+  - `-` or `Off`: Use default cutadapt 5.1 matching algorithm (default)
+  - `Cutadapt3`: Use cutadapt 3.x compatibility mode for matching Trim Galore/cutadapt 3.2 behavior
+
+**When to use**: Enable `Cutadapt3` mode when you need to match trimming results from datasets processed with Trim Galore using cutadapt 3.2 (or earlier 3.x versions). This mode adjusts adapter matching tie-breaking to prefer earlier matches (shorter trims) and relaxes acceptance criteria for short overlaps, reproducing the behavior differences between cutadapt 3.x and 5.x.
+
+**Note**: Compatibility mode only affects adapter matching behavior, not quality trimming or minimum length logic.
 
 ## Default Adapter Sequences
 

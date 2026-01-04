@@ -14,8 +14,9 @@ This document lists **STAR-Flex-only parameters** that are not present in upstre
 | `--trimCutadaptQuality` | `20` | Quality threshold for 3' trimming (Phred scale, integer) |
 | `--trimCutadaptMinLength` | `20` | Minimum read length after trimming. Pairs with either mate shorter than this are dropped (integer) |
 | `--trimCutadaptAdapter` | `-` | Custom adapter sequences for R1 and R2 (space-separated). Default (`-`) uses TruSeq adapters: `AGATCGGAAGAGCACACGTCTGAACTCCAGTCA` (R1) and `AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT` (R2) |
+| `--trimCutadaptCompat` | `-` | Compatibility mode for adapter matching (`-`/`Off`/`Cutadapt3`). Default (`-`/`Off`) uses cutadapt 5.1 parity. `Cutadapt3` enables cutadapt 3.x compatibility mode for matching Trim Galore/cutadapt 3.2 behavior. |
 
-**Note**: Trimming achieves perfect parity with Trim Galore/cutadapt v5.1. See [docs/trimming.md](docs/trimming.md) for algorithm details and usage examples.
+**Note**: Trimming achieves perfect parity with Trim Galore/cutadapt v5.1 by default. The `Cutadapt3` compatibility mode reproduces cutadapt 3.x behavior for datasets processed with older Trim Galore versions. See [docs/trimming.md](docs/trimming.md) for algorithm details and usage examples.
 
 ### Y-Chromosome BAM Split
 

@@ -8,6 +8,7 @@ This folder holds the minimal helpers to build a flex-capable STAR reference:
 - `build_filtered_reference.sh`: Full pipeline to filter probes, generate probe-only FASTA/GTF, build a hybrid FASTA/GTF (base genome + filtered probes), and emit BED/probe lists + manifests under `filtered_reference/`.
 - `make_filtered_star_index.sh`: Run STAR genomeGenerate on the filtered hybrid reference produced by `build_filtered_reference.sh`.
 - `mk_probe_bed.py`: Helper used by `build_filtered_reference.sh` to generate exon BED entries for probe genes.
+- `compare_run_parity.sh`: Compare two STAR runs (logs, BAM stats) and optionally validate trim parity against Trim Galore outputs.
 
 Usage examples:
 
@@ -33,6 +34,20 @@ Usage examples:
   --filtered-reference work/filtered_reference \
   --output-dir work/star_index_filtered \
   --threads 24
+
+# Compare autoindex vs baseline runs (logs + BAM stats + trim parity sample)
+./scripts/compare_run_parity.sh \
+  --auto-dir /storage/production/JAX_PE_comp_auto/autoindex_vb \
+  --base-dir /storage/production/JAX_PE_comp_control_trimmed_base_twopass_basic/ref_vb \
+  --out-dir /storage/production/JAX_PE_comp_report \
+  --raw-r1 /storage/JAX_PE/PPARG_R_WT_3_GT24-02468_ATGAGGCC-CAATTAAC_S21_L001_R1_001.fastq.gz \
+  --raw-r2 /storage/JAX_PE/PPARG_R_WT_3_GT24-02468_ATGAGGCC-CAATTAAC_S21_L001_R2_001.fastq.gz \
+  --trimmed-r1 /mnt/pikachu/processing/morphic-jax/JAX_RNAseq7_Reversion/trimmed/PPARG_R_WT_3_GT24-02468_ATGAGGCC-CAATTAAC_S21_L001_R1_001_val_1.fq.gz \
+  --trimmed-r2 /mnt/pikachu/processing/morphic-jax/JAX_RNAseq7_Reversion/trimmed/PPARG_R_WT_3_GT24-02468_ATGAGGCC-CAATTAAC_S21_L001_R2_001_val_2.fq.gz \
+  --trim-sample 100000
+
+# If the baseline BAM is unsorted and you want idxstats, add:
+#   --idxstats-sort-unsorted
 ```
 
 Notes:

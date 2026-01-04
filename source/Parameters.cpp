@@ -211,6 +211,7 @@ Parameters::Parameters() {//initalize parameters info
     parArray.push_back(new ParameterInfoScalar <uint8> (-1, -1, "trimCutadaptQuality", &trimCutadaptQuality));
     parArray.push_back(new ParameterInfoScalar <uint32> (-1, -1, "trimCutadaptMinLength", &trimCutadaptMinLength));
     parArray.push_back(new ParameterInfoVector <string> (-1, -1, "trimCutadaptAdapter", &trimCutadaptAdapter));
+    parArray.push_back(new ParameterInfoScalar <string> (-1, -1, "trimCutadaptCompat", &trimCutadaptCompat));
 
     //binning, anchors, windows
     parArray.push_back(new ParameterInfoScalar <uint>   (-1, -1, "winBinNbits", &winBinNbits));
@@ -315,6 +316,7 @@ Parameters::Parameters() {//initalize parameters info
     parArray.push_back(new ParameterInfoScalar <double>   (-1, -1, "quantVBprior", &quant.transcriptVB.vbPrior));
     parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "quantVBem", &quant.transcriptVB.quantVBemInt)); // If true, use EM instead of VB
     parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "quantVBgenes", &quant.transcriptVB.geneOutputInt));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "quantVBgenesMode", &quant.transcriptVB.genesModeStr));
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "quantVBLibType", &quant.transcriptVB.libType));
     parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "quantVBAutoDetectWindow", &quant.transcriptVB.autoDetectWindow));
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "quantVBTrace", &quant.transcriptVB.traceFile));
@@ -1196,6 +1198,22 @@ void Parameters::inputParameters (int argInN, char* argIn[]) {//input parameters
             quant.transcriptVB.outFile = outFileNamePrefix + "quant.sf";
         }
         quant.transcriptVB.outFileGene = outFileNamePrefix + "quant.genes.sf";
+        quant.transcriptVB.outFileGeneTximport = outFileNamePrefix + "quant.genes.tximport.sf";
+        
+        // Parse genesMode: Legacy or Tximport
+        string genesModeLower = quant.transcriptVB.genesModeStr;
+        for (auto& c : genesModeLower) c = std::tolower(c);
+        if (genesModeLower == "legacy") {
+            quant.transcriptVB.genesTximport = false;
+        } else if (genesModeLower == "tximport") {
+            quant.transcriptVB.genesTximport = true;
+        } else {
+            ostringstream errOut;
+            errOut << "EXITING because of FATAL PARAMETER ERROR: "
+                   << "--quantVBgenesMode must be 'Legacy' or 'Tximport'\n"
+                   << "Got: " << quant.transcriptVB.genesModeStr << "\n";
+            exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
+        }
         
         // Validate autoDetectWindow is positive
         if (quant.transcriptVB.autoDetectWindow <= 0) {
@@ -1356,6 +1374,12 @@ void Parameters::inputParameters (int argInN, char* argIn[]) {//input parameters
         if (trimCutadapt == "Yes") {
             inOut->logMain << "WARNING: --trimCutadapt is enabled. Existing clip* parameters will be IGNORED.\n";
             inOut->logMain << "         ClipMate clipping is bypassed; trimming uses trimCutadapt* parameters instead.\n";
+        }
+        
+        // Warn if compatibility mode is enabled (non-default trimming)
+        if (trimCutadapt == "Yes" && trimCutadaptCompat == "Cutadapt3") {
+            inOut->logMain << "NOTICE: --trimCutadaptCompat Cutadapt3 is enabled. Using cutadapt 3.x compatibility mode.\n";
+            inOut->logMain << "         This mode reproduces Trim Galore/cutadapt 3.2 behavior for adapter matching.\n";
         }
 
     //alignEnds

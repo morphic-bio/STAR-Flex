@@ -352,6 +352,12 @@ trimCutadaptAdapter             -
                - ... use default TruSeq adapters
                AGATCGGAAGAGCACACGTCTGAACTCCAGTCA AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT
 
+trimCutadaptCompat              -
+    string: compatibility mode for adapter matching
+            -    ... off (default, cutadapt 5.1 parity)
+            Off  ... off (same as -)
+            Cutadapt3 ... cutadapt 3.x compatibility mode (for matching Trim Galore/cutadapt 3.2 behavior)
+
 ### Limits
 limitGenomeGenerateRAM               31000000000
     int>0: maximum available RAM (bytes) for genome generation
@@ -901,7 +907,13 @@ quantVBem                            0
     int: 0/1 - use EM instead of VB for transcript quantification (TranscriptVB mode)
 
 quantVBgenes                         1
-    int: 0 or 1
+    int: 0 or 1 - output gene-level quantification (quant.genes.sf)
+
+quantVBgenesMode                     Legacy
+    string: Gene-level count mode
+                Legacy   ... raw counts summed by gene (Salmon-compatible)
+                Tximport ... lengthScaledTPM counts (tximport-compatible)
+            When Tximport mode is enabled, an additional output file quant.genes.tximport.sf is written.
 
 quantVBLibType                        A
     string: Library format for EC building: A=auto-detect, IU=inward unstranded, ISF=inward stranded forward, ISR=inward stranded reverse, U=single-end unstranded

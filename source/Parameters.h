@@ -102,6 +102,7 @@ class Parameters {
         uint8 trimCutadaptQuality;
         uint32 trimCutadaptMinLength;
         vector <string> trimCutadaptAdapter;
+        string trimCutadaptCompat;  // Compatibility mode: "-"/"Off" (default) or "Cutadapt3"
 
         //align parameters
         uint alignSJoverhangMin,alignSJDBoverhangMin,alignSplicedMateMapLmin; //min SJ donor/acceptor length
@@ -342,6 +343,10 @@ class Parameters {
                 bool geneOutput=true;   // Output gene-level quant (default: yes)
                 int geneOutputInt=1;    // CLI flag (0/1)
                 string outFileGene;     // Gene output file path
+                string outFileGeneTximport; // tximport-style gene output
+                // Gene summarization mode
+                string genesModeStr = "Legacy";  // "Legacy" or "Tximport"
+                bool genesTximport = false;      // If true, use lengthScaledTPM counts
                 
                 // Library format detection and EC building parameters
                 string libType = "A";      // A=auto, IU, ISF, ISR, U
