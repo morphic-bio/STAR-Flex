@@ -6,7 +6,7 @@ This document describes the STAR-Flex fork, which extends upstream STAR with add
 
 STAR-Flex extends STAR with additional features:
 
-1. **Cutadapt-style trimming** (`--trimCutadapt Yes`) for **bulk RNA-seq** with perfect parity to Trim Galore/cutadapt v5.1. This is a general-purpose trimming feature usable with any STAR workflow (bulk RNA-seq, single-cell, etc.). See [docs/trimming.md](docs/trimming.md) for details.
+1. **Cutadapt-style trimming** (`--trimCutadapt Yes`) for **bulk RNA-seq** with perfect parity to Trim Galore/cutadapt v5.1. For legacy datasets processed with Trim Galore + cutadapt 3.2, enable `--trimCutadaptCompat Cutadapt3` (see [docs/cutadapt_3.2_parity_report.md](docs/cutadapt_3.2_parity_report.md)). This is a general-purpose trimming feature usable with any STAR workflow (bulk RNA-seq, single-cell, etc.). See [docs/trimming.md](docs/trimming.md) for details.
 
 2. **Inline hash-based pipeline for 10x Genomics Flex** (Fixed RNA Profiling) samples using probes for transcript detection and RTL tags for multiplexing. We generate a hybrid reference with the regular genome and with synthetic chromosomes for each of the probes. This allows to use the STAR alignment routines to quantify probe alignment and use the genomic hits to confirm the match and detect off-probe noise. However, the rest of the workflow diverges from the standard STAR solo workflow, largely due to the presence of RTL tags for multiplexing samples. Because these are on the same mate as the probe and not the cell barcode, STAR's barcode and UMI correction, and UMI deduping routines could not be used. Furthermore, the noise characteristics of Flex are different that the native STAR's multimapping ad emptyDrops functions could not be used. A fast inline path was created to handle Flex processing after STAR alignment.
 
@@ -27,7 +27,7 @@ This fork adds several features beyond upstream STAR:
 
 ### Bulk RNA-seq Features
 
-- **[Cutadapt-Style Trimming](docs/trimming.md)**: Perfect parity with Trim Galore/cutadapt v5.1 for quality and adapter trimming. Usable with any STAR workflow (bulk RNA-seq, single-cell, etc.).
+- **[Cutadapt-Style Trimming](docs/trimming.md)**: Perfect parity with Trim Galore/cutadapt v5.1 for quality and adapter trimming. For legacy datasets trimmed with Trim Galore + cutadapt 3.2, enable `--trimCutadaptCompat Cutadapt3` (see [docs/cutadapt_3.2_parity_report.md](docs/cutadapt_3.2_parity_report.md)).
 
 - **TranscriptVB (VB/EM) + Salmon parity workflow**: STAR-Flex can quantify transcripts with variational Bayes (VB, default) or EM, and can run Salmon in alignment mode for cross-tool parity checks.
   - **STAR TranscriptVB** (VB by default; set `--quantVBem 1` for EM):
@@ -104,6 +104,8 @@ This fork adds several features beyond upstream STAR:
 - **[Y-Chromosome BAM Split](docs/Y_CHROMOSOME_BAM_SPLIT.md)**: Split BAMs by Y-chromosome alignment. Developed for **Morphic requirements for KOLF cell lines** (not connected to Flex pipeline). Works with both bulk and single-cell workflows.
 
 ### Index-Time Features
+
+- **[AutoIndex + CellRanger-style references](docs/autoindex_cellranger.md)**: Optional reference download + integrity verification, CellRanger-style FASTA/GTF formatting, and automatic index creation in `--genomeDir` (`--autoIndex`, `--forceIndex`, `--forceAllIndex`).
 
 - **[Transcriptome FASTA Generation](#transcriptome-fasta-generation)**: Generate `transcriptome.fa` during index creation for Salmon quantification parity and TranscriptVB error modeling. Eliminates the need to run gffread/rsem-prepare-reference separately.
 
@@ -349,6 +351,27 @@ STAR \
   # --soloProbeList is auto-detected from probe_gene_list.txt in the index directory
 ```
 
+## AutoIndex + CellRanger-Style References
+
+STAR-Flex includes an index-time workflow to reproduce the “CellRanger-style” reference preparation (download → integrity checks → format FASTA/GTF → genomeGenerate).
+
+```bash
+STAR --runMode genomeGenerate \
+  --genomeDir /path/to/index \
+  --autoIndex Yes \
+  --cellrangerStyleIndex Yes \
+  --autoCksumUpdate Yes \
+  --sjdbOverhang 100 \
+  --runThreadN 16
+```
+
+Key outputs and paths:
+- Formatted inputs: `${genomeDir}/cellranger_ref/genome.fa`, `${genomeDir}/cellranger_ref/genes.gtf`
+- Download cache (default): `${genomeDir}/cellranger_ref_cache` (override with `--cellrangerStyleCacheDir`)
+- Rebuild controls: `--forceIndex Yes` (re-index), `--forceAllIndex Yes` (re-download + re-index)
+
+See [docs/autoindex_cellranger.md](docs/autoindex_cellranger.md) for URL selection (`--cellrangerRefRelease` / `--faUrl` / `--gtfUrl`), checksum flags, and parity test scripts.
+
 ## Transcriptome FASTA Generation
 
 STAR-Flex can generate `transcriptome.fa` during index creation, eliminating the need for separate gffread/rsem-prepare-reference runs. This is required for:
@@ -379,7 +402,11 @@ This produces `${genomeDir}/transcriptome.fa` alongside the standard index files
 
 ### CellRanger-Style Index
 
-When combined with `--cellrangerStyleIndex Yes`, the transcriptome is written to both:
+When `--cellrangerStyleIndex Yes`, STAR-Flex formats the annotation inputs into `${genomeDir}/cellranger_ref/`:
+- `${genomeDir}/cellranger_ref/genome.fa`
+- `${genomeDir}/cellranger_ref/genes.gtf`
+
+When combined with `--genomeGenerateTranscriptome Yes`, the transcriptome is written to both:
 - `${genomeDir}/transcriptome.fa` (standard path)
 - `${genomeDir}/cellranger_ref/transcriptome.fa` (CellRanger-compatible path)
 
@@ -688,25 +715,35 @@ tools/remove_y_reads/           # Standalone FASTQ Y-splitter CLI
 
 ## Code Statistics
 
-STAR-Flex adds approximately **16,000 lines of C++ code** on top of upstream STAR 2.7.11b.
+STAR-Flex adds approximately **33,800 lines of C/C++ code** on top of upstream STAR 2.7.11b.
 
 ### Summary (excluding third-party libraries)
 
 | Repository | Files | Lines |
 |------------|-------|-------|
-| Upstream STAR | 248 | 27,785 |
-| STAR-Flex | 306 | 43,849 |
-| **Difference** | **+58** | **+16,064** |
+| Upstream STAR (2.7.11b) | 250 | 28,228 |
+| STAR-Flex | 356 | 62,016 |
+| **Difference** | **+106** | **+33,788** |
 
-### Breakdown of New Code
+### Bulk/PE vs Flex (heuristic file classification)
 
-| Category | Lines | Files |
+| Category | Files | Lines |
 |----------|-------|-------|
-| New files in source/ | 5,797 | 39 |
-| Modifications to existing files | +4,439 | 25 |
-| source/libflex/ (Flex filtering library) | 4,899 | 16 |
-| source/solo/ (CB correction) | 933 | 4 |
-| **Total (Our Code)** | **~16,000** | |
+| Flex-specific | 25 | 9,670 |
+| Bulk/PE-specific | 44 | 10,993 |
+| Shared/core (includes overlap) | 287 | 41,353 |
+
+Bulk/PE-specific includes (among others) `source/libtrim/` (trimming) and `source/libem/` (TranscriptVB/EM + tximport-style gene summaries).
+
+### Key Bulk/PE Modules (selected)
+
+| Path | Files | Lines |
+|------|-------|-------|
+| `source/libtrim/` | 4 | 962 |
+| `source/libem/` | 26 | 4,873 |
+| `source/TranscriptomeFasta.*` | 2 | 231 |
+| `source/SamtoolsSorter.*` | 2 | 584 |
+| `source/CellRangerFormatter.*` | 2 | 1,863 |
 
 ### Third-party Libraries (included in repo)
 
@@ -716,4 +753,4 @@ STAR-Flex adds approximately **16,000 lines of C++ code** on top of upstream STA
 | klib/khash.h | 617 | 1 | New in STAR-Flex |
 | SimpleGoodTuring | 300 | 1 | Present in upstream |
 
-*Line counts include only compiled source files (.cpp, .h, .hpp) in source/. Excludes htslib, opal, reference data, scripts, and test fixtures.*
+*Line counts include only compiled source files (`.c`, `.cpp`, `.h`, `.hpp`) under `source/`. Excludes `source/htslib/`, `source/opal/`, reference data, scripts, and test fixtures. Generated by `scripts/count_cpp_lines.sh --upstream-ref 2.7.11b`.*

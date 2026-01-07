@@ -16,7 +16,28 @@ This document lists **STAR-Flex-only parameters** that are not present in upstre
 | `--trimCutadaptAdapter` | `-` | Custom adapter sequences for R1 and R2 (space-separated). Default (`-`) uses TruSeq adapters: `AGATCGGAAGAGCACACGTCTGAACTCCAGTCA` (R1) and `AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT` (R2) |
 | `--trimCutadaptCompat` | `-` | Compatibility mode for adapter matching (`-`/`Off`/`Cutadapt3`). Default (`-`/`Off`) uses cutadapt 5.1 parity. `Cutadapt3` enables cutadapt 3.x compatibility mode for matching Trim Galore/cutadapt 3.2 behavior. |
 
-**Note**: Trimming achieves perfect parity with Trim Galore/cutadapt v5.1 by default. The `Cutadapt3` compatibility mode reproduces cutadapt 3.x behavior for datasets processed with older Trim Galore versions. See [docs/trimming.md](docs/trimming.md) for algorithm details and usage examples.
+**Note**: Trimming achieves perfect parity with Trim Galore/cutadapt v5.1 by default. The `Cutadapt3` compatibility mode reproduces cutadapt 3.x behavior for datasets processed with older Trim Galore versions. See [docs/trimming.md](trimming.md) for algorithm details and usage examples.
+
+### TranscriptVB (VB/EM) + tximport-Style Gene Summaries
+
+**Note**: This is a bulk RNA-seq quantification feature (Salmon-style EC-based VB/EM) integrated into STAR-Flex.
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--quantMode TranscriptVB` | - | Enable TranscriptVB quantification (value of `--quantMode`) |
+| `--quantVBem` | `0` | Use EM instead of VB (0/1) |
+| `--quantVBLibType` | `A` | Library format (A=auto-detect; IU/ISF/ISR/U fixed) |
+| `--quantVBAutoDetectWindow` | `1000` | Reads used for auto-detect (when `--quantVBLibType A`) |
+| `--quantVBgenes` | `1` | Write gene summary `quant.genes.sf` (0/1) |
+| `--quantVBgenesMode` | `Legacy` | Gene summarization mode: `Legacy` (simple sum) or `Tximport` (lengthScaledTPM, writes `quant.genes.tximport.sf`) |
+
+See [docs/TranscriptVB_quantification.md](TranscriptVB_quantification.md) for details, warnings, and example commands.
+
+### Samtools-Style BAM Sorting Backend
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--outBAMsortMethod` | `star` | Coordinate-sorting backend for BAM output: `star` (legacy) or `samtools` (spill-to-disk) |
 
 ### Y-Chromosome BAM Split
 
@@ -30,6 +51,35 @@ This document lists **STAR-Flex-only parameters** that are not present in upstre
 | `--YOutput` | - | Optional: override default path for Y BAM output |
 
 See [docs/Y_CHROMOSOME_BAM_SPLIT.md](Y_CHROMOSOME_BAM_SPLIT.md) for details.
+
+## Index-Time Features
+
+### AutoIndex + CellRanger-Style Reference Formatting
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--autoIndex` | `No` | Build index in `--genomeDir` only if missing |
+| `--forceIndex` | `No` | Rebuild index even if it exists (keeps cached inputs) |
+| `--forceAllIndex` | `No` | Re-download/re-format/rebuild (wipes cache + formatted files) |
+| `--cellrangerStyleIndex` | `No` | Format FASTA/GTF using CellRanger-style rules before indexing |
+| `--cellrangerRefRelease` | `2024-A` | Default URL set used by AutoIndex when no inputs provided (`2024-A`/`2020-A`) |
+| `--cellrangerStyleCacheDir` | `-` | Cache directory for downloads and checksum cache (default `${genomeDir}/cellranger_ref_cache`) |
+| `--cellrangerStyleDownloadOnly` | `No` | Download-only mode (exit after download; skip formatting and indexing) |
+| `--faUrl` | `-` | FASTA URL (must be provided together with `--gtfUrl`) |
+| `--gtfUrl` | `-` | GTF URL (must be provided together with `--faUrl`) |
+| `--autoCksumUpdate` | `No` | Auto-fill missing checksums from CHECKSUMS files for trusted URLs |
+| `--replaceUnverifiableFiles` | `No` | Replace existing final files that cannot be verified (checksum mismatches still error) |
+| `--allUntrustedUrl` | `No` | Allow untrusted URLs without checksums (disables integrity checking for those URLs) |
+
+See [docs/autoindex_cellranger.md](autoindex_cellranger.md) for usage examples and output layout.
+
+### Transcriptome FASTA Generation
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--genomeGenerateTranscriptome` | `No` | Generate `${genomeDir}/transcriptome.fa` during genomeGenerate |
+| `--genomeGenerateTranscriptomeFasta` | `-` | Override transcriptome FASTA output path |
+| `--genomeGenerateTranscriptomeOverwrite` | `No` | Overwrite existing transcriptome FASTA (`Yes`/`No`) |
 
 ## Flex-Specific Features
 

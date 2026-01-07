@@ -95,10 +95,10 @@ Uses cutadapt's modified Mott algorithm:
 
 ### Adapter Matching
 
-Uses cutadapt's semiglobal alignment algorithm (exact port from cutadapt v5.1):
+Default mode (`--trimCutadaptCompat -/Off`) uses cutadapt's semiglobal alignment algorithm (exact port from cutadapt v5.1). Legacy compatibility mode (`--trimCutadaptCompat Cutadapt3`) uses a faithful port of cutadapt v3.2 adapter matching (see [docs/cutadapt_3.2_parity_report.md](cutadapt_3.2_parity_report.md)).
 
 - **Algorithm**: Semiglobal dynamic programming with edit distance (Levenshtein)
-- **Source**: Ported verbatim from `cutadapt v5.1` (`_align.pyx`, `Aligner.locate()` method)
+- **Source**: Ported verbatim from `cutadapt v5.1` (`_align.pyx`, `Aligner.locate()` method); Cutadapt3 mode ports cutadapt v3.2 matching/tie-breaking
 - **Minimum overlap**: 1 base (Trim Galore default `--stringency 1`)
 - **Maximum error rate**: 0.1 (10% errors allowed)
 - **Error threshold**: `floor(aligned_adapter_length × 0.1)` where `aligned_adapter_length` is the adapter portion actually matched
@@ -107,7 +107,7 @@ Uses cutadapt's semiglobal alignment algorithm (exact port from cutadapt v5.1):
 
 **Note on adapter overlap**: The default minimum overlap of 1 base matches Trim Galore's `--stringency 1` setting. This ensures that even single-base adapter matches are trimmed, providing maximum parity with Trim Galore output. Increasing the overlap threshold (e.g., to 3 bases) would be less aggressive and may retain additional bases in edge cases where only 1-2 bases match the adapter sequence.
 
-**Note**: The adapter matching implementation in `source/libtrim/adapter_trim.cpp` is synchronized with cutadapt v5.1. If cutadapt is upgraded, parity tests (`make test_trim_parity`) must be re-run to verify compatibility.
+**Note**: Adapter matching is implemented in `source/libtrim/adapter_trim.cpp` and supports both default cutadapt v5.1 parity and optional cutadapt v3.2 compatibility. If trimming logic is changed, re-run parity tests (`make test_trim_parity`) and (for Cutadapt3 mode) the cutadapt 3.2 comparison described in [docs/cutadapt_3.2_parity_report.md](cutadapt_3.2_parity_report.md).
 
 ## Statistics Output
 
@@ -146,11 +146,13 @@ Single-end trimming is supported. When `trimCutadapt` is enabled for single-end 
 
 ## Parity Validation
 
-The trimming implementation achieves **perfect parity** with Trim Galore/cutadapt v5.1:
+The trimming implementation achieves **perfect parity** with Trim Galore/cutadapt v5.1 (default mode):
 - **FASTQ-level parity**: 0 diff lines in integration tests (all 9 tests pass)
 - **Alignment parity**: Guaranteed by FASTQ parity (identical FASTQs → identical alignments)
 
 **Test Suite**: Run `make test_trim_parity` from `source/` directory to validate parity.
+
+For legacy datasets trimmed with Trim Galore + cutadapt 3.2, enable `--trimCutadaptCompat Cutadapt3` and validate against the cutadapt 3.2 parity procedure in [docs/cutadapt_3.2_parity_report.md](cutadapt_3.2_parity_report.md).
 
 **End-to-End Test**: An optional end-to-end alignment test script is available at `tools/trimvalidate/run_end_to_end_parity.sh` for additional validation (requires reference genome).
 
@@ -159,7 +161,7 @@ The trimming implementation achieves **perfect parity** with Trim Galore/cutadap
 | Feature | ClipMate | trimCutadapt |
 |---------|----------|--------------|
 | Quality trimming | No | Yes (Mott algorithm) |
-| Adapter matching | Hamming/Opal | Semiglobal DP (cutadapt v5.1) |
+| Adapter matching | Hamming/Opal | Semiglobal DP (cutadapt v5.1; optional v3.2 compat) |
 | 5' adapter | Supported | Not supported (future) |
 | Single-end | Supported | Supported |
 | Statistics | Limited | Detailed (counts reads, not pairs) |
