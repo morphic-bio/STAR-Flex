@@ -29,6 +29,78 @@ This fork adds several features beyond upstream STAR:
 
 - **[Cutadapt-Style Trimming](docs/trimming.md)**: Perfect parity with Trim Galore/cutadapt v5.1 for quality and adapter trimming. Usable with any STAR workflow (bulk RNA-seq, single-cell, etc.).
 
+- **TranscriptVB (VB/EM) + Salmon parity workflow**: STAR-Flex can quantify transcripts with variational Bayes (VB, default) or EM, and can run Salmon in alignment mode for cross-tool parity checks.
+  - **STAR TranscriptVB** (VB by default; set `--quantVBem 1` for EM):
+    ```bash
+    STAR \
+      --runMode alignReads \
+      --genomeDir /path/to/star_index \
+      --readFilesIn R2.fastq.gz R1.fastq.gz \
+      --readFilesCommand zcat \
+      --quantMode TranscriptVB \
+      --quantVBLibType A \
+      --quantVBAutoDetectWindow 1000 \
+      --quantVBem 0 \
+      --outFileNamePrefix out/
+    ```
+  - **Generate transcriptome BAM for Salmon (alignment-mode quant)**:
+    ```bash
+    STAR \
+      --runMode alignReads \
+      --genomeDir /path/to/star_index \
+      --readFilesIn R2.fastq.gz R1.fastq.gz \
+      --readFilesCommand zcat \
+      --quantMode TranscriptomeSAM \
+      --outSAMtype BAM Unsorted \
+      --outFileNamePrefix out_trbam/
+    ```
+    This produces `out_trbam/Aligned.toTranscriptome.out.bam`.
+  - **Salmon VB in alignment mode** (requires `transcriptome.fa`):
+    ```bash
+    salmon quant \
+      -t /path/to/transcriptome.fa \
+      -l A \
+      -a out_trbam/Aligned.toTranscriptome.out.bam \
+      --useVBOpt \
+      -o salmon_out
+    ```
+    For gene-level Salmon output, also pass a gene map: `-g tx2gene.tsv` (format `transcript_id<TAB>gene_id`).
+  - **tximport-style gene counts in STAR** (DESeq2-friendly):
+    ```bash
+    STAR \
+      --runMode alignReads \
+      --genomeDir /path/to/star_index \
+      --readFilesIn R2.fastq.gz R1.fastq.gz \
+      --readFilesCommand zcat \
+      --quantMode TranscriptVB \
+      --quantVBgenesMode Tximport \
+      --outFileNamePrefix out/
+    ```
+    This writes `out/quant.genes.tximport.sf` in the standard `quant.sf`-like schema.
+  - **Testing and expected correlations**:
+    - TranscriptVB vs Salmon (alignment-mode VB) parity tests: `tests/transcriptvb/salmon_parity_test.sh`
+    - tximport parity tests (STAR vs R tximport, and CLI tool): `tests/tximport/star_tximport_e2e_test.sh`
+    - On the JAX PE validation runs, gene-level correlations between STAR and Salmon tximport-style summaries are typically very high (Spearman/Pearson ~0.99+), and base-vs-auto (trimming) parity is expected to be ~1.0.
+
+- **Samtools-style spill-to-disk BAM sorting** (`--outBAMsortMethod samtools`): Optional coordinate-sorting backend that uses a spill-to-disk strategy (bounded by `--limitBAMsortRAM`) to reduce temporary disk usage compared to STAR’s legacy bin-based sorter.
+  - Rationale: the legacy STAR sorter partitions alignments into many genomic bins and can create large temporary files; the spill-to-disk sorter keeps in-memory buffers up to the RAM cap and only writes spill files as needed.
+  - Usage:
+    ```bash
+    STAR \
+      --runMode alignReads \
+      --genomeDir /path/to/star_index \
+      --readFilesIn R2.fastq.gz R1.fastq.gz \
+      --readFilesCommand zcat \
+      --outSAMtype BAM SortedByCoordinate \
+      --outBAMsortMethod samtools \
+      --outBAMsortingThreadN 8 \
+      --limitBAMsortRAM 24000000000 \
+      --outFileNamePrefix out/
+    ```
+  - Notes:
+    - Default remains `--outBAMsortMethod star`.
+    - Works with `--emitNoYBAM yes` / `--keepBAM yes`.
+
 - **[Y-Chromosome BAM Split](docs/Y_CHROMOSOME_BAM_SPLIT.md)**: Split BAMs by Y-chromosome alignment. Developed for **Morphic requirements for KOLF cell lines** (not connected to Flex pipeline). Works with both bulk and single-cell workflows.
 
 ### Index-Time Features
