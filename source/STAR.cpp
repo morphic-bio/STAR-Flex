@@ -1,5 +1,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <fstream>
 
 #include "IncludeDefine.h"
 #include "Parameters.h"
@@ -482,6 +483,27 @@ int main(int argInN, char *argIn[])
     { // concatenate Aligned.* files
         RAchunk[0]->chunkFilesCat(P.inOut->outSAM, P.outFileTmp + "/Aligned.out.sam.chunk", g_threadChunks.chunkOutN);
     };
+
+    if (P.emitYReadNamesyes) {
+        for (int ichunk = 0; ichunk < P.runThreadN; ichunk++) {
+            if (RAchunk[ichunk] != nullptr &&
+                RAchunk[ichunk]->RA != nullptr &&
+                RAchunk[ichunk]->RA->chunkOutYReadNames.is_open()) {
+                RAchunk[ichunk]->RA->chunkOutYReadNames.flush();
+                RAchunk[ichunk]->RA->chunkOutYReadNames.close();
+            }
+        }
+
+        ofstream yNamesOut(P.outYReadNamesFile.c_str());
+        if (yNamesOut.fail()) {
+            ostringstream errOut;
+            errOut << "EXITING because of fatal OUTPUT ERROR: could not create Y read names file: "
+                   << P.outYReadNamesFile << "\n";
+            exitWithError(errOut.str(), std::cerr, P.inOut->logMain, EXIT_CODE_PARAMETER, P);
+        }
+        uint yNameChunk = 0;
+        RAchunk[0]->chunkFilesCat(&yNamesOut, P.outFileTmp + "/YReadNames.out.thread", yNameChunk);
+    }
 
     bamSortByCoordinate(P, RAchunk, *genomeMain.genomeOut.g, soloMain);
     

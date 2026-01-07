@@ -46,9 +46,11 @@ See [docs/TranscriptVB_quantification.md](TranscriptVB_quantification.md) for de
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `--emitNoYBAM` | `no` | Enable Y-chromosome BAM splitting (`yes`/`no`). When enabled, emits `<out>_Y.bam` and `<out>_noY.bam`. Primary BAM is suppressed unless `--keepBAM yes` is specified. |
+| `--emitYReadNames` | `no` | Emit list of read names with any Y-chromosome alignment (one per line). Useful for FASTQ filtering without generating Y/noY BAMs. |
 | `--keepBAM` | `no` | Keep primary BAM output when `--emitNoYBAM yes` is enabled (`yes`/`no`) |
 | `--noYOutput` | - | Optional: override default path for noY BAM output |
 | `--YOutput` | - | Optional: override default path for Y BAM output |
+| `--YReadNamesOutput` | - | Optional: override output path for Y read names list (default: `<outFileNamePrefix>Aligned.out_Y.names.txt`) |
 
 See [docs/Y_CHROMOSOME_BAM_SPLIT.md](Y_CHROMOSOME_BAM_SPLIT.md) for details.
 

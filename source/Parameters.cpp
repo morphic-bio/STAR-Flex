@@ -152,9 +152,11 @@ Parameters::Parameters() {//initalize parameters info
     parArray.push_back(new ParameterInfoScalar <uint32>        (-1, -1, "outBAMsortingBinsN", &outBAMsortingBinsN));
     parArray.push_back(new ParameterInfoScalar <string>     (-1, -1, "outBAMsortMethod", &outBAMsortMethod));
     parArray.push_back(new ParameterInfoScalar <string>     (-1, -1, "emitNoYBAM", &emitNoYBAM));
+    parArray.push_back(new ParameterInfoScalar <string>     (-1, -1, "emitYReadNames", &emitYReadNames));
     parArray.push_back(new ParameterInfoScalar <string>     (-1, -1, "keepBAM", &keepBAM));
     parArray.push_back(new ParameterInfoScalar <string>     (-1, -1, "noYOutput", &noYOutput));
     parArray.push_back(new ParameterInfoScalar <string>     (-1, -1, "YOutput", &YOutput));
+    parArray.push_back(new ParameterInfoScalar <string>     (-1, -1, "YReadNamesOutput", &YReadNamesOutput));
     parArray.push_back(new ParameterInfoVector <string>     (-1, -1, "outSAMfilter", &outSAMfilter.mode));
     parArray.push_back(new ParameterInfoScalar <uint>     (-1, -1, "outSAMmultNmax", &outSAMmultNmax));
     parArray.push_back(new ParameterInfoScalar <uint>     (-1, -1, "outSAMattrIHstart", &outSAMattrIHstart));
@@ -757,6 +759,9 @@ void Parameters::inputParameters (int argInN, char* argIn[]) {//input parameters
     outBAMunsorted=false;
     outBAMunsortedUseSoloTmp=false;
     outBAMcoord=false;
+    emitNoYBAMyes=false;
+    emitYReadNamesyes=false;
+    keepBAMyes=false;
     if (runMode=="alignReads" && outSAMmode != "None") {//open SAM file and write header
         if (outSAMtype.at(0)=="BAM") {
             if (outSAMtype.size()<2) {
@@ -845,7 +850,7 @@ void Parameters::inputParameters (int argInN, char* argIn[]) {//input parameters
                     exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
                 }
             }
-            
+
             // Derive Y/noY BAM output paths
             if (emitNoYBAMyes) {
                 // Handle user-specified override paths
@@ -925,6 +930,27 @@ void Parameters::inputParameters (int argInN, char* argIn[]) {//input parameters
             exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
         };
     };
+
+    {
+        string t = emitYReadNames; std::transform(t.begin(), t.end(), t.begin(), ::tolower);
+        if (t == "yes") emitYReadNamesyes = true;
+        else if (t == "no" || t.empty()) emitYReadNamesyes = false;
+        else {
+            ostringstream errOut;
+            errOut << "EXITING because of fatal PARAMETERS error: unrecognized option in --emitYReadNames=" << emitYReadNames << "\n";
+            errOut << "SOLUTION: use allowed option: yes OR no\n";
+            exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
+        }
+    }
+
+    // Derive Y read names output path
+    if (emitYReadNamesyes) {
+        if (!YReadNamesOutput.empty() && YReadNamesOutput != "-") {
+            outYReadNamesFile = YReadNamesOutput;
+        } else {
+            outYReadNamesFile = outFileNamePrefix + "Aligned.out_Y.names.txt";
+        }
+    }
 
     if (!outBAMcoord && outWigFlags.yes && runMode=="alignReads") {
         ostringstream errOut;

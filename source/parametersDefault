@@ -560,6 +560,10 @@ emitNoYBAM              no
                             When enabled, emits _noY.bam and _Y.bam files
                             Primary BAM is suppressed by default (use --keepBAM to retain)
 
+emitYReadNames          no
+    string:                 yes|no - emit list of read names with any Y-chromosome alignment
+                            Useful for FASTQ filtering without generating Y/noY BAMs
+
 keepBAM                 no
     string:                 yes|no - when emitNoYBAM is enabled, also emit primary BAM
 
@@ -568,6 +572,10 @@ noYOutput               -
 
 YOutput                 -
     string:                 override path for _Y.bam output
+
+YReadNamesOutput        -
+    string:                 override path for Y-read names list
+                            Default: <outFileNamePrefix>Aligned.out_Y.names.txt
 
 ### BAM processing
 bamRemoveDuplicatesType  -

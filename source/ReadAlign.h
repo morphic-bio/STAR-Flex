@@ -48,6 +48,7 @@ class ReadAlign {
         BAMoutput *outBAMcoord, *outBAMunsorted, *outBAMquant;//sorted by coordinate, unsorted, transcriptomic BAM structure
         std::atomic<uint64_t>* bamRecordIndexPtr; //pointer to global BAM record counter
         fstream chunkOutChimSAM, *chunkOutChimJunction, chunkOutUnmappedReadsStream[MAX_N_MATES], chunkOutFilterBySJoutFiles[MAX_N_MATES];
+        fstream chunkOutYReadNames;
         OutSJ *chunkOutSJ, *chunkOutSJ1;
 
         ostream* outSAMstream;
@@ -293,4 +294,3 @@ class ReadAlign {
 };
 
 #endif
-

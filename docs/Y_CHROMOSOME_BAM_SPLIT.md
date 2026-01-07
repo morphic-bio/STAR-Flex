@@ -64,9 +64,13 @@ This feature is useful for sex-specific analyses, separating male/female samples
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `--emitNoYBAM` | `no` | Enable Y-chromosome BAM splitting (`yes`/`no`) |
+| `--emitYReadNames` | `no` | Emit list of read names with any Y-chromosome alignment (one per line) |
 | `--keepBAM` | `no` | Keep primary BAM when splitting is enabled |
 | `--noYOutput` | - | Override default path for noY BAM |
 | `--YOutput` | - | Override default path for Y BAM |
+| `--YReadNamesOutput` | - | Override output path for Y read names list (default: `<outFileNamePrefix>Aligned.out_Y.names.txt`) |
+
+**Names-only mode**: You can emit Y-read names without producing Y/noY BAMs by using `--emitYReadNames yes` alone.
 
 ## Files Modified
 
@@ -639,4 +643,3 @@ make htslib/libhts.a
 - [README_flex.md](../README_flex.md) - User-facing documentation
 - [plans/remove_y_tool_plan.md](../plans/remove_y_tool_plan.md) - Implementation plan
 - [tests/TEST_REPORT_REMOVE_Y_FASTQ.md](../tests/TEST_REPORT_REMOVE_Y_FASTQ.md) - Test report
-

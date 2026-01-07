@@ -174,6 +174,17 @@ This produces:
 - `output/Aligned.sortedByCoord.out_noY.bam` - Reads with no Y-chromosome alignments
 - Primary BAM (`output/Aligned.sortedByCoord.out.bam`) is suppressed by default
 
+To emit a read-name list for FASTQ filtering (with or without Y/noY BAMs):
+
+```bash
+STAR \
+  ... \
+  --emitYReadNames yes \
+  --outFileNamePrefix output/
+```
+
+This writes `output/Aligned.out_Y.names.txt` by default (override with `--YReadNamesOutput`).
+
 To keep the primary BAM alongside the split files:
 
 ```bash
@@ -209,9 +220,11 @@ STAR \
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--emitNoYBAM` | `no` | Enable Y-chromosome BAM splitting (`yes`/`no`). When enabled, emits two additional BAM files: `<out>_noY.bam` (reads with no Y-chromosome alignments) and `<out>_Y.bam` (reads with any Y-chromosome alignment). Primary BAM is suppressed by default unless `--keepBAM yes` is specified. |
+| `--emitYReadNames` | `no` | Emit list of read names with any Y-chromosome alignment (one per line). Can be used with or without Y/noY BAMs. |
 | `--keepBAM` | `no` | Keep primary BAM output when `--emitNoYBAM yes` is enabled (`yes`/`no`) |
 | `--noYOutput` | - | Optional: override default path for noY BAM output (default: `<out>_noY.bam`) |
 | `--YOutput` | - | Optional: override default path for Y BAM output (default: `<out>_Y.bam`) |
+| `--YReadNamesOutput` | - | Optional: override output path for Y read names list (default: `<out>Aligned.out_Y.names.txt`) |
 
 ### Sample Detection
 

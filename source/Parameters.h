@@ -193,10 +193,14 @@ class Parameters {
         //Y-chromosome BAM split
         string emitNoYBAM;  // raw CLI: yes|no - split BAM output by Y-chromosome alignments
         bool emitNoYBAMyes;  // resolved: true if enabled
+        string emitYReadNames;  // raw CLI: yes|no - emit Y-read name list for FASTQ filtering
+        bool emitYReadNamesyes; // resolved: true if enabled
         string keepBAM;      // raw CLI: yes|no - when emitNoYBAM is enabled, also emit primary BAM
         bool keepBAMyes;    // resolved: true if enabled
         string outBAMfileYName, outBAMfileNoYName;  // derived output paths for Y/noY BAMs
         string noYOutput, YOutput;  // user-specified override paths
+        string YReadNamesOutput; // user-specified override path for Y-read names list
+        string outYReadNamesFile; // derived output path for Y-read names list
 
 //         string bamRemoveDuplicatesType;
 //         uint bamRemoveDuplicatesMate2basesN;

@@ -106,6 +106,10 @@ ReadAlignChunk::ReadAlignChunk(Parameters& Pin, Genome &genomeIn, Transcriptome 
         if (P.readNends==2) chunkFstreamOpen(P.outFileTmp + "/FilterBySJoutFiles.mate2.thread",iChunk, RA->chunkOutFilterBySJoutFiles[1]); //here we do not output barcode read
     };
 
+    if (P.emitYReadNamesyes) {
+        chunkFstreamOpen(P.outFileTmp + "/YReadNames.out.thread", iChunk, RA->chunkOutYReadNames);
+    }
+
     if (P.wasp.yes) {
         RA->waspRA= new ReadAlign(Pin,genomeIn,TrIn,iChunk);
     };

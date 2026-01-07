@@ -6,6 +6,7 @@
 #include "UmiCodec.h"
 #include "solo/CbCorrector.h"
 #include "TranscriptQuantEC.h"
+#include <cstring>
 
 namespace {
 inline const char* sanitizeQname(char** readNameMates, uint32_t readNmates, uint32_t mateIdx) {
@@ -17,6 +18,31 @@ inline const char* sanitizeQname(char** readNameMates, uint32_t readNmates, uint
         ++qptr;
     }
     return qptr;
+}
+
+inline void writeNormalizedQname(std::ostream& out, const char* raw) {
+    if (raw == nullptr) {
+        return;
+    }
+    const char* start = raw;
+    size_t len = std::strlen(raw);
+    if (len > 0 && start[0] == '@') {
+        ++start;
+        --len;
+    }
+    size_t end = 0;
+    while (end < len && start[end] != ' ' && start[end] != '\t' &&
+           start[end] != '\n' && start[end] != '\r') {
+        ++end;
+    }
+    len = end;
+    if (len >= 2 && start[len - 2] == '/' && (start[len - 1] == '1' || start[len - 1] == '2')) {
+        len -= 2;
+    }
+    if (len > 0) {
+        out.write(start, static_cast<std::streamsize>(len));
+    }
+    out.put('\n');
 }
 }
 
@@ -68,7 +94,7 @@ void ReadAlign::outputAlignments() {
         // - Bulk paired-end: Check both read's alignments AND mate's alignments (via mtid in BAM output)
         // - Bulk single-end: Only check read's own alignments
         hasYAlignment_ = false;
-        if (P.emitNoYBAMyes) {
+        if (P.emitNoYBAMyes || P.emitYReadNamesyes) {
             // Determine if we're in single-cell/Flex mode (no mates) vs bulk paired-end (has mates)
             bool isSingleCellOrFlex = (P.pSolo.type != 0) || P.pSolo.flexMode;
             bool hasMates = (P.readNmates == 2) && !isSingleCellOrFlex;
@@ -120,6 +146,10 @@ void ReadAlign::outputAlignments() {
                 // For single-cell/Flex unmapped reads or single-end unmapped: 
                 // default hasYAlignment_ = false -> route to noY
             }
+        }
+
+        if (P.emitYReadNamesyes && hasYAlignment_) {
+            writeNormalizedQname(chunkOutYReadNames, readNameMates[0]);
         }
 
         //the operations below are both for mapped and unmapped reads
