@@ -200,6 +200,14 @@ For example, `Sample_R1_001.fastq.gz` becomes `Sample_Y_R1_001.fastq.gz` and `Sa
 (output written under the `--outFileNamePrefix` directory).
 If no `_R1`/`_R2` token is found, STAR falls back to `Y_reads.mateN.fastq(.gz)` and `noY_reads.mateN.fastq(.gz)` under the output prefix.
 You can override names explicitly with `--YFastqOutputPrefix` and `--noYFastqOutputPrefix`.
+If a separate barcode read is present (e.g., scRNA-seq R3), only the true mates (R1/R2) are emitted.
+
+Edge cases to be aware of:
+- If the reference has no Y contigs, the Y FASTQs are empty and a warning is logged.
+- FASTA inputs produce `.fa(.gz)` outputs with `>` headers and no `+`/quality lines.
+- Multiple input files per mate derive output names from the first file for each mate.
+- `--emitYNoYFastqCompression none` writes uncompressed `.fastq`/`.fa` outputs.
+- Unmapped reads are routed to noY.
 
 You can use `--emitYNoYFastq yes` with `--outSAMtype None` to emit FASTQ files without BAM output.
 

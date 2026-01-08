@@ -163,7 +163,7 @@ void ReadAlign::outputAlignments() {
                 // Note: hasYAlignment_ reflects current read's alignments in Flex mode
                 // In Flex mode, R1 and R2 are processed separately, so we write all available mates
                 // but hasYAlignment_ applies to the current read being processed
-                for (uint im = 0; im < P.readNends; im++) {
+                for (uint im = 0; im < P.readNmates; im++) {
                     if (hasYAlignment_) {
                         writeFastxRecord(im, true);  // Write to Y FASTQ
                     } else {
@@ -173,7 +173,7 @@ void ReadAlign::outputAlignments() {
             } else {
                 // Bulk PE mode: route both mates together based on hasYAlignment_ (which reflects both mates)
                 // If either mate has Y alignment, both mates go to Y FASTQ
-                for (uint im = 0; im < P.readNends; im++) {
+                for (uint im = 0; im < P.readNmates; im++) {
                     if (hasYAlignment_) {
                         writeFastxRecord(im, true);  // Write both mates to Y FASTQ
                     } else {

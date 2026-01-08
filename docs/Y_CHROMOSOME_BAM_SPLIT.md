@@ -78,6 +78,13 @@ This feature is useful for sex-specific analyses, separating male/female samples
 
 **FASTQ-only mode**: You can emit Y/noY FASTQ files without producing BAMs by using `--emitYNoYFastq yes` with `--outSAMtype None`.
 
+**FASTQ edge cases**:
+- If the reference has no Y contigs, Y FASTQs are empty and a warning is logged.
+- FASTA inputs emit `.fa(.gz)` outputs with `>` headers and no `+`/quality lines.
+- Multiple input files per mate derive output names from the first file for each mate.
+- `--emitYNoYFastqCompression none` writes uncompressed outputs.
+- Unmapped reads are routed to noY.
+
 ## Files Modified
 
 ### Header Files
