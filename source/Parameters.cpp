@@ -20,6 +20,68 @@ std::atomic<uint64_t> global_processed_fragments{0};
 // Used for FLD statistics only, NOT for pre-burn-in gating
 std::atomic<uint64_t> Parameters::global_fld_obs_count{0};
 
+namespace {
+string pathBasename(const string& path) {
+    size_t pos = path.find_last_of("/\\");
+    if (pos == string::npos) {
+        return path;
+    }
+    return path.substr(pos + 1);
+}
+
+string outputDirFromPrefix(const string& prefix) {
+    size_t pos = prefix.find_last_of("/\\");
+    if (pos == string::npos) {
+        return "";
+    }
+    return prefix.substr(0, pos + 1);
+}
+
+bool endsWith(const string& value, const string& suffix) {
+    if (suffix.size() > value.size()) {
+        return false;
+    }
+    return value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+bool hasReadToken(const string& name) {
+    return name.rfind("_R1") != string::npos ||
+           name.rfind("_R2") != string::npos ||
+           name.rfind("_r1") != string::npos ||
+           name.rfind("_r2") != string::npos;
+}
+
+string insertTagBeforeReadToken(const string& name, const string& tag) {
+    size_t pos = string::npos;
+    auto updatePos = [&](size_t candidate) {
+        if (candidate != string::npos) {
+            pos = (pos == string::npos) ? candidate : max(pos, candidate);
+        }
+    };
+    updatePos(name.rfind("_R1"));
+    updatePos(name.rfind("_R2"));
+    updatePos(name.rfind("_r1"));
+    updatePos(name.rfind("_r2"));
+    if (pos == string::npos) {
+        return string();
+    }
+    return name.substr(0, pos) + tag + name.substr(pos);
+}
+
+string adjustCompressionExt(const string& name, const string& compression) {
+    if (compression == "gz") {
+        if (!endsWith(name, ".gz")) {
+            return name + ".gz";
+        }
+        return name;
+    }
+    if (endsWith(name, ".gz")) {
+        return name.substr(0, name.size() - 3);
+    }
+    return name;
+}
+}
+
 //for mkfifo
 #include <sys/stat.h>
 #include <cstdlib>
@@ -157,6 +219,10 @@ Parameters::Parameters() {//initalize parameters info
     parArray.push_back(new ParameterInfoScalar <string>     (-1, -1, "noYOutput", &noYOutput));
     parArray.push_back(new ParameterInfoScalar <string>     (-1, -1, "YOutput", &YOutput));
     parArray.push_back(new ParameterInfoScalar <string>     (-1, -1, "YReadNamesOutput", &YReadNamesOutput));
+    parArray.push_back(new ParameterInfoScalar <string>     (-1, -1, "emitYNoYFastq", &emitYNoYFastq));
+    parArray.push_back(new ParameterInfoScalar <string>     (-1, -1, "emitYNoYFastqCompression", &emitYNoYFastqCompression));
+    parArray.push_back(new ParameterInfoScalar <string>     (-1, -1, "YFastqOutputPrefix", &YFastqOutputPrefix));
+    parArray.push_back(new ParameterInfoScalar <string>     (-1, -1, "noYFastqOutputPrefix", &noYFastqOutputPrefix));
     parArray.push_back(new ParameterInfoVector <string>     (-1, -1, "outSAMfilter", &outSAMfilter.mode));
     parArray.push_back(new ParameterInfoScalar <uint>     (-1, -1, "outSAMmultNmax", &outSAMmultNmax));
     parArray.push_back(new ParameterInfoScalar <uint>     (-1, -1, "outSAMattrIHstart", &outSAMattrIHstart));
@@ -762,6 +828,7 @@ void Parameters::inputParameters (int argInN, char* argIn[]) {//input parameters
     emitNoYBAMyes=false;
     emitYReadNamesyes=false;
     keepBAMyes=false;
+    emitYNoYFastqyes=false;
     if (runMode=="alignReads" && outSAMmode != "None") {//open SAM file and write header
         if (outSAMtype.at(0)=="BAM") {
             if (outSAMtype.size()<2) {
@@ -951,7 +1018,33 @@ void Parameters::inputParameters (int argInN, char* argIn[]) {//input parameters
             outYReadNamesFile = outFileNamePrefix + "Aligned.out_Y.names.txt";
         }
     }
-
+    
+    // Parse Y-chromosome FASTQ emission parameters
+    {
+        string t = emitYNoYFastq; std::transform(t.begin(), t.end(), t.begin(), ::tolower);
+        if (t == "yes") emitYNoYFastqyes = true;
+        else if (t == "no" || t.empty()) emitYNoYFastqyes = false;
+        else {
+            ostringstream errOut;
+            errOut << "EXITING because of fatal PARAMETERS error: unrecognized option in --emitYNoYFastq=" << emitYNoYFastq << "\n";
+            errOut << "SOLUTION: use allowed option: yes OR no\n";
+            exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
+        }
+    }
+    {
+        string t = emitYNoYFastqCompression; std::transform(t.begin(), t.end(), t.begin(), ::tolower);
+        if (t.empty() || t == "gz") {
+            emitYNoYFastqCompression = "gz";
+        } else if (t == "none") {
+            emitYNoYFastqCompression = "none";
+        } else {
+            ostringstream errOut;
+            errOut << "EXITING because of fatal PARAMETERS error: unrecognized option in --emitYNoYFastqCompression=" << emitYNoYFastqCompression << "\n";
+            errOut << "SOLUTION: use allowed option: gz OR none\n";
+            exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
+        }
+    }
+    
     if (!outBAMcoord && outWigFlags.yes && runMode=="alignReads") {
         ostringstream errOut;
         errOut <<"EXITING because of fatal PARAMETER error: generating signal with --outWigType requires sorted BAM\n";
@@ -1045,6 +1138,66 @@ void Parameters::inputParameters (int argInN, char* argIn[]) {//input parameters
     //read parameters
     readFilesInit();
 
+    // Derive Y/noY FASTQ output paths (after readFilesInit so readFilesNames/readNends are available)
+    if (emitYNoYFastqyes) {
+        const bool hasYPrefix = !YFastqOutputPrefix.empty() && YFastqOutputPrefix != "-";
+        const bool hasNoYPrefix = !noYFastqOutputPrefix.empty() && noYFastqOutputPrefix != "-";
+        const string ext = (emitYNoYFastqCompression == "gz") ? ".fastq.gz" : ".fastq";
+        const string outputDir = outputDirFromPrefix(outFileNamePrefix);
+        bool useMateFallback = false;
+
+        if (!hasYPrefix || !hasNoYPrefix) {
+            if (readFilesN > 1) {
+                warningMessage(" emitYNoYFastq: multiple input files detected; output FASTQ names are derived from the first file for each mate",
+                               std::cerr, inOut->logMain, *this);
+            }
+        }
+
+        if (!hasYPrefix || !hasNoYPrefix) {
+            for (uint imate = 0; imate < readNends; imate++) {
+                if (readFilesNames.size() <= imate || readFilesNames[imate].empty()) {
+                    useMateFallback = true;
+                    break;
+                }
+                string base = pathBasename(readFilesNames[imate][0]);
+                if (!hasReadToken(base)) {
+                    useMateFallback = true;
+                    break;
+                }
+            }
+        }
+
+        for (uint imate = 0; imate < readNends; imate++) {
+            if (hasYPrefix) {
+                outYFastqFile[imate] = YFastqOutputPrefix + "mate" + to_string(imate + 1) + ext;
+            } else if (!useMateFallback && readFilesNames.size() > imate && !readFilesNames[imate].empty()) {
+                string base = pathBasename(readFilesNames[imate][0]);
+                string tagged = insertTagBeforeReadToken(base, "_Y");
+                if (!tagged.empty()) {
+                    outYFastqFile[imate] = outputDir + adjustCompressionExt(tagged, emitYNoYFastqCompression);
+                } else {
+                    outYFastqFile[imate] = outFileNamePrefix + "Y_reads.mate" + to_string(imate + 1) + ext;
+                }
+            } else {
+                outYFastqFile[imate] = outFileNamePrefix + "Y_reads.mate" + to_string(imate + 1) + ext;
+            }
+
+            if (hasNoYPrefix) {
+                outNoYFastqFile[imate] = noYFastqOutputPrefix + "mate" + to_string(imate + 1) + ext;
+            } else if (!useMateFallback && readFilesNames.size() > imate && !readFilesNames[imate].empty()) {
+                string base = pathBasename(readFilesNames[imate][0]);
+                string tagged = insertTagBeforeReadToken(base, "_noY");
+                if (!tagged.empty()) {
+                    outNoYFastqFile[imate] = outputDir + adjustCompressionExt(tagged, emitYNoYFastqCompression);
+                } else {
+                    outNoYFastqFile[imate] = outFileNamePrefix + "noY_reads.mate" + to_string(imate + 1) + ext;
+                }
+            } else {
+                outNoYFastqFile[imate] = outFileNamePrefix + "noY_reads.mate" + to_string(imate + 1) + ext;
+            }
+        }
+    }
+
     //two-pass
     if (parArray.at(twoPass.pass1readsN_par)->inputLevel>0  && twoPass.mode=="None") {
         ostringstream errOut;
@@ -1112,6 +1265,26 @@ void Parameters::inputParameters (int argInN, char* argIn[]) {//input parameters
                 inOut->outUnmappedReadsStream[imate].open(ff.str().c_str());
             };
         };
+        
+        // Open Y/noY FASTQ output files
+        if (runMode == "alignReads" && emitYNoYFastqyes) {
+            if (emitYNoYFastqCompression == "gz") {
+                // For gzip, files will be opened per-thread and concatenated later
+                // No need to open main output files here
+            } else {
+                // Open uncompressed output files
+                for (uint imate = 0; imate < readNends; imate++) {
+                    inOut->outYFastqStream[imate].open(outYFastqFile[imate].c_str());
+                    inOut->outNoYFastqStream[imate].open(outNoYFastqFile[imate].c_str());
+                    if (!inOut->outYFastqStream[imate].is_open() || !inOut->outNoYFastqStream[imate].is_open()) {
+                        ostringstream errOut;
+                        errOut << "EXITING because of FATAL ERROR: could not create Y/noY FASTQ output files\n";
+                        errOut << "Solution: check that you have permission to write and disk space\n";
+                        exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_INPUT_FILES, *this);
+                    }
+                }
+            }
+        }
     };
 
     if (outSAMmapqUnique<0 || outSAMmapqUnique>255) {

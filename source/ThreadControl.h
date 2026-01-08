@@ -13,6 +13,7 @@ public:
     pthread_t *threadArray;
     pthread_mutex_t mutexInRead, mutexOutSAM, mutexOutBAM1, mutexOutChimSAM, mutexOutChimJunction, mutexOutUnmappedFastx, mutexOutFilterBySJout;
     pthread_mutex_t mutexStats, mutexLogMain, mutexBAMsortBins, mutexError;
+    pthread_mutex_t mutexOutYFastq[MAX_N_MATES], mutexOutNoYFastq[MAX_N_MATES];  // Y/noY FASTQ output mutexes per mate
 
     uint chunkInN,chunkOutN;
 

@@ -65,12 +65,18 @@ This feature is useful for sex-specific analyses, separating male/female samples
 |-----------|---------|-------------|
 | `--emitNoYBAM` | `no` | Enable Y-chromosome BAM splitting (`yes`/`no`) |
 | `--emitYReadNames` | `no` | Emit list of read names with any Y-chromosome alignment (one per line) |
+| `--emitYNoYFastq` | `no` | Emit Y/noY FASTQ files directly during alignment (`yes`/`no`) |
+| `--emitYNoYFastqCompression` | `gz` | Compression for FASTQ output (`gz`/`none`) |
+| `--YFastqOutputPrefix` | - | Output prefix for Y FASTQ files (default: derived from input name, inserting `_Y` before the last `_R1`/`_R2`; if missing, falls back to `Y_reads.mateN`) |
+| `--noYFastqOutputPrefix` | - | Output prefix for noY FASTQ files (default: derived from input name, inserting `_noY` before the last `_R1`/`_R2`; if missing, falls back to `noY_reads.mateN`) |
 | `--keepBAM` | `no` | Keep primary BAM when splitting is enabled |
 | `--noYOutput` | - | Override default path for noY BAM |
 | `--YOutput` | - | Override default path for Y BAM |
 | `--YReadNamesOutput` | - | Override output path for Y read names list (default: `<outFileNamePrefix>Aligned.out_Y.names.txt`) |
 
 **Names-only mode**: You can emit Y-read names without producing Y/noY BAMs by using `--emitYReadNames yes` alone.
+
+**FASTQ-only mode**: You can emit Y/noY FASTQ files without producing BAMs by using `--emitYNoYFastq yes` with `--outSAMtype None`.
 
 ## Files Modified
 

@@ -47,6 +47,10 @@ See [docs/TranscriptVB_quantification.md](TranscriptVB_quantification.md) for de
 |-----------|---------|-------------|
 | `--emitNoYBAM` | `no` | Enable Y-chromosome BAM splitting (`yes`/`no`). When enabled, emits `<out>_Y.bam` and `<out>_noY.bam`. Primary BAM is suppressed unless `--keepBAM yes` is specified. |
 | `--emitYReadNames` | `no` | Emit list of read names with any Y-chromosome alignment (one per line). Useful for FASTQ filtering without generating Y/noY BAMs. |
+| `--emitYNoYFastq` | `no` | Emit Y/noY FASTQ files directly during alignment (`yes`/`no`). Works with both bulk PE and Flex/solo modes. |
+| `--emitYNoYFastqCompression` | `gz` | Compression for FASTQ output (`gz`/`none`). Default is gzip-compressed. |
+| `--YFastqOutputPrefix` | - | Optional: override output prefix for Y FASTQ files (default: derived from input name, inserting `_Y` before the last `_R1`/`_R2`; if missing, falls back to `Y_reads.mateN`) |
+| `--noYFastqOutputPrefix` | - | Optional: override output prefix for noY FASTQ files (default: derived from input name, inserting `_noY` before the last `_R1`/`_R2`; if missing, falls back to `noY_reads.mateN`) |
 | `--keepBAM` | `no` | Keep primary BAM output when `--emitNoYBAM yes` is enabled (`yes`/`no`) |
 | `--noYOutput` | - | Optional: override default path for noY BAM output |
 | `--YOutput` | - | Optional: override default path for Y BAM output |

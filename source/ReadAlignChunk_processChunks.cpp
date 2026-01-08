@@ -258,6 +258,20 @@ void ReadAlignChunk::processChunks() {//read-map-write chunks
 
     };//cycle over input chunks
 
+    // Close Y/noY FASTQ gzip streams even if no reads were processed in this thread
+    if (P.emitYNoYFastqyes && P.emitYNoYFastqCompression == "gz") {
+        for (uint32 imate = 0; imate < P.readNends; imate++) {
+            if (RA->chunkOutYFastqGz[imate] != nullptr) {
+                gzclose(RA->chunkOutYFastqGz[imate]);
+                RA->chunkOutYFastqGz[imate] = nullptr;
+            }
+            if (RA->chunkOutNoYFastqGz[imate] != nullptr) {
+                gzclose(RA->chunkOutNoYFastqGz[imate]);
+                RA->chunkOutNoYFastqGz[imate] = nullptr;
+            }
+        }
+    }
+
     if (P.outFilterBySJoutStage!=1 && RA->iRead>0) {//not the first stage of the 2-stage mapping
         if (P.outBAMunsorted && chunkOutBAMunsorted!=NULL) chunkOutBAMunsorted->unsortedFlush();
         if (P.outBAMcoord) chunkOutBAMcoord->coordFlush();
@@ -279,6 +293,14 @@ void ReadAlignChunk::processChunks() {//read-map-write chunks
             if (P.runThreadN>1)
                 pthread_mutex_unlock(&g_threadChunks.mutexOutUnmappedFastx);
         };
+        
+        // Concatenate Y/noY FASTQ thread outputs
+        if (P.emitYNoYFastqyes && P.emitYNoYFastqCompression != "gz") {
+            for (uint32 imate = 0; imate < P.readNends; imate++) {
+                chunkFstreamCat(RA->chunkOutYFastqStream[imate], P.inOut->outYFastqStream[imate], P.runThreadN > 1, g_threadChunks.mutexOutYFastq[imate]);
+                chunkFstreamCat(RA->chunkOutNoYFastqStream[imate], P.inOut->outNoYFastqStream[imate], P.runThreadN > 1, g_threadChunks.mutexOutNoYFastq[imate]);
+            }
+        }
     };
     if (P.runThreadN>1) pthread_mutex_lock(&g_threadChunks.mutexLogMain);
     P.inOut->logMain << "Completed: thread #" <<iThread <<endl;

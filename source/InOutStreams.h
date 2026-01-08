@@ -15,6 +15,7 @@ class InOutStreams {
     ofstream outBAMfileUnsortedSoloTmp;
 
     ofstream outChimSAM, outChimJunction, logMain, logProgress, logFinal, outUnmappedReadsStream[MAX_N_MATES];
+    ofstream outYFastqStream[MAX_N_MATES], outNoYFastqStream[MAX_N_MATES];  // Y/noY FASTQ output streams (uncompressed)
     ifstream readIn[MAX_N_MATES];
 
     //compilation-optional streams

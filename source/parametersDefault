@@ -577,6 +577,28 @@ YReadNamesOutput        -
     string:                 override path for Y-read names list
                             Default: <outFileNamePrefix>Aligned.out_Y.names.txt
 
+emitYNoYFastq          no
+    string:                 yes|no - emit Y/noY FASTQ files directly during alignment
+                            Emits separate FASTQ files for reads with/without Y-chromosome alignments
+                            Works with both bulk PE and Flex/solo modes
+
+emitYNoYFastqCompression gz
+    string:                 gz|none - compression for Y/noY FASTQ output
+                            gz: gzip-compressed output (default)
+                            none: uncompressed FASTQ
+
+YFastqOutputPrefix      -
+    string:                 output prefix for Y FASTQ files
+                            Default: derived from input FASTQ name (first file per mate)
+                            Inserts _Y before the last _R1/_R2
+                            If no _R1/_R2 token is found, falls back to <outFileNamePrefix>Y_reads.mateN
+
+noYFastqOutputPrefix    -
+    string:                 output prefix for noY FASTQ files
+                            Default: derived from input FASTQ name (first file per mate)
+                            Inserts _noY before the last _R1/_R2
+                            If no _R1/_R2 token is found, falls back to <outFileNamePrefix>noY_reads.mateN
+
 ### BAM processing
 bamRemoveDuplicatesType  -
     string: mark duplicates in the BAM file, for now only works with (i) sorted BAM fed with inputBAMfile, and (ii) for paired-end alignments only

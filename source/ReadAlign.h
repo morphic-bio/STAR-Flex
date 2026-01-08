@@ -15,6 +15,7 @@
 #include "ReadAnnotations.h"
 #include "SpliceGraph.h"
 #include "ClipMate.h"
+#include <zlib.h>
 
 // Forward declarations
 class SampleDetector;
@@ -49,6 +50,8 @@ class ReadAlign {
         std::atomic<uint64_t>* bamRecordIndexPtr; //pointer to global BAM record counter
         fstream chunkOutChimSAM, *chunkOutChimJunction, chunkOutUnmappedReadsStream[MAX_N_MATES], chunkOutFilterBySJoutFiles[MAX_N_MATES];
         fstream chunkOutYReadNames;
+        fstream chunkOutYFastqStream[MAX_N_MATES], chunkOutNoYFastqStream[MAX_N_MATES];  // Y/noY FASTQ streams (uncompressed)
+        gzFile chunkOutYFastqGz[MAX_N_MATES], chunkOutNoYFastqGz[MAX_N_MATES];  // Y/noY FASTQ streams (gzip-compressed)
         OutSJ *chunkOutSJ, *chunkOutSJ1;
 
         ostream* outSAMstream;
@@ -286,6 +289,7 @@ class ReadAlign {
         //output alignments functions
         void outFilterBySJout();
         void outReadsUnmapped();
+        void writeFastxRecord(uint imate, bool isY);  // Write FASTQ/FASTA record to Y or noY stream
         void spliceGraphWriteSAM();
         void alignedAnnotation();
         void writeSAM(uint64 nTrOutSAM, Transcript **trOutSAM, Transcript *trBestSAM);

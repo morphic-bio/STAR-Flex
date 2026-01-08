@@ -201,6 +201,13 @@ class Parameters {
         string noYOutput, YOutput;  // user-specified override paths
         string YReadNamesOutput; // user-specified override path for Y-read names list
         string outYReadNamesFile; // derived output path for Y-read names list
+        
+        //Y-chromosome FASTQ emission
+        string emitYNoYFastq;  // raw CLI: yes|no - emit Y/noY FASTQ files
+        bool emitYNoYFastqyes; // resolved: true if enabled
+        string emitYNoYFastqCompression;  // raw CLI: gz|none - compression for FASTQ output
+        string YFastqOutputPrefix, noYFastqOutputPrefix;  // user-specified output prefixes
+        string outYFastqFile[MAX_N_MATES], outNoYFastqFile[MAX_N_MATES];  // derived output paths per mate
 
 //         string bamRemoveDuplicatesType;
 //         uint bamRemoveDuplicatesMate2basesN;

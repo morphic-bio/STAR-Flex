@@ -230,6 +230,12 @@ int main(int argInN, char *argIn[])
         pthread_mutex_init(&g_threadChunks.mutexStats, NULL);
         pthread_mutex_init(&g_threadChunks.mutexBAMsortBins, NULL);
         pthread_mutex_init(&g_threadChunks.mutexError, NULL);
+        if (P.emitYNoYFastqyes) {
+            for (uint32 imate = 0; imate < P.readNends; imate++) {
+                pthread_mutex_init(&g_threadChunks.mutexOutYFastq[imate], NULL);
+                pthread_mutex_init(&g_threadChunks.mutexOutNoYFastq[imate], NULL);
+            }
+        }
     };
 
     g_statsAll.progressReportHeader(P.inOut->logProgress);
@@ -503,6 +509,51 @@ int main(int argInN, char *argIn[])
         }
         uint yNameChunk = 0;
         RAchunk[0]->chunkFilesCat(&yNamesOut, P.outFileTmp + "/YReadNames.out.thread", yNameChunk);
+    }
+    
+    // Concatenate Y/noY FASTQ gzip files (if compression is enabled)
+    if (P.emitYNoYFastqyes && P.emitYNoYFastqCompression == "gz") {
+        for (uint32 imate = 0; imate < P.readNends; imate++) {
+            // Concatenate Y FASTQ gzip files
+            ofstream yFastqOut(P.outYFastqFile[imate].c_str(), ios::binary);
+            if (yFastqOut.fail()) {
+                ostringstream errOut;
+                errOut << "EXITING because of fatal OUTPUT ERROR: could not create Y FASTQ file: "
+                       << P.outYFastqFile[imate] << "\n";
+                exitWithError(errOut.str(), std::cerr, P.inOut->logMain, EXIT_CODE_PARAMETER, P);
+            }
+            for (int ichunk = 0; ichunk < P.runThreadN; ichunk++) {
+                ostringstream chunkName;
+                chunkName << P.outFileTmp << "/YFastq.mate" << imate << ".thread" << ichunk << ".gz";
+                ifstream chunkIn(chunkName.str().c_str(), ios::binary);
+                if (chunkIn.good()) {
+                    yFastqOut << chunkIn.rdbuf();
+                    chunkIn.close();
+                    remove(chunkName.str().c_str());
+                }
+            }
+            yFastqOut.close();
+            
+            // Concatenate noY FASTQ gzip files
+            ofstream noYFastqOut(P.outNoYFastqFile[imate].c_str(), ios::binary);
+            if (noYFastqOut.fail()) {
+                ostringstream errOut;
+                errOut << "EXITING because of fatal OUTPUT ERROR: could not create noY FASTQ file: "
+                       << P.outNoYFastqFile[imate] << "\n";
+                exitWithError(errOut.str(), std::cerr, P.inOut->logMain, EXIT_CODE_PARAMETER, P);
+            }
+            for (int ichunk = 0; ichunk < P.runThreadN; ichunk++) {
+                ostringstream chunkName;
+                chunkName << P.outFileTmp << "/noYFastq.mate" << imate << ".thread" << ichunk << ".gz";
+                ifstream chunkIn(chunkName.str().c_str(), ios::binary);
+                if (chunkIn.good()) {
+                    noYFastqOut << chunkIn.rdbuf();
+                    chunkIn.close();
+                    remove(chunkName.str().c_str());
+                }
+            }
+            noYFastqOut.close();
+        }
     }
 
     bamSortByCoordinate(P, RAchunk, *genomeMain.genomeOut.g, soloMain);

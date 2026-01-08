@@ -118,6 +118,12 @@ ReadAlign::ReadAlign (Parameters& Pin, Genome &genomeIn, Transcriptome *TrIn, in
     };
     resetN();
     
+    // Initialize Y/noY FASTQ streams
+    for (uint32 imate = 0; imate < P.readNends; imate++) {
+        chunkOutYFastqGz[imate] = nullptr;
+        chunkOutNoYFastqGz[imate] = nullptr;
+    }
+    
     //chim
     chunkOutChimJunction = new fstream;
     chimDet = new ChimericDetection(P, trAll, nWinTr, Read1, mapGen, chunkOutChimJunction, this);

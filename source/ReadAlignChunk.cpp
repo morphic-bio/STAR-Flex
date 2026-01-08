@@ -6,6 +6,7 @@
 #include "Solo.h"
 #include <fstream>
 #include <cstdlib>
+#include <zlib.h>
 
 ReadAlignChunk::ReadAlignChunk(Parameters& Pin, Genome &genomeIn, Transcriptome *TrIn, int iChunk,
                                 const libem::Transcriptome* libemTr) : P(Pin), mapGen(genomeIn) {//initialize chunk
@@ -108,6 +109,33 @@ ReadAlignChunk::ReadAlignChunk(Parameters& Pin, Genome &genomeIn, Transcriptome 
 
     if (P.emitYReadNamesyes) {
         chunkFstreamOpen(P.outFileTmp + "/YReadNames.out.thread", iChunk, RA->chunkOutYReadNames);
+    }
+    
+    if (P.emitYNoYFastqyes) {
+        for (uint32 imate = 0; imate < P.readNends; imate++) {
+            if (P.emitYNoYFastqCompression == "gz") {
+                // Open gzip-compressed streams
+                ostringstream yName, noYName;
+                yName << P.outFileTmp << "/YFastq.mate" << imate << ".thread" << iChunk << ".gz";
+                noYName << P.outFileTmp << "/noYFastq.mate" << imate << ".thread" << iChunk << ".gz";
+                RA->chunkOutYFastqGz[imate] = gzopen(yName.str().c_str(), "wb");
+                RA->chunkOutNoYFastqGz[imate] = gzopen(noYName.str().c_str(), "wb");
+                if (RA->chunkOutYFastqGz[imate] == nullptr || RA->chunkOutNoYFastqGz[imate] == nullptr) {
+                    ostringstream errOut;
+                    errOut << "EXITING because of FATAL ERROR: could not create Y/noY FASTQ output files\n";
+                    errOut << "Solution: check that you have permission to write and disk space\n";
+                    exitWithError(errOut.str(), std::cerr, P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
+                }
+                RA->chunkOutYFastqStream[imate].setstate(ios::badbit); // Mark fstream as unused
+                RA->chunkOutNoYFastqStream[imate].setstate(ios::badbit);
+            } else {
+                // Open uncompressed streams
+                chunkFstreamOpen(P.outFileTmp + "/YFastq.mate" + to_string(imate) + ".thread", iChunk, RA->chunkOutYFastqStream[imate]);
+                chunkFstreamOpen(P.outFileTmp + "/noYFastq.mate" + to_string(imate) + ".thread", iChunk, RA->chunkOutNoYFastqStream[imate]);
+                RA->chunkOutYFastqGz[imate] = nullptr;
+                RA->chunkOutNoYFastqGz[imate] = nullptr;
+            }
+        }
     }
 
     if (P.wasp.yes) {

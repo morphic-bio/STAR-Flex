@@ -94,7 +94,7 @@ void ReadAlign::outputAlignments() {
         // - Bulk paired-end: Check both read's alignments AND mate's alignments (via mtid in BAM output)
         // - Bulk single-end: Only check read's own alignments
         hasYAlignment_ = false;
-        if (P.emitNoYBAMyes || P.emitYReadNamesyes) {
+        if (P.emitNoYBAMyes || P.emitYReadNamesyes || P.emitYNoYFastqyes) {
             // Determine if we're in single-cell/Flex mode (no mates) vs bulk paired-end (has mates)
             bool isSingleCellOrFlex = (P.pSolo.type != 0) || P.pSolo.flexMode;
             bool hasMates = (P.readNmates == 2) && !isSingleCellOrFlex;
@@ -150,6 +150,37 @@ void ReadAlign::outputAlignments() {
 
         if (P.emitYReadNamesyes && hasYAlignment_) {
             writeNormalizedQname(chunkOutYReadNames, readNameMates[0]);
+        }
+        
+        // Write Y/noY FASTQ output
+        if (P.emitYNoYFastqyes) {
+            // Determine if we're in Flex/solo mode (route per read) vs bulk PE (route both mates together)
+            bool isSingleCellOrFlex = (P.pSolo.type != 0) || P.pSolo.flexMode;
+            bool routePerRead = isSingleCellOrFlex;  // Flex: route each read independently
+            
+            if (routePerRead) {
+                // Flex/solo mode: route each read independently based on its own alignments
+                // Note: hasYAlignment_ reflects current read's alignments in Flex mode
+                // In Flex mode, R1 and R2 are processed separately, so we write all available mates
+                // but hasYAlignment_ applies to the current read being processed
+                for (uint im = 0; im < P.readNends; im++) {
+                    if (hasYAlignment_) {
+                        writeFastxRecord(im, true);  // Write to Y FASTQ
+                    } else {
+                        writeFastxRecord(im, false); // Write to noY FASTQ
+                    }
+                }
+            } else {
+                // Bulk PE mode: route both mates together based on hasYAlignment_ (which reflects both mates)
+                // If either mate has Y alignment, both mates go to Y FASTQ
+                for (uint im = 0; im < P.readNends; im++) {
+                    if (hasYAlignment_) {
+                        writeFastxRecord(im, true);  // Write both mates to Y FASTQ
+                    } else {
+                        writeFastxRecord(im, false); // Write both mates to noY FASTQ
+                    }
+                }
+            }
         }
 
         //the operations below are both for mapped and unmapped reads
@@ -717,6 +748,55 @@ void ReadAlign::writeSAM(uint64 nTrOutSAM, Transcript **trOutSAM, Transcript *tr
         };
     };       
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void ReadAlign::writeFastxRecord(uint imate, bool isY)
+{
+    // Write FASTQ/FASTA record to Y or noY stream, preserving input header tokens
+    const char* rawName = readNameMates[imate];
+    if (rawName == nullptr || rawName[0] == 0) {
+        return;
+    }
+    char headerPrefix = (readFileType == 2) ? '@' : '>';
+    const char* name = rawName;
+    if (name[0] == '@' || name[0] == '>') {
+        ++name;
+    }
+    const string& extra = readNameExtra[imate];
+
+    if (P.emitYNoYFastqCompression == "gz") {
+        gzFile stream = isY ? chunkOutYFastqGz[imate] : chunkOutNoYFastqGz[imate];
+        if (stream == nullptr) return;
+        
+        // Write header
+        if (!extra.empty()) {
+            gzprintf(stream, "%c%s %s\n", headerPrefix, name, extra.c_str());
+        } else {
+            gzprintf(stream, "%c%s\n", headerPrefix, name);
+        }
+        gzprintf(stream, "%s\n", Read0[imate]);
+        if (readFileType == 2) { // fastq
+            gzprintf(stream, "+\n");
+            gzprintf(stream, "%s\n", Qual0[imate]);
+        }
+    } else {
+        fstream &stream = isY ? chunkOutYFastqStream[imate] : chunkOutNoYFastqStream[imate];
+        // Check if stream is open (not in bad state from gzip mode)
+        if (stream.rdstate() & ios::badbit) return;
+        
+        // Write header
+        if (!extra.empty()) {
+            stream << headerPrefix << name << " " << extra << "\n";
+        } else {
+            stream << headerPrefix << name << "\n";
+        }
+        stream << Read0[imate] << "\n";
+        if (readFileType == 2) { // fastq
+            stream << "+\n";
+            stream << Qual0[imate] << "\n";
+        }
+    }
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void ReadAlign::outReadsUnmapped()

@@ -185,6 +185,24 @@ STAR \
 
 This writes `output/Aligned.out_Y.names.txt` by default (override with `--YReadNamesOutput`).
 
+To emit Y/noY FASTQ files directly during alignment:
+
+```bash
+STAR \
+  ... \
+  --emitYNoYFastq yes \
+  --emitYNoYFastqCompression gz \
+  --outFileNamePrefix output/
+```
+
+This creates FASTQs named after the input files, with `_Y` / `_noY` inserted before the last `_R1` or `_R2`.
+For example, `Sample_R1_001.fastq.gz` becomes `Sample_Y_R1_001.fastq.gz` and `Sample_noY_R1_001.fastq.gz`
+(output written under the `--outFileNamePrefix` directory).
+If no `_R1`/`_R2` token is found, STAR falls back to `Y_reads.mateN.fastq(.gz)` and `noY_reads.mateN.fastq(.gz)` under the output prefix.
+You can override names explicitly with `--YFastqOutputPrefix` and `--noYFastqOutputPrefix`.
+
+You can use `--emitYNoYFastq yes` with `--outSAMtype None` to emit FASTQ files without BAM output.
+
 To keep the primary BAM alongside the split files:
 
 ```bash
@@ -221,6 +239,10 @@ STAR \
 |------|---------|-------------|
 | `--emitNoYBAM` | `no` | Enable Y-chromosome BAM splitting (`yes`/`no`). When enabled, emits two additional BAM files: `<out>_noY.bam` (reads with no Y-chromosome alignments) and `<out>_Y.bam` (reads with any Y-chromosome alignment). Primary BAM is suppressed by default unless `--keepBAM yes` is specified. |
 | `--emitYReadNames` | `no` | Emit list of read names with any Y-chromosome alignment (one per line). Can be used with or without Y/noY BAMs. |
+| `--emitYNoYFastq` | `no` | Emit Y/noY FASTQ files directly during alignment (`yes`/`no`). |
+| `--emitYNoYFastqCompression` | `gz` | Compression for Y/noY FASTQ output (`gz`/`none`). |
+| `--YFastqOutputPrefix` | - | Optional: override output prefix for Y FASTQ files (default: derived from input name; falls back to `Y_reads.mateN`). |
+| `--noYFastqOutputPrefix` | - | Optional: override output prefix for noY FASTQ files (default: derived from input name; falls back to `noY_reads.mateN`). |
 | `--keepBAM` | `no` | Keep primary BAM output when `--emitNoYBAM yes` is enabled (`yes`/`no`) |
 | `--noYOutput` | - | Optional: override default path for noY BAM output (default: `<out>_noY.bam`) |
 | `--YOutput` | - | Optional: override default path for Y BAM output (default: `<out>_Y.bam`) |

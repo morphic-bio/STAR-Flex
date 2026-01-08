@@ -51,6 +51,14 @@ InOutStreams::~InOutStreams() {
             outUnmappedReadsStream[ii].flush();
             outUnmappedReadsStream[ii].close();
         }
+        if (outYFastqStream[ii].is_open()) {
+            outYFastqStream[ii].flush();
+            outYFastqStream[ii].close();
+        }
+        if (outNoYFastqStream[ii].is_open()) {
+            outNoYFastqStream[ii].flush();
+            outNoYFastqStream[ii].close();
+        }
     };
 };
 
