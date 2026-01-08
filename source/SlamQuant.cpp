@@ -34,6 +34,21 @@ void SlamQuant::addRead(uint32_t geneId, uint16_t nT, uint8_t k, double weight) 
     stats.coverage += weight * static_cast<double>(nT);
 }
 
+void SlamQuant::addTransitions(const double coverage[4], const double mismatches[4][4], double weight) {
+    if (weight <= 0.0) {
+        return;
+    }
+    for (int g = 0; g < 4; ++g) {
+        transitions_.coverage[g] += coverage[g] * weight;
+        for (int r = 0; r < 4; ++r) {
+            if (g == r) {
+                continue;
+            }
+            transitions_.mismatches[g][r] += mismatches[g][r] * weight;
+        }
+    }
+}
+
 void SlamQuant::merge(const SlamQuant& other) {
     if (other.geneStats_.size() != geneStats_.size()) {
         return;
@@ -65,6 +80,12 @@ void SlamQuant::merge(const SlamQuant& other) {
     }
     for (const auto& kv : other.diag_.sumWeightDistribution) {
         diag_.sumWeightDistribution[kv.first] += kv.second;
+    }
+    for (int g = 0; g < 4; ++g) {
+        transitions_.coverage[g] += other.transitions_.coverage[g];
+        for (int r = 0; r < 4; ++r) {
+            transitions_.mismatches[g][r] += other.transitions_.mismatches[g][r];
+        }
     }
 }
 
@@ -125,6 +146,25 @@ void SlamQuant::writeDiagnostics(const std::string& diagFile) const {
         double bucketStart = kv.first * 0.1;
         double bucketEnd = (kv.first == 10) ? 999.0 : (kv.first + 1) * 0.1;
         out << "sumWeight_" << bucketStart << "_to_" << bucketEnd << "\t" << kv.second << "\n";
+    }
+}
+
+void SlamQuant::writeTransitions(const std::string& outFile) const {
+    std::ofstream out(outFile.c_str());
+    if (!out.good()) {
+        return;
+    }
+    static const char bases[4] = {'A', 'C', 'G', 'T'};
+    out << "Genomic\tRead\tCoverage\tMismatches\n";
+    for (int g = 0; g < 4; ++g) {
+        for (int r = 0; r < 4; ++r) {
+            if (g == r) {
+                continue;
+            }
+            out << bases[g] << "\t" << bases[r] << "\t"
+                << transitions_.coverage[g] << "\t"
+                << transitions_.mismatches[g][r] << "\n";
+        }
     }
 }
 

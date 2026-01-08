@@ -772,6 +772,10 @@ int main(int argInN, char *argIn[])
         // Write diagnostics
         std::string diagFile = P.quant.slam.outFile + ".diagnostics";
         mergedSlam.writeDiagnostics(diagFile);
+
+        // Write transition summary (genomic -> read base)
+        std::string transitionsFile = P.quant.slam.outFile + ".transitions.tsv";
+        mergedSlam.writeTransitions(transitionsFile);
         
         // Write top mismatches if reference file exists
         std::string refFile = P.pGe.gDir + "/../expected/fixture_ref_human.tsv.gz";
@@ -791,6 +795,8 @@ int main(int argInN, char *argIn[])
                          << P.quant.slam.outFile << "\n";
         P.inOut->logMain << "SLAM diagnostics written to: "
                          << diagFile << "\n";
+        P.inOut->logMain << "SLAM transition summary written to: "
+                         << transitionsFile << "\n";
         *P.inOut->logStdOut << timeMonthDayTime() << " ..... finished SLAM quantification\n"
                             << flush;
         P.inOut->logMain << timeMonthDayTime() << " ..... finished SLAM quantification\n";

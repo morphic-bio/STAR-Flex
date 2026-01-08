@@ -15,6 +15,9 @@ bool ReadAlign::slamCollect(const Transcript& trOut, const std::set<uint32_t>& g
 
     uint16_t nT = 0;
     uint16_t k = 0;
+    double localCoverage[4] = {0.0, 0.0, 0.0, 0.0};
+    double localMismatches[4][4] = {{0.0}};
+    bool hasSnp = false;
 
     for (uint iex = 0; iex < trOut.nExons; ++iex) {
         uint64 gStart = trOut.exons[iex][EX_G];
@@ -24,13 +27,19 @@ bool ReadAlign::slamCollect(const Transcript& trOut, const std::set<uint32_t>& g
         for (uint64 ii = 0; ii < len; ++ii) {
             uint64 gpos = gStart + ii;
             if (slamSnpMask != nullptr && slamSnpMask->contains(gpos)) {
-                slamQuant->diagnostics().readsDroppedSnpMask++;
-                return false; // discard read if it overlaps SNP mask
+                hasSnp = true;
+                break; // discard read if it overlaps SNP mask
             }
             char r1 = R[rStart + ii];
             char g1 = genOut.G[gpos];
             if (r1 == 4 || g1 == 4) {
                 continue;
+            }
+            if (g1 >= 0 && g1 < 4 && r1 >= 0 && r1 < 4) {
+                localCoverage[static_cast<int>(g1)] += 1.0;
+                if (g1 != r1) {
+                    localMismatches[static_cast<int>(g1)][static_cast<int>(r1)] += 1.0;
+                }
             }
             if (!isMinus) {
                 if (g1 == 3) { // T
@@ -48,12 +57,21 @@ bool ReadAlign::slamCollect(const Transcript& trOut, const std::set<uint32_t>& g
                 }
             }
         }
+        if (hasSnp) {
+            break;
+        }
+    }
+
+    if (hasSnp) {
+        slamQuant->diagnostics().readsDroppedSnpMask++;
+        return false;
     }
 
     uint8_t k8 = static_cast<uint8_t>(k > 255 ? 255 : k);
     for (uint32_t geneId : geneIds) {
         slamQuant->addRead(geneId, nT, k8, weight);
     }
+    slamQuant->addTransitions(localCoverage, localMismatches, weight);
     slamQuant->diagnostics().readsProcessed++;
     return true;
 }
