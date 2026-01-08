@@ -4,7 +4,7 @@
 **Repository:** STAR-Flex  
 **Branch:** slam  
 **Commit:** 48a451c237ddc690045e09e36a73e4677c07bee4  
-**Update:** Latest test run - using classifyAlign (transcript-concordant mode)
+**Update:** Latest test run - using classifyAlign (transcript-concordant mode) + GEDI debug instrumentation
 
 ## Executive Summary
 
@@ -356,6 +356,123 @@ Based on diagnostic data and top mismatch analysis:
 - Conclusion: Current approach (same weight to all genes) is correct
 
 **Final Conclusion:** The current weight calculation (`weight = 1.0 / nTr`) appears to match GRAND-SLAM's behavior. The observation that 30,915 reads have `sumWeight < 1.0` is expected and represents reads where not all alignments have gene assignments.
+
+---
+
+## GEDI Debug Instrumentation Results
+
+**Date:** January 8, 2026  
+**Purpose:** Instrument GEDI (GRAND-SLAM) to generate gene-targeted debug TSV for parity comparison
+
+### Instrumentation Process
+
+1. **Patched GEDI:** Applied `patch_gedi_slam_debug.py` to `SlamCollector.java`
+   - Added debug fields: `debugGenes`, `debugWriter`, `debugMaxReads`, `debugReadCount`
+   - Added debug methods: `initDebug()`, `isDebugGene()`, `writeDebugLine()`
+   - Integrated debug logging into `countNumis` method
+
+2. **Fixed Compilation:** Cast `count()` result from `long` to `int` to resolve type mismatch
+
+3. **Rebuilt GEDI:** Successfully compiled with `mvn compile`
+
+4. **Created GEDI Genome Index:** Indexed genome.fa and genes.gtf (took ~16m 47s)
+   - Output: `~/.gedi/genomic/human_fixture.oml`
+
+5. **Ran GEDI SLAM with Debug Flags:**
+   ```bash
+   SLAM_DEBUG_GENES="ENSG00000198938,ENSG00000198727,ENSG00000198712,ENSG00000213741,ENSG00000138326"
+   SLAM_DEBUG_OUT="/mnt/pikachu/STAR-Flex/test/tmp_slam_fixture/slam_debug.tsv"
+   SLAM_DEBUG_MAX_READS=20000
+   SLAM_DEBUG_VERBOSE=1
+   ```
+
+### Debug TSV Summary
+
+**File:** `test/tmp_slam_fixture/slam_debug.tsv`  
+**Size:** 176 KB  
+**Total Reads Logged:** 2,166 reads (plus header)
+
+**Columns:** Gene, Read, Strand, OppositeStrand, GeneConsistent, TranscriptCount, ConsistentTranscripts, OverlapGeneCount, OverlapGenes, ReadLen, ReadLen1, ReadLen2, DistinctIndex, Weight
+
+### Gene Distribution (Target Genes)
+
+| Gene ID | Symbol | Read Count | Percentage |
+|---------|--------|------------|------------|
+| ENSG00000198938 | MT-CO3 | 874 reads | 40.4% |
+| ENSG00000198727 | MT-CYB | 747 reads | 34.5% |
+| ENSG00000198712 | MT-CO2 | 395 reads | 18.2% |
+| ENSG00000138326 | RPS24 | 98 reads | 4.5% |
+| ENSG00000213741 | RPS29 | 52 reads | 2.4% |
+
+**Note:** Mitochondrial genes dominate the debug output (93.1% of reads), consistent with them being top mismatches.
+
+### Weight Distribution Analysis
+
+- **Total reads:** 2,166
+- **Sum of weights:** 2,340.42
+- **Average weight:** 1.08052
+- **Reads with weight < 1.0:** 93 (4.3%)
+- **Reads with weight > 1.0:** 151 (7.0%)
+- **Most common weight:** 1.0 (1,922 reads, 88.7%)
+
+**Weight Distribution:**
+- 1.0: 1,922 reads (88.7%)
+- 0.5: 88 reads (4.1%)
+- 2.0: 115 reads (5.3%)
+- 3.0: 22 reads (1.0%)
+- 0.25, 0.333, 4.0, 5.0, 6.0, 12.0: < 1% each
+
+**Key Finding:** Most reads have weight 1.0, but multi-mappers show fractional or higher weights. The average weight (1.08) suggests some reads are weighted differently than 1/nTr.
+
+### Strandness Analysis
+
+- **Plus strand (+):** 2,114 reads (97.6%)
+- **Minus strand (-):** 52 reads (2.4%)
+- **OppositeStrand flag:** All reads show `OppositeStrand=0` (no strand mismatches detected)
+
+**Finding:** Strong sense strand bias detected, consistent with GEDI's auto-detected strand-specific sequencing mode. No obvious strandness mismatches in the debug output.
+
+### isConsistent Special Case (Mitochondrial Genes)
+
+**Hypothesis:** GEDI uses special-case logic for coding transcripts without UTRs (common in mitochondrial genes), accepting any intersecting read that is intron-consistent.
+
+**Results:**
+- **No reads found** with `GeneConsistent=1, TranscriptCount>0, ConsistentTranscripts=0` for MT-CO3, MT-CYB, or MT-CO2
+- **MT-CO3:** All 874 reads have `TranscriptCount=1, ConsistentTranscripts=1`
+- **Finding:** The special-case logic does not appear to be firing for these mitochondrial genes in this dataset, or all reads are already transcript-consistent
+
+### Key Observations
+
+1. **Weight Distribution:** Most reads have weight 1.0, but multi-mappers show varied weights (0.25-12.0)
+2. **Strandness:** Strong sense strand bias (97.6% + strand), consistent with detected strand-specific sequencing
+3. **Mitochondrial Gene Consistency:** All MT-CO3 reads are transcript-consistent; no special-case handling observed
+4. **No Obvious Strandness Mismatches:** All reads show `OppositeStrand=0`
+
+### Next Steps for Comparison
+
+1. **Compare Weights:** Compare GEDI weights vs STAR-SLAM weights for the same reads
+2. **Check Gene Assignment:** Verify STAR-SLAM assigns the same reads to the same genes
+3. **Investigate Multi-Mappers:** Examine reads with weight ≠ 1.0 to understand weighting differences
+4. **Coverage Calculation:** Compare how coverage is calculated between GEDI and STAR-SLAM
+5. **Read-Level Comparison:** Match individual reads between GEDI debug TSV and STAR-SLAM output to identify divergence points
+
+---
+
+## What We Tried (Do Not Repeat)
+
+- **Unstranded gene assignment (`SLAM_UNSTRANDED=1`)**: parity worsened (read/count/coverage mismatches increased).
+- **GeneFull overlap mode (`SLAM_USE_GENEFULL_OVERLAP=1`)**: not viable; geneFull structures are not loaded for SLAM-only runs.
+- **Weight denominator alternatives**:
+  - `weight = 1/nAlignWithGene`, weight normalization to sum=1, and per-gene split weights all worsened parity.
+  - Conclusion: `weight = 1/nTr` is closest to GRAND-SLAM behavior.
+- **Strandness mismatch hypothesis**: ruled out by GEDI debug TSV (OppositeStrand=0 for all logged reads).
+- **GEDI special-case transcript consistency (coding with no UTRs)**: not observed for MT-CO3/MT-CYB/MT-CO2 in this fixture.
+
+## Remaining Divergences: Likely Locations
+
+- **Mitochondrial overlaps**: MT-CO3 shows 31.2% of reads overlapping another mt gene (`ENSG00000198899`) in GEDI debug output. GEDI counts to all compatible genes with `overlap=All`; STAR may be assigning a smaller gene set for those overlaps.
+- **Transcript compatibility differences**: RPS24/RPS29 reads show `ConsistentTranscripts < TranscriptCount` in GEDI, meaning GEDI counts reads if any transcript is consistent. STAR uses its own transcript concordance logic (`alignToTranscript`), which may reject some of these reads.
+- **Downstream impacts**: read count, conversion, and coverage deltas likely follow from these assignment differences rather than EM solver behavior.
 
 ## Next Steps
 
