@@ -51,12 +51,14 @@ public:
     SlamQuant(uint32_t nGenes, std::vector<uint8_t> allowedGenes);
 
     void addRead(uint32_t geneId, uint16_t nT, uint8_t k, double weight);
-    void addTransitions(const double coverage[4], const double mismatches[4][4], double weight);
+    void addTransitionBase(uint32_t readPos, bool secondMate, int genomicBase, int readBase, double weight);
     void merge(const SlamQuant& other);
     void write(const Transcriptome& tr, const std::string& outFile,
                double errorRate, double convRate) const;
     void writeDiagnostics(const std::string& diagFile) const;
     void writeTransitions(const std::string& outFile) const;
+    void writeMismatches(const std::string& outFile, const std::string& condition) const;
+    void writeMismatchDetails(const std::string& outFile) const;
     void writeTopMismatches(const Transcriptome& tr, const std::string& refFile,
                            const std::string& mismatchFile, size_t topN) const;
 
@@ -68,6 +70,9 @@ private:
     std::vector<SlamGeneStats> geneStats_;
     SlamDiagnostics diag_;
     SlamTransitionStats transitions_;
+    SlamTransitionStats transitionsFirst_;
+    SlamTransitionStats transitionsSecond_;
+    std::vector<SlamTransitionStats> positionTransitions_;
     std::vector<uint8_t> allowedGenes_;
 };
 

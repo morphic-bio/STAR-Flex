@@ -34,18 +34,26 @@ void SlamQuant::addRead(uint32_t geneId, uint16_t nT, uint8_t k, double weight) 
     stats.coverage += weight * static_cast<double>(nT);
 }
 
-void SlamQuant::addTransitions(const double coverage[4], const double mismatches[4][4], double weight) {
-    if (weight <= 0.0) {
+void SlamQuant::addTransitionBase(uint32_t readPos, bool secondMate, int genomicBase, int readBase, double weight) {
+    if (weight <= 0.0 || genomicBase < 0 || genomicBase > 3 || readBase < 0 || readBase > 3) {
         return;
     }
-    for (int g = 0; g < 4; ++g) {
-        transitions_.coverage[g] += coverage[g] * weight;
-        for (int r = 0; r < 4; ++r) {
-            if (g == r) {
-                continue;
-            }
-            transitions_.mismatches[g][r] += mismatches[g][r] * weight;
-        }
+    transitions_.coverage[genomicBase] += weight;
+    if (genomicBase != readBase) {
+        transitions_.mismatches[genomicBase][readBase] += weight;
+    }
+    SlamTransitionStats& orient = secondMate ? transitionsSecond_ : transitionsFirst_;
+    orient.coverage[genomicBase] += weight;
+    if (genomicBase != readBase) {
+        orient.mismatches[genomicBase][readBase] += weight;
+    }
+    if (readPos >= positionTransitions_.size()) {
+        positionTransitions_.resize(readPos + 1);
+    }
+    SlamTransitionStats& pos = positionTransitions_[readPos];
+    pos.coverage[genomicBase] += weight;
+    if (genomicBase != readBase) {
+        pos.mismatches[genomicBase][readBase] += weight;
     }
 }
 
@@ -85,6 +93,25 @@ void SlamQuant::merge(const SlamQuant& other) {
         transitions_.coverage[g] += other.transitions_.coverage[g];
         for (int r = 0; r < 4; ++r) {
             transitions_.mismatches[g][r] += other.transitions_.mismatches[g][r];
+        }
+    }
+    for (int g = 0; g < 4; ++g) {
+        transitionsFirst_.coverage[g] += other.transitionsFirst_.coverage[g];
+        transitionsSecond_.coverage[g] += other.transitionsSecond_.coverage[g];
+        for (int r = 0; r < 4; ++r) {
+            transitionsFirst_.mismatches[g][r] += other.transitionsFirst_.mismatches[g][r];
+            transitionsSecond_.mismatches[g][r] += other.transitionsSecond_.mismatches[g][r];
+        }
+    }
+    if (other.positionTransitions_.size() > positionTransitions_.size()) {
+        positionTransitions_.resize(other.positionTransitions_.size());
+    }
+    for (size_t i = 0; i < other.positionTransitions_.size(); ++i) {
+        for (int g = 0; g < 4; ++g) {
+            positionTransitions_[i].coverage[g] += other.positionTransitions_[i].coverage[g];
+            for (int r = 0; r < 4; ++r) {
+                positionTransitions_[i].mismatches[g][r] += other.positionTransitions_[i].mismatches[g][r];
+            }
         }
     }
 }
@@ -164,6 +191,56 @@ void SlamQuant::writeTransitions(const std::string& outFile) const {
             out << bases[g] << "\t" << bases[r] << "\t"
                 << transitions_.coverage[g] << "\t"
                 << transitions_.mismatches[g][r] << "\n";
+        }
+    }
+}
+
+void SlamQuant::writeMismatches(const std::string& outFile, const std::string& condition) const {
+    std::ofstream out(outFile.c_str());
+    if (!out.good()) {
+        return;
+    }
+    static const char bases[4] = {'A', 'C', 'G', 'T'};
+    out << "Category\tCondition\tOrientation\tGenomic\tRead\tCoverage\tMismatches\n";
+    const SlamTransitionStats* orientations[2] = {&transitionsFirst_, &transitionsSecond_};
+    const char* labels[2] = {"First", "Second"};
+    for (int o = 0; o < 2; ++o) {
+        const SlamTransitionStats& stats = *orientations[o];
+        for (int g = 0; g < 4; ++g) {
+            for (int r = 0; r < 4; ++r) {
+                if (g == r) {
+                    continue;
+                }
+                out << "Exonic\t" << condition << "\t" << labels[o] << "\t"
+                    << bases[g] << "\t" << bases[r] << "\t"
+                    << stats.coverage[g] << "\t" << stats.mismatches[g][r] << "\n";
+            }
+        }
+    }
+}
+
+void SlamQuant::writeMismatchDetails(const std::string& outFile) const {
+    std::ofstream out(outFile.c_str());
+    if (!out.good()) {
+        return;
+    }
+    static const char bases[4] = {'A', 'C', 'G', 'T'};
+    out << "Category\tGenomic\tRead\tPosition\tOverlap\tOpposite\tCoverage\tMismatches\n";
+    for (size_t pos = 0; pos < positionTransitions_.size(); ++pos) {
+        const SlamTransitionStats& stats = positionTransitions_[pos];
+        for (int g = 0; g < 4; ++g) {
+            double cov = stats.coverage[g];
+            if (cov <= 0.0) {
+                continue;
+            }
+            for (int r = 0; r < 4; ++r) {
+                if (g == r) {
+                    continue;
+                }
+                out << "Exonic\t" << bases[g] << "\t" << bases[r] << "\t"
+                    << pos << "\t0\t0\t" << cov << "\t"
+                    << stats.mismatches[g][r] << "\n";
+            }
         }
     }
 }

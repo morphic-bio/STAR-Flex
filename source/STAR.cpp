@@ -773,9 +773,13 @@ int main(int argInN, char *argIn[])
         std::string diagFile = P.quant.slam.outFile + ".diagnostics";
         mergedSlam.writeDiagnostics(diagFile);
 
-        // Write transition summary (genomic -> read base)
+        // Write transition summaries (GEDI-style and compact)
         std::string transitionsFile = P.quant.slam.outFile + ".transitions.tsv";
         mergedSlam.writeTransitions(transitionsFile);
+        std::string mismatchFile = P.quant.slam.outFile + ".mismatches.tsv";
+        mergedSlam.writeMismatches(mismatchFile, P.outFileNamePrefix);
+        std::string mismatchDetailsFile = P.quant.slam.outFile + ".mismatchdetails.tsv";
+        mergedSlam.writeMismatchDetails(mismatchDetailsFile);
         
         // Write top mismatches if reference file exists
         std::string refFile = P.pGe.gDir + "/../expected/fixture_ref_human.tsv.gz";
@@ -797,6 +801,10 @@ int main(int argInN, char *argIn[])
                          << diagFile << "\n";
         P.inOut->logMain << "SLAM transition summary written to: "
                          << transitionsFile << "\n";
+        P.inOut->logMain << "SLAM mismatch summary written to: "
+                         << mismatchFile << "\n";
+        P.inOut->logMain << "SLAM mismatch details written to: "
+                         << mismatchDetailsFile << "\n";
         *P.inOut->logStdOut << timeMonthDayTime() << " ..... finished SLAM quantification\n"
                             << flush;
         P.inOut->logMain << timeMonthDayTime() << " ..... finished SLAM quantification\n";
