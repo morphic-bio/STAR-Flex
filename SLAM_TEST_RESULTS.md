@@ -194,10 +194,29 @@ The segmentation fault was caused by missing transcript/exon structure loading w
 2. **Zero-gene reads:** 61,983 reads have no gene assignment (may be intergenic or unannotated)
 3. **Multi-mapper weighting:** Most reads are single-mappers (nTr=1), but multi-mappers are properly weighted
 4. **Multi-gene overlaps:** Some alignments overlap 15-22 genes, suggesting complex gene structures
-5. **Weight denominator issue CONFIRMED:** 30,915 reads have sumWeight < 1.0 (38.8% of all reads)
+5. **Weight denominator discrepancy noted:** 30,915 reads have sumWeight < 1.0 (38.8% of all reads)
    - 28,620 reads have nAlignWithGene = 0 (no alignments with gene assignments)
    - This means weight = 1/nTr is being used even when many alignments have no genes
    - **Hypothesis:** Should use weight = 1/nAlignWithGene instead of 1/nTr
+   - **Status:** Follow-up runs suggest this is not the primary driver of the remaining parity gaps
+
+## GEDI Filters & Instrumentation Notes
+
+**Filter inventory (GEDI SLAM pipeline):**
+- Biotype allowlist when `allGenes=false` (protein_coding, lincRNA, antisense, IG/TR classes, synthetic).
+- Strandness from `${prefix}.strandness` (auto-detected in `SlamDetectSnps` unless overridden).
+- Read weighting: `mode=Weight`; overlap handling: `overlap=All`.
+- SNP mask from `${prefix}.snpdata` (masked positions excluded from counts).
+- Trimming: `trim5p/trim3p` (defaults 0); `lenientOverlap=false` unless `-lenient`/`-10x`.
+- `introns=false` by default; no low-complexity blacklist in the SLAM path.
+
+**Transcript compatibility note:** `SlamCollector.isConsistent` uses strict `isConsistentlyContained` except for coding transcripts without UTRs (common in mitochondrial genes), where it accepts any intersecting read that is intron-consistent. This is a likely driver of remaining mt/ribo deltas vs STAR.
+
+**Instrumentation plan (if parity still off):**
+- Patch GEDI to emit a debug TSV for a small gene list (e.g., MT-CO3/MT-CYB/MT-CO2/RPS29/RPS24).
+- Log per read: location, strandness, `isConsistent` result, overlap gene set, read geometry/length, and weight.
+- Use `SlamCollector.setVerbose(1/2)` for mismatch-level detail, gated to the target genes to keep output small.
+- Compare against STAR SLAM debug logs for the same genes to pinpoint the first divergence point.
 
 ## Remaining Parity Mismatches
 
