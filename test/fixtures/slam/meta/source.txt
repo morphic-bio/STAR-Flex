@@ -1,0 +1,31 @@
+Human fixture (default):
+  Study: SRP568085 (Ewing sarcoma SLAM-seq)
+  Sample: GSM8829548 (A2.2_150nM_SLAM-seq_rep2)
+  Accession: SRR32576116 (SE150)
+
+Commands used:
+  fastq-dump -X 100000 --gzip -O test/tmp_slam_fixture SRR32576116
+  zcat test/tmp_slam_fixture/SRR32576116.fastq.gz | head -n 400000 | gzip > \
+    test/fixtures/slam/raw/slam_100000_reads_SRR32576116.fastq.gz
+
+Reference (standard 110-44):
+  Genome: /storage/autoindex_110_44/bulk_index/cellranger_ref/genome.fa
+  GTF:    /storage/autoindex_110_44/bulk_index/cellranger_ref/genes.gtf
+  STAR index: /storage/autoindex_110_44/bulk_index
+
+Fixture notes:
+  Read length: 150
+  Read count: 100000
+  Default SNP handling: prefilter BAM by removing reads that overlap GRAND-SLAM
+    detected SNPs (snpdata -> BED -> samtools view -L -U). The final reference
+    outputs are generated from the prefiltered BAM.
+  Optional: an external SNP VCF can be converted to BED and used for the same
+    prefilter step (ensure contig naming matches the BAM).
+  Reference output: test/fixtures/slam/expected/fixture_ref_human.tsv.gz
+  SNP BED (data-derived): test/fixtures/slam/ref/snps.bed
+
+Mouse fixture (legacy):
+  Zenodo record: 7612564 (Herzog et al., 2017), QuantSeq 3' mRNA-Seq, SE50.
+  Accession: SRR5678872 (mESC.0h.chase.A)
+  File: test/fixtures/slam/raw/slam_100000_reads.fastq.gz
+  Annotation: test/fixtures/slam/ref/mESC-end.gtf

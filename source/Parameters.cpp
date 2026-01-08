@@ -390,6 +390,11 @@ Parameters::Parameters() {//initalize parameters info
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "quantVBTrace", &quant.transcriptVB.traceFile));
     parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "quantVBTraceLimit", &quant.transcriptVB.traceLimit));
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "quantVBErrorModel", &quant.transcriptVB.errorModelMode));
+    parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "slamQuantMode", &quant.slam.modeInt));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamSnpBed", &quant.slam.snpBed));
+    parArray.push_back(new ParameterInfoScalar <double>   (-1, -1, "slamErrorRate", &quant.slam.errorRate));
+    parArray.push_back(new ParameterInfoScalar <double>   (-1, -1, "slamConvRate", &quant.slam.convRate));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamOutFile", &quant.slam.outFile));
 
     //2-pass
     parArray.push_back(new ParameterInfoScalar <uint>   (-1, -1, "twopass1readsN", &twoPass.pass1readsN));
@@ -1305,6 +1310,30 @@ void Parameters::inputParameters (int argInN, char* argIn[]) {//input parameters
     //these may be set in STARsolo or in SAM attributes
     quant.geneFull.yes=false;
     quant.gene.yes=false;
+
+    // SLAM quantification (independent of quantMode)
+    quant.slam.yes = (quant.slam.modeInt != 0);
+    if (quant.slam.yes) {
+        quant.yes = true;
+        if (quant.slam.outFile.empty() || quant.slam.outFile == "-") {
+            quant.slam.outFile = outFileNamePrefix + "SlamQuant.out";
+        }
+        if (quant.slam.errorRate <= 0.0 || quant.slam.errorRate >= 1.0) {
+            ostringstream errOut;
+            errOut << "EXITING because of FATAL PARAMETER ERROR: "
+                   << "--slamErrorRate must be in (0,1)\n";
+            exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
+        }
+        if (quant.slam.convRate <= 0.0 || quant.slam.convRate >= 1.0) {
+            ostringstream errOut;
+            errOut << "EXITING because of FATAL PARAMETER ERROR: "
+                   << "--slamConvRate must be in (0,1)\n";
+            exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
+        }
+        if (quant.slam.snpBed == "-" || quant.slam.snpBed == "None") {
+            quant.slam.snpBed.clear();
+        }
+    }
     
     // Initialize transcriptVB defaults
     if (quant.transcriptVB.yes) {

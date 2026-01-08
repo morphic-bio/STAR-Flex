@@ -19,6 +19,7 @@
 
 // Forward declaration for library format detector
 class LibFormatDetector;
+class SlamSnpMask;
 
 class Parameters {
 
@@ -378,6 +379,16 @@ class Parameters {
                 // Shared detector instance (created before detection, accessed by TranscriptQuantEC)
                 LibFormatDetector* libFormatDetector = nullptr;  // Raw ptr, owned by STAR.cpp
             } transcriptVB;
+
+            struct {
+                bool yes=false;
+                int modeInt=0;              // CLI flag (0/1)
+                double errorRate=0.001;     // Background error rate
+                double convRate=0.05;       // Conversion rate for labeled reads
+                string snpBed;              // Optional SNP BED for prefilter
+                string outFile;             // Output file path
+                SlamSnpMask* snpMask=nullptr; // Loaded SNP mask (if any)
+            } slam;
 
             struct {
                 bool yes=false;

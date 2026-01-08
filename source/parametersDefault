@@ -967,6 +967,21 @@ quantVBErrorModel                     auto
             as   ... use AS only
             off  ... disable error model
 
+slamQuantMode                         0
+    int: 0/1 - enable STAR-Slam quantification
+
+slamSnpBed                            -
+    string: BED file of SNP positions to prefilter reads (optional)
+
+slamErrorRate                         0.001
+    double: Background error rate for SLAM EM solver
+
+slamConvRate                          0.05
+    double: Conversion rate for labeled reads in SLAM EM solver
+
+slamOutFile                           -
+    string: Output file for SlamQuant (default: <prefix>SlamQuant.out)
+
 quantTranscriptomeSAMoutput BanSingleEnd_BanIndels_ExtendSoftclip
     string: alignment filtering for TranscriptomeSAM output
                             BanSingleEnd_BanIndels_ExtendSoftclip ... prohibit indels and single-end alignments, extend softclips - compatible with RSEM

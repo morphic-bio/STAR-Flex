@@ -1,0 +1,5 @@
+Gene	Symbol	test/tmp_slam_fixture/fixture_human_ Readcount	test/tmp_slam_fixture/fixture_human_ 0.05 quantile	test/tmp_slam_fixture/fixture_human_ Mean	test/tmp_slam_fixture/fixture_human_ MAP	test/tmp_slam_fixture/fixture_human_ 0.95 quantile	test/tmp_slam_fixture/fixture_human_ alpha	test/tmp_slam_fixture/fixture_human_ beta	test/tmp_slam_fixture/fixture_human_ Conversions	test/tmp_slam_fixture/fixture_human_ Coverage	test/tmp_slam_fixture/fixture_human_ Double-Hits	test/tmp_slam_fixture/fixture_human_ Double-Hit Coverage	test/tmp_slam_fixture/fixture_human_ min2	Length
+Exonic	null	48245.3571	0.1430	0.1464	0.1463	0.1498	4338.5051	25303.4558	1.289e+04	1.509e+06	0.000	0.000	2991.8	0
+ExonicSense	null	48245.3571	0.1430	0.1464	0.1463	0.1498	4338.5051	25303.4558	1.289e+04	1.509e+06	0.000	0.000	2991.8	0
+Intronic	null	6630.2583	0.6067	0.6212	0.6212	0.6354	1921.9038	1172.2683	5788	1.568e+05	0.000	0.000	1509.7	0
+IntronicSense	null	6630.2583	0.6067	0.6212	0.6212	0.6354	1921.9038	1172.2683	5788	1.568e+05	0.000	0.000	1509.7	0

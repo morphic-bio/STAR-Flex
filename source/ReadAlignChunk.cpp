@@ -1,12 +1,64 @@
 #include "ReadAlignChunk.h"
 #include "alignment_model.h"  // For Transcriptome
+#include "SlamQuant.h"
 #include <pthread.h>
 #include "ErrorWarning.h"
 #include "ProbeListIndex.h"
 #include "Solo.h"
 #include <fstream>
 #include <cstdlib>
+#include <unordered_set>
 #include <zlib.h>
+
+namespace {
+std::vector<uint8_t> buildSlamAllowedGenes(const Transcriptome& tr) {
+    std::vector<uint8_t> allowed;
+    if (tr.geBiotype.empty()) {
+        return allowed;
+    }
+    bool anyBiotype = false;
+    for (const auto& bt : tr.geBiotype) {
+        if (!bt.empty()) {
+            anyBiotype = true;
+            break;
+        }
+    }
+    if (!anyBiotype) {
+        return allowed;
+    }
+    static const std::unordered_set<std::string> allowedBiotypes = {
+        "protein_coding",
+        "lincRNA",
+        "antisense",
+        "IG_LV_gene",
+        "IG_V_gene",
+        "IG_V_pseudogene",
+        "IG_D_gene",
+        "IG_J_gene",
+        "IG_J_pseudogene",
+        "IG_C_gene",
+        "IG_C_pseudogene",
+        "TR_V_gene",
+        "TR_V_pseudogene",
+        "TR_D_gene",
+        "TR_J_gene",
+        "TR_J_pseudogene",
+        "TR_C_gene",
+        "synthetic"
+    };
+    allowed.assign(tr.nGe, 0);
+    size_t n = tr.geBiotype.size();
+    if (n > tr.nGe) {
+        n = tr.nGe;
+    }
+    for (size_t i = 0; i < n; ++i) {
+        if (allowedBiotypes.count(tr.geBiotype[i]) > 0) {
+            allowed[i] = 1;
+        }
+    }
+    return allowed;
+}
+}
 
 ReadAlignChunk::ReadAlignChunk(Parameters& Pin, Genome &genomeIn, Transcriptome *TrIn, int iChunk,
                                 const libem::Transcriptome* libemTr) : P(Pin), mapGen(genomeIn) {//initialize chunk
@@ -20,9 +72,16 @@ ReadAlignChunk::ReadAlignChunk(Parameters& Pin, Genome &genomeIn, Transcriptome 
         chunkTr=NULL;
     };
 
+    slamQuant = nullptr;
+    if (P.quant.slam.yes && chunkTr != nullptr) {
+        slamQuant = new SlamQuant(chunkTr->nGe, buildSlamAllowedGenes(*chunkTr));
+    }
+
     RA = new ReadAlign(P, mapGen, chunkTr, iChunk, libemTr);//new local copy of RA for each chunk
 
     RA->iRead=0;
+    RA->slamQuant = slamQuant;
+    RA->slamSnpMask = P.quant.slam.snpMask;
 
     chunkIn=new char* [P.readNends];
     readInStream=new istringstream* [P.readNends];

@@ -20,6 +20,8 @@
 // Forward declarations
 class SampleDetector;
 class TranscriptQuantEC;
+class SlamQuant;
+class SlamSnpMask;
 namespace libem {
 class Transcriptome;
 }
@@ -156,6 +158,9 @@ class ReadAlign {
         Transcriptome *chunkTr;
     public:
         TranscriptQuantEC *quantEC;  // EC table for transcript quantification (TranscriptVB mode)
+        // SLAM quantification (optional)
+        SlamQuant* slamQuant = nullptr;
+        const SlamSnpMask* slamSnpMask = nullptr;
     private:
 
         //mapping time
@@ -292,6 +297,7 @@ class ReadAlign {
         void writeFastxRecord(uint imate, bool isY);  // Write FASTQ/FASTA record to Y or noY stream
         void spliceGraphWriteSAM();
         void alignedAnnotation();
+        bool slamCollect(const Transcript& trOut, const std::set<uint32_t>& geneIds, double weight);
         void writeSAM(uint64 nTrOutSAM, Transcript **trOutSAM, Transcript *trBestSAM);
         void recordSJ(uint64 nTrO, Transcript **trO, OutSJ *cSJ);
 

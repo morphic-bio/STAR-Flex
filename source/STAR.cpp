@@ -38,6 +38,7 @@
 #include "gc_bias.h"
 #include "fld_accumulator.h"
 #include "TranscriptQuantOutput.h"
+#include "SlamQuant.h"
 // Note: effective_length.h not included due to Transcriptome class name conflict
 // Use wrapper function instead
 #include "effective_length_wrapper.h"
@@ -250,6 +251,22 @@ int main(int argInN, char *argIn[])
     if (P.quant.yes)
     { // load transcriptome
         transcriptomeMain = new Transcriptome(P);
+
+        if (P.quant.slam.yes && !P.quant.slam.snpBed.empty()) {
+            P.quant.slam.snpMask = new SlamSnpMask();
+            std::string err;
+            if (!P.quant.slam.snpMask->loadBed(P.quant.slam.snpBed, *genomeMain.genomeOut.g, &err)) {
+                ostringstream errOut;
+                errOut << "EXITING because of fatal INPUT error: failed to load slamSnpBed "
+                       << P.quant.slam.snpBed << "\n";
+                if (!err.empty()) {
+                    errOut << "Details: " << err << "\n";
+                }
+                exitWithError(errOut.str(), std::cerr, P.inOut->logMain, EXIT_CODE_PARAMETER, P);
+            }
+            P.inOut->logMain << "Loaded SLAM SNP BED (" << P.quant.slam.snpMask->size()
+                             << " positions): " << P.quant.slam.snpBed << "\n";
+        }
         
         // Load transcript sequences for error model if enabled
         if (P.quant.transcriptVB.yes && P.quant.transcriptVB.errorModelMode != "off") {
@@ -734,6 +751,49 @@ int main(int argInN, char *argIn[])
         *P.inOut->logStdOut << timeMonthDayTime() << " ..... finished transcript quantification\n"
                           << flush;
         P.inOut->logMain << timeMonthDayTime() << " ..... finished transcript quantification\n";
+    }
+
+    // SLAM quantification (gene-level)
+    if (P.quant.slam.yes && transcriptomeMain != nullptr && transcriptomeMain->nGe > 0) {
+        *P.inOut->logStdOut << timeMonthDayTime() << " ..... started SLAM quantification\n"
+                            << flush;
+        P.inOut->logMain << timeMonthDayTime() << " ..... started SLAM quantification\n";
+
+        SlamQuant mergedSlam(transcriptomeMain->nGe);
+        for (int ichunk = 0; ichunk < P.runThreadN; ++ichunk) {
+            if (RAchunk[ichunk] != nullptr && RAchunk[ichunk]->RA != nullptr &&
+                RAchunk[ichunk]->RA->slamQuant != nullptr) {
+                mergedSlam.merge(*RAchunk[ichunk]->RA->slamQuant);
+            }
+        }
+        mergedSlam.write(*transcriptomeMain, P.quant.slam.outFile,
+                         P.quant.slam.errorRate, P.quant.slam.convRate);
+
+        // Write diagnostics
+        std::string diagFile = P.quant.slam.outFile + ".diagnostics";
+        mergedSlam.writeDiagnostics(diagFile);
+        
+        // Write top mismatches if reference file exists
+        std::string refFile = P.pGe.gDir + "/../expected/fixture_ref_human.tsv.gz";
+        std::ifstream refCheck(refFile.c_str());
+        if (!refCheck.good()) {
+            // Try alternative path
+            refFile = "test/fixtures/slam/expected/fixture_ref_human.tsv.gz";
+            refCheck.open(refFile.c_str());
+        }
+        if (refCheck.good()) {
+            refCheck.close();
+            std::string mismatchFile = P.quant.slam.outFile + ".top_mismatches";
+            mergedSlam.writeTopMismatches(*transcriptomeMain, refFile, mismatchFile, 20);
+        }
+
+        P.inOut->logMain << "SLAM quantification written to: "
+                         << P.quant.slam.outFile << "\n";
+        P.inOut->logMain << "SLAM diagnostics written to: "
+                         << diagFile << "\n";
+        *P.inOut->logStdOut << timeMonthDayTime() << " ..... finished SLAM quantification\n"
+                            << flush;
+        P.inOut->logMain << timeMonthDayTime() << " ..... finished SLAM quantification\n";
     }
 
     // wiggle output

@@ -1,0 +1,2 @@
+2026-01-08 15:47:49.062 INFO Gedi version 1.0.6d (JAR) startup
+2026-01-08 15:47:49.067 INFO GRAND-SLAM version 2.0.7b

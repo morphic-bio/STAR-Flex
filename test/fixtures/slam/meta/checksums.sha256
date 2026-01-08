@@ -1,0 +1,5 @@
+8c28fae4adae8c2ed0ee22db1e7cceced4ae598f441b86d1a17fe5aeea8f3d76  test/fixtures/slam/raw/slam_100000_reads_SRR32576116.fastq.gz
+b78a46b1612500eac68ce8a75ce861302e8b7caac14bf94c0448e96dca2582c8  test/fixtures/slam/ref/genome.fa
+38d4d8cfc56e17783493424d127eeea98acd56f4c13bc9582a0f96f7ef4cf01d  test/fixtures/slam/ref/genes.gtf
+8f2e760550f4456f13be4384475cff7de786fa9b2242cbbc8c16edb9fd9ac497  test/fixtures/slam/ref/snps.bed
+d22fe98466c3f25b0e20444d30bef4f21c0e07a6cdd6906d5bc5b2d2e2c48a47  test/fixtures/slam/expected/fixture_ref_human.tsv.gz

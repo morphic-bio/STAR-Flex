@@ -1,4 +1,5 @@
 #include "ReadAlign.h"
+#include "SlamQuant.h"
 #include "SampleDetector.h"
 #include "GlobalVariables.h"
 #include "ErrorWarning.h"
@@ -86,6 +87,66 @@ void ReadAlign::outputAlignments() {
             };            
             
             ReadAlign::alignedAnnotation();
+            
+            if (P.quant.slam.yes && slamQuant != nullptr) {
+                auto &annFeat = readAnnot.annotFeatures[SoloFeatureTypes::Gene];
+                size_t nAlign = annFeat.fAlign.size();
+                if (nTr > 0) {
+                    size_t nTrSize = static_cast<size_t>(nTr);
+                    // Ensure we process exactly nTr alignments
+                    // fAlign should be resized to nTr by classifyAlign, but be safe
+                    if (nAlign != nTrSize) {
+                        if (nAlign < nTrSize) {
+                            annFeat.fAlign.resize(nTrSize);
+                        } else {
+                            nAlign = nTrSize;
+                        }
+                    }
+                    
+                    // Track nTr distribution
+                    slamQuant->diagnostics().nTrDistribution[nTr]++;
+                    
+                    // Count alignments with gene assignments
+                    size_t nAlignWithGene = 0;
+                    double sumWeight = 0.0;
+                    
+                    // Use nTr as denominator for weight (matches GRAND-SLAM behavior)
+                    // Weight is applied only to alignments that have gene assignments
+                    double weight = 1.0 / static_cast<double>(nTr);
+                    
+                    // Iterate over all nTr alignments
+                    for (size_t ia = 0; ia < nTrSize; ++ia) {
+                        if (ia < annFeat.fAlign.size()) {
+                            const auto &genes = annFeat.fAlign[ia];
+                            // Track gene set size distribution
+                            slamQuant->diagnostics().geneSetSizeDistribution[genes.size()]++;
+                            if (!genes.empty()) {
+                                nAlignWithGene++;
+                                sumWeight += weight;
+                                // Apply same weight to all genes in the set (current approach)
+                                slamCollect(*trMult[ia], genes, weight);
+                            }
+                        }
+                    }
+                    
+                    // Track weight denominator diagnostics
+                    slamQuant->diagnostics().nAlignWithGeneDistribution[nAlignWithGene]++;
+                    // Bucket sumWeight for distribution (0.0-0.1, 0.1-0.2, ..., 0.9-1.0, 1.0+)
+                    size_t weightBucket = static_cast<size_t>(sumWeight * 10.0);
+                    if (weightBucket > 10) weightBucket = 10;
+                    slamQuant->diagnostics().sumWeightDistribution[weightBucket]++;
+                    
+                    if (nAlignWithGene == 0) {
+                        slamQuant->diagnostics().readsNAlignWithGeneZero++;
+                    }
+                    if (sumWeight < 0.999) {  // Allow small floating point tolerance
+                        slamQuant->diagnostics().readsSumWeightLessThanOne++;
+                    }
+                } else if (nTr > 0 && nAlign == 0) {
+                    slamQuant->diagnostics().readsZeroGenes++;
+                    slamQuant->diagnostics().readsNAlignWithGeneZero++;
+                }
+            }
         };
         
         // Y-chromosome alignment decision: check if any alignment touches Y
@@ -857,6 +918,10 @@ void ReadAlign::alignedAnnotation()
     if ( P.quant.gene.yes ) {
         chunkTr->classifyAlign(trMult, nTr, readAnnot);
     };
+    // SLAM quantification needs gene annotations for alignments (if not already done above)
+    if ( P.quant.slam.yes && !P.quant.gene.yes ) {
+        chunkTr->classifyAlign(trMult, nTr, readAnnot);
+    }
     //solo-GeneFull_ExonOverIntron
     if ( P.quant.geneFull_ExonOverIntron.yes ) {
         chunkTr->geneFullAlignOverlap_ExonOverIntron(nTr, trMult, P.pSolo.strand, readAnnot.annotFeatures[SoloFeatureTypes::GeneFull_ExonOverIntron], readAnnot.annotFeatures[SoloFeatureTypes::Gene]);

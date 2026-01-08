@@ -14,6 +14,7 @@
 namespace libem {
     class Transcriptome;
 }
+class SlamQuant;
 
 class ReadAlignChunk {//chunk of reads and alignments
 public:
@@ -21,6 +22,7 @@ public:
     ReadAlign* RA;
 
     Transcriptome *chunkTr;
+    SlamQuant *slamQuant;
 
     char **chunkIn; //space for the chunk of input reads
     array<uint64, MAX_N_MATES> chunkInSizeBytesTotal;    

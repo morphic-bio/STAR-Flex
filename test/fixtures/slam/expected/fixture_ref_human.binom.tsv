@@ -1,0 +1,1257 @@
+n	d	Condition	Type	count
+35	2	test/tmp_slam_fixture/fixture_human_		38
+2	1	test/tmp_slam_fixture/fixture_human_		2
+68	3	test/tmp_slam_fixture/fixture_human_		3
+35	3	test/tmp_slam_fixture/fixture_human_		23
+68	4	test/tmp_slam_fixture/fixture_human_		1
+35	4	test/tmp_slam_fixture/fixture_human_		15
+35	5	test/tmp_slam_fixture/fixture_human_		8
+35	6	test/tmp_slam_fixture/fixture_human_		1
+69	0	test/tmp_slam_fixture/fixture_human_		22
+36	0	test/tmp_slam_fixture/fixture_human_		920
+69	1	test/tmp_slam_fixture/fixture_human_		1
+36	1	test/tmp_slam_fixture/fixture_human_		106
+3	0	test/tmp_slam_fixture/fixture_human_		83
+69	2	test/tmp_slam_fixture/fixture_human_		1
+36	2	test/tmp_slam_fixture/fixture_human_		31
+69	3	test/tmp_slam_fixture/fixture_human_		4
+3	1	test/tmp_slam_fixture/fixture_human_		1
+36	3	test/tmp_slam_fixture/fixture_human_		15
+36	4	test/tmp_slam_fixture/fixture_human_		13
+36	5	test/tmp_slam_fixture/fixture_human_		2
+36	6	test/tmp_slam_fixture/fixture_human_		1
+70	0	test/tmp_slam_fixture/fixture_human_		21
+37	0	test/tmp_slam_fixture/fixture_human_		1572
+70	1	test/tmp_slam_fixture/fixture_human_		1
+37	1	test/tmp_slam_fixture/fixture_human_		176
+4	0	test/tmp_slam_fixture/fixture_human_		135
+70	2	test/tmp_slam_fixture/fixture_human_		2
+37	2	test/tmp_slam_fixture/fixture_human_		57
+4	1	test/tmp_slam_fixture/fixture_human_		6
+37	3	test/tmp_slam_fixture/fixture_human_		32
+37	4	test/tmp_slam_fixture/fixture_human_		12
+37	5	test/tmp_slam_fixture/fixture_human_		8
+37	8	test/tmp_slam_fixture/fixture_human_		1
+71	0	test/tmp_slam_fixture/fixture_human_		11
+38	0	test/tmp_slam_fixture/fixture_human_		933
+38	1	test/tmp_slam_fixture/fixture_human_		94
+5	0	test/tmp_slam_fixture/fixture_human_		142
+38	2	test/tmp_slam_fixture/fixture_human_		40
+5	1	test/tmp_slam_fixture/fixture_human_		7
+38	3	test/tmp_slam_fixture/fixture_human_		23
+71	4	test/tmp_slam_fixture/fixture_human_		1
+38	4	test/tmp_slam_fixture/fixture_human_		9
+38	5	test/tmp_slam_fixture/fixture_human_		7
+38	6	test/tmp_slam_fixture/fixture_human_		3
+38	8	test/tmp_slam_fixture/fixture_human_		3
+72	0	test/tmp_slam_fixture/fixture_human_		10
+39	0	test/tmp_slam_fixture/fixture_human_		859
+6	0	test/tmp_slam_fixture/fixture_human_		196
+39	1	test/tmp_slam_fixture/fixture_human_		119
+39	2	test/tmp_slam_fixture/fixture_human_		36
+6	1	test/tmp_slam_fixture/fixture_human_		12
+39	3	test/tmp_slam_fixture/fixture_human_		35
+39	4	test/tmp_slam_fixture/fixture_human_		7
+39	5	test/tmp_slam_fixture/fixture_human_		2
+72	7	test/tmp_slam_fixture/fixture_human_		1
+39	6	test/tmp_slam_fixture/fixture_human_		3
+72	9	test/tmp_slam_fixture/fixture_human_		1
+73	0	test/tmp_slam_fixture/fixture_human_		9
+40	0	test/tmp_slam_fixture/fixture_human_		718
+73	1	test/tmp_slam_fixture/fixture_human_		1
+40	1	test/tmp_slam_fixture/fixture_human_		74
+7	0	test/tmp_slam_fixture/fixture_human_		265
+40	2	test/tmp_slam_fixture/fixture_human_		19
+7	1	test/tmp_slam_fixture/fixture_human_		14
+40	3	test/tmp_slam_fixture/fixture_human_		22
+7	2	test/tmp_slam_fixture/fixture_human_		2
+40	4	test/tmp_slam_fixture/fixture_human_		10
+40	5	test/tmp_slam_fixture/fixture_human_		2
+40	6	test/tmp_slam_fixture/fixture_human_		1
+40	7	test/tmp_slam_fixture/fixture_human_		1
+74	0	test/tmp_slam_fixture/fixture_human_		2
+41	0	test/tmp_slam_fixture/fixture_human_		665
+8	0	test/tmp_slam_fixture/fixture_human_		306
+41	1	test/tmp_slam_fixture/fixture_human_		113
+41	2	test/tmp_slam_fixture/fixture_human_		58
+8	1	test/tmp_slam_fixture/fixture_human_		16
+41	3	test/tmp_slam_fixture/fixture_human_		22
+8	2	test/tmp_slam_fixture/fixture_human_		1
+74	4	test/tmp_slam_fixture/fixture_human_		1
+41	4	test/tmp_slam_fixture/fixture_human_		17
+74	5	test/tmp_slam_fixture/fixture_human_		1
+41	5	test/tmp_slam_fixture/fixture_human_		1
+41	6	test/tmp_slam_fixture/fixture_human_		2
+41	7	test/tmp_slam_fixture/fixture_human_		3
+75	0	test/tmp_slam_fixture/fixture_human_		5
+42	0	test/tmp_slam_fixture/fixture_human_		702
+9	0	test/tmp_slam_fixture/fixture_human_		349
+42	1	test/tmp_slam_fixture/fixture_human_		67
+42	2	test/tmp_slam_fixture/fixture_human_		32
+9	1	test/tmp_slam_fixture/fixture_human_		29
+75	3	test/tmp_slam_fixture/fixture_human_		1
+42	3	test/tmp_slam_fixture/fixture_human_		19
+9	2	test/tmp_slam_fixture/fixture_human_		3
+42	4	test/tmp_slam_fixture/fixture_human_		22
+9	3	test/tmp_slam_fixture/fixture_human_		1
+42	5	test/tmp_slam_fixture/fixture_human_		3
+42	8	test/tmp_slam_fixture/fixture_human_		1
+76	0	test/tmp_slam_fixture/fixture_human_		3
+43	0	test/tmp_slam_fixture/fixture_human_		743
+10	0	test/tmp_slam_fixture/fixture_human_		453
+43	1	test/tmp_slam_fixture/fixture_human_		84
+10	1	test/tmp_slam_fixture/fixture_human_		30
+43	2	test/tmp_slam_fixture/fixture_human_		28
+43	3	test/tmp_slam_fixture/fixture_human_		19
+10	2	test/tmp_slam_fixture/fixture_human_		4
+43	4	test/tmp_slam_fixture/fixture_human_		10
+43	5	test/tmp_slam_fixture/fixture_human_		2
+43	6	test/tmp_slam_fixture/fixture_human_		2
+43	8	test/tmp_slam_fixture/fixture_human_		2
+77	0	test/tmp_slam_fixture/fixture_human_		1
+44	0	test/tmp_slam_fixture/fixture_human_		673
+77	1	test/tmp_slam_fixture/fixture_human_		1
+11	0	test/tmp_slam_fixture/fixture_human_		593
+44	1	test/tmp_slam_fixture/fixture_human_		75
+11	1	test/tmp_slam_fixture/fixture_human_		54
+44	2	test/tmp_slam_fixture/fixture_human_		18
+44	3	test/tmp_slam_fixture/fixture_human_		19
+11	2	test/tmp_slam_fixture/fixture_human_		11
+44	4	test/tmp_slam_fixture/fixture_human_		9
+44	5	test/tmp_slam_fixture/fixture_human_		7
+44	6	test/tmp_slam_fixture/fixture_human_		1
+44	7	test/tmp_slam_fixture/fixture_human_		1
+45	0	test/tmp_slam_fixture/fixture_human_		542
+12	0	test/tmp_slam_fixture/fixture_human_		618
+45	1	test/tmp_slam_fixture/fixture_human_		49
+45	2	test/tmp_slam_fixture/fixture_human_		24
+12	1	test/tmp_slam_fixture/fixture_human_		41
+45	3	test/tmp_slam_fixture/fixture_human_		19
+12	2	test/tmp_slam_fixture/fixture_human_		4
+45	4	test/tmp_slam_fixture/fixture_human_		14
+12	3	test/tmp_slam_fixture/fixture_human_		3
+45	5	test/tmp_slam_fixture/fixture_human_		4
+45	6	test/tmp_slam_fixture/fixture_human_		7
+45	7	test/tmp_slam_fixture/fixture_human_		1
+79	0	test/tmp_slam_fixture/fixture_human_		1
+46	0	test/tmp_slam_fixture/fixture_human_		567
+13	0	test/tmp_slam_fixture/fixture_human_		701
+46	1	test/tmp_slam_fixture/fixture_human_		60
+13	1	test/tmp_slam_fixture/fixture_human_		67
+46	2	test/tmp_slam_fixture/fixture_human_		32
+46	3	test/tmp_slam_fixture/fixture_human_		26
+13	2	test/tmp_slam_fixture/fixture_human_		11
+46	4	test/tmp_slam_fixture/fixture_human_		20
+13	3	test/tmp_slam_fixture/fixture_human_		2
+46	5	test/tmp_slam_fixture/fixture_human_		3
+46	6	test/tmp_slam_fixture/fixture_human_		2
+47	0	test/tmp_slam_fixture/fixture_human_		601
+14	0	test/tmp_slam_fixture/fixture_human_		734
+47	1	test/tmp_slam_fixture/fixture_human_		85
+14	1	test/tmp_slam_fixture/fixture_human_		63
+47	2	test/tmp_slam_fixture/fixture_human_		25
+14	2	test/tmp_slam_fixture/fixture_human_		24
+47	3	test/tmp_slam_fixture/fixture_human_		14
+47	4	test/tmp_slam_fixture/fixture_human_		9
+14	3	test/tmp_slam_fixture/fixture_human_		11
+47	5	test/tmp_slam_fixture/fixture_human_		6
+14	4	test/tmp_slam_fixture/fixture_human_		3
+47	6	test/tmp_slam_fixture/fixture_human_		1
+47	7	test/tmp_slam_fixture/fixture_human_		1
+48	0	test/tmp_slam_fixture/fixture_human_		506
+15	0	test/tmp_slam_fixture/fixture_human_		909
+48	1	test/tmp_slam_fixture/fixture_human_		42
+15	1	test/tmp_slam_fixture/fixture_human_		68
+48	2	test/tmp_slam_fixture/fixture_human_		19
+15	2	test/tmp_slam_fixture/fixture_human_		20
+48	3	test/tmp_slam_fixture/fixture_human_		15
+48	4	test/tmp_slam_fixture/fixture_human_		5
+15	3	test/tmp_slam_fixture/fixture_human_		2
+48	5	test/tmp_slam_fixture/fixture_human_		6
+15	4	test/tmp_slam_fixture/fixture_human_		1
+48	6	test/tmp_slam_fixture/fixture_human_		4
+48	7	test/tmp_slam_fixture/fixture_human_		3
+48	8	test/tmp_slam_fixture/fixture_human_		1
+48	9	test/tmp_slam_fixture/fixture_human_		1
+49	0	test/tmp_slam_fixture/fixture_human_		495
+16	0	test/tmp_slam_fixture/fixture_human_		893
+49	1	test/tmp_slam_fixture/fixture_human_		48
+16	1	test/tmp_slam_fixture/fixture_human_		85
+49	2	test/tmp_slam_fixture/fixture_human_		23
+49	3	test/tmp_slam_fixture/fixture_human_		10
+16	2	test/tmp_slam_fixture/fixture_human_		15
+16	3	test/tmp_slam_fixture/fixture_human_		9
+49	4	test/tmp_slam_fixture/fixture_human_		19
+49	5	test/tmp_slam_fixture/fixture_human_		5
+49	6	test/tmp_slam_fixture/fixture_human_		5
+49	7	test/tmp_slam_fixture/fixture_human_		2
+49	10	test/tmp_slam_fixture/fixture_human_		1
+50	0	test/tmp_slam_fixture/fixture_human_		494
+17	0	test/tmp_slam_fixture/fixture_human_		885
+50	1	test/tmp_slam_fixture/fixture_human_		62
+17	1	test/tmp_slam_fixture/fixture_human_		74
+50	2	test/tmp_slam_fixture/fixture_human_		22
+17	2	test/tmp_slam_fixture/fixture_human_		33
+50	3	test/tmp_slam_fixture/fixture_human_		15
+50	4	test/tmp_slam_fixture/fixture_human_		6
+17	4	test/tmp_slam_fixture/fixture_human_		1
+50	5	test/tmp_slam_fixture/fixture_human_		6
+50	6	test/tmp_slam_fixture/fixture_human_		5
+50	8	test/tmp_slam_fixture/fixture_human_		1
+51	0	test/tmp_slam_fixture/fixture_human_		451
+18	0	test/tmp_slam_fixture/fixture_human_		895
+51	1	test/tmp_slam_fixture/fixture_human_		27
+18	1	test/tmp_slam_fixture/fixture_human_		77
+51	2	test/tmp_slam_fixture/fixture_human_		16
+18	2	test/tmp_slam_fixture/fixture_human_		31
+51	3	test/tmp_slam_fixture/fixture_human_		15
+51	4	test/tmp_slam_fixture/fixture_human_		9
+18	3	test/tmp_slam_fixture/fixture_human_		7
+51	5	test/tmp_slam_fixture/fixture_human_		5
+18	4	test/tmp_slam_fixture/fixture_human_		1
+51	6	test/tmp_slam_fixture/fixture_human_		2
+51	7	test/tmp_slam_fixture/fixture_human_		1
+18	6	test/tmp_slam_fixture/fixture_human_		1
+51	8	test/tmp_slam_fixture/fixture_human_		3
+52	0	test/tmp_slam_fixture/fixture_human_		429
+19	0	test/tmp_slam_fixture/fixture_human_		920
+52	1	test/tmp_slam_fixture/fixture_human_		34
+19	1	test/tmp_slam_fixture/fixture_human_		118
+52	2	test/tmp_slam_fixture/fixture_human_		28
+19	2	test/tmp_slam_fixture/fixture_human_		37
+52	3	test/tmp_slam_fixture/fixture_human_		11
+19	3	test/tmp_slam_fixture/fixture_human_		10
+52	4	test/tmp_slam_fixture/fixture_human_		8
+52	5	test/tmp_slam_fixture/fixture_human_		4
+19	4	test/tmp_slam_fixture/fixture_human_		4
+52	6	test/tmp_slam_fixture/fixture_human_		4
+19	5	test/tmp_slam_fixture/fixture_human_		1
+52	7	test/tmp_slam_fixture/fixture_human_		1
+53	0	test/tmp_slam_fixture/fixture_human_		384
+20	0	test/tmp_slam_fixture/fixture_human_		1047
+53	1	test/tmp_slam_fixture/fixture_human_		41
+20	1	test/tmp_slam_fixture/fixture_human_		116
+53	2	test/tmp_slam_fixture/fixture_human_		28
+20	2	test/tmp_slam_fixture/fixture_human_		32
+53	3	test/tmp_slam_fixture/fixture_human_		13
+20	3	test/tmp_slam_fixture/fixture_human_		10
+53	4	test/tmp_slam_fixture/fixture_human_		13
+20	4	test/tmp_slam_fixture/fixture_human_		4
+53	5	test/tmp_slam_fixture/fixture_human_		5
+20	5	test/tmp_slam_fixture/fixture_human_		1
+53	6	test/tmp_slam_fixture/fixture_human_		2
+20	6	test/tmp_slam_fixture/fixture_human_		1
+54	0	test/tmp_slam_fixture/fixture_human_		367
+21	0	test/tmp_slam_fixture/fixture_human_		1106
+54	1	test/tmp_slam_fixture/fixture_human_		38
+21	1	test/tmp_slam_fixture/fixture_human_		135
+54	2	test/tmp_slam_fixture/fixture_human_		15
+54	3	test/tmp_slam_fixture/fixture_human_		15
+21	2	test/tmp_slam_fixture/fixture_human_		37
+54	4	test/tmp_slam_fixture/fixture_human_		7
+21	3	test/tmp_slam_fixture/fixture_human_		9
+54	5	test/tmp_slam_fixture/fixture_human_		7
+21	4	test/tmp_slam_fixture/fixture_human_		2
+54	6	test/tmp_slam_fixture/fixture_human_		1
+54	7	test/tmp_slam_fixture/fixture_human_		1
+54	9	test/tmp_slam_fixture/fixture_human_		1
+54	10	test/tmp_slam_fixture/fixture_human_		1
+55	0	test/tmp_slam_fixture/fixture_human_		368
+22	0	test/tmp_slam_fixture/fixture_human_		1036
+55	1	test/tmp_slam_fixture/fixture_human_		29
+22	1	test/tmp_slam_fixture/fixture_human_		105
+55	2	test/tmp_slam_fixture/fixture_human_		14
+22	2	test/tmp_slam_fixture/fixture_human_		39
+55	3	test/tmp_slam_fixture/fixture_human_		14
+55	4	test/tmp_slam_fixture/fixture_human_		15
+22	3	test/tmp_slam_fixture/fixture_human_		8
+55	5	test/tmp_slam_fixture/fixture_human_		4
+22	4	test/tmp_slam_fixture/fixture_human_		2
+22	5	test/tmp_slam_fixture/fixture_human_		2
+55	6	test/tmp_slam_fixture/fixture_human_		1
+55	7	test/tmp_slam_fixture/fixture_human_		2
+56	0	test/tmp_slam_fixture/fixture_human_		296
+23	0	test/tmp_slam_fixture/fixture_human_		1249
+56	1	test/tmp_slam_fixture/fixture_human_		28
+23	1	test/tmp_slam_fixture/fixture_human_		135
+56	2	test/tmp_slam_fixture/fixture_human_		14
+23	2	test/tmp_slam_fixture/fixture_human_		48
+56	3	test/tmp_slam_fixture/fixture_human_		15
+56	4	test/tmp_slam_fixture/fixture_human_		5
+23	3	test/tmp_slam_fixture/fixture_human_		16
+23	4	test/tmp_slam_fixture/fixture_human_		5
+56	5	test/tmp_slam_fixture/fixture_human_		7
+56	6	test/tmp_slam_fixture/fixture_human_		3
+56	8	test/tmp_slam_fixture/fixture_human_		3
+56	9	test/tmp_slam_fixture/fixture_human_		1
+57	0	test/tmp_slam_fixture/fixture_human_		258
+24	0	test/tmp_slam_fixture/fixture_human_		1219
+57	1	test/tmp_slam_fixture/fixture_human_		18
+24	1	test/tmp_slam_fixture/fixture_human_		118
+57	2	test/tmp_slam_fixture/fixture_human_		9
+57	3	test/tmp_slam_fixture/fixture_human_		9
+24	2	test/tmp_slam_fixture/fixture_human_		29
+24	3	test/tmp_slam_fixture/fixture_human_		15
+57	4	test/tmp_slam_fixture/fixture_human_		16
+57	5	test/tmp_slam_fixture/fixture_human_		1
+24	4	test/tmp_slam_fixture/fixture_human_		1
+57	6	test/tmp_slam_fixture/fixture_human_		6
+24	5	test/tmp_slam_fixture/fixture_human_		1
+57	8	test/tmp_slam_fixture/fixture_human_		3
+57	9	test/tmp_slam_fixture/fixture_human_		1
+58	0	test/tmp_slam_fixture/fixture_human_		235
+25	0	test/tmp_slam_fixture/fixture_human_		1012
+58	1	test/tmp_slam_fixture/fixture_human_		20
+25	1	test/tmp_slam_fixture/fixture_human_		93
+58	2	test/tmp_slam_fixture/fixture_human_		16
+25	2	test/tmp_slam_fixture/fixture_human_		39
+58	3	test/tmp_slam_fixture/fixture_human_		14
+58	4	test/tmp_slam_fixture/fixture_human_		7
+25	3	test/tmp_slam_fixture/fixture_human_		16
+58	5	test/tmp_slam_fixture/fixture_human_		7
+58	6	test/tmp_slam_fixture/fixture_human_		1
+58	7	test/tmp_slam_fixture/fixture_human_		1
+59	0	test/tmp_slam_fixture/fixture_human_		169
+26	0	test/tmp_slam_fixture/fixture_human_		1067
+59	1	test/tmp_slam_fixture/fixture_human_		19
+59	2	test/tmp_slam_fixture/fixture_human_		13
+26	1	test/tmp_slam_fixture/fixture_human_		113
+26	2	test/tmp_slam_fixture/fixture_human_		36
+59	3	test/tmp_slam_fixture/fixture_human_		7
+26	3	test/tmp_slam_fixture/fixture_human_		7
+59	4	test/tmp_slam_fixture/fixture_human_		1
+59	5	test/tmp_slam_fixture/fixture_human_		4
+26	4	test/tmp_slam_fixture/fixture_human_		11
+26	5	test/tmp_slam_fixture/fixture_human_		2
+59	7	test/tmp_slam_fixture/fixture_human_		1
+59	8	test/tmp_slam_fixture/fixture_human_		1
+59	10	test/tmp_slam_fixture/fixture_human_		2
+60	0	test/tmp_slam_fixture/fixture_human_		126
+27	0	test/tmp_slam_fixture/fixture_human_		1023
+60	1	test/tmp_slam_fixture/fixture_human_		13
+27	1	test/tmp_slam_fixture/fixture_human_		141
+60	2	test/tmp_slam_fixture/fixture_human_		11
+60	3	test/tmp_slam_fixture/fixture_human_		13
+27	2	test/tmp_slam_fixture/fixture_human_		40
+27	3	test/tmp_slam_fixture/fixture_human_		19
+60	4	test/tmp_slam_fixture/fixture_human_		3
+27	4	test/tmp_slam_fixture/fixture_human_		6
+60	5	test/tmp_slam_fixture/fixture_human_		2
+27	5	test/tmp_slam_fixture/fixture_human_		2
+60	6	test/tmp_slam_fixture/fixture_human_		1
+60	7	test/tmp_slam_fixture/fixture_human_		1
+27	6	test/tmp_slam_fixture/fixture_human_		1
+60	8	test/tmp_slam_fixture/fixture_human_		1
+61	0	test/tmp_slam_fixture/fixture_human_		135
+28	0	test/tmp_slam_fixture/fixture_human_		1046
+61	1	test/tmp_slam_fixture/fixture_human_		10
+28	1	test/tmp_slam_fixture/fixture_human_		123
+61	2	test/tmp_slam_fixture/fixture_human_		5
+28	2	test/tmp_slam_fixture/fixture_human_		54
+61	3	test/tmp_slam_fixture/fixture_human_		6
+28	3	test/tmp_slam_fixture/fixture_human_		18
+61	4	test/tmp_slam_fixture/fixture_human_		6
+61	5	test/tmp_slam_fixture/fixture_human_		2
+28	4	test/tmp_slam_fixture/fixture_human_		9
+61	6	test/tmp_slam_fixture/fixture_human_		3
+28	5	test/tmp_slam_fixture/fixture_human_		4
+28	6	test/tmp_slam_fixture/fixture_human_		1
+61	7	test/tmp_slam_fixture/fixture_human_		2
+62	0	test/tmp_slam_fixture/fixture_human_		92
+29	0	test/tmp_slam_fixture/fixture_human_		1087
+62	1	test/tmp_slam_fixture/fixture_human_		7
+29	1	test/tmp_slam_fixture/fixture_human_		129
+62	2	test/tmp_slam_fixture/fixture_human_		9
+29	2	test/tmp_slam_fixture/fixture_human_		56
+62	3	test/tmp_slam_fixture/fixture_human_		6
+29	3	test/tmp_slam_fixture/fixture_human_		14
+62	4	test/tmp_slam_fixture/fixture_human_		1
+29	4	test/tmp_slam_fixture/fixture_human_		12
+62	5	test/tmp_slam_fixture/fixture_human_		2
+62	6	test/tmp_slam_fixture/fixture_human_		4
+29	6	test/tmp_slam_fixture/fixture_human_		1
+62	10	test/tmp_slam_fixture/fixture_human_		1
+63	0	test/tmp_slam_fixture/fixture_human_		84
+30	0	test/tmp_slam_fixture/fixture_human_		1250
+63	1	test/tmp_slam_fixture/fixture_human_		8
+30	1	test/tmp_slam_fixture/fixture_human_		116
+63	2	test/tmp_slam_fixture/fixture_human_		12
+30	2	test/tmp_slam_fixture/fixture_human_		46
+63	3	test/tmp_slam_fixture/fixture_human_		3
+30	3	test/tmp_slam_fixture/fixture_human_		20
+63	4	test/tmp_slam_fixture/fixture_human_		4
+30	4	test/tmp_slam_fixture/fixture_human_		7
+63	5	test/tmp_slam_fixture/fixture_human_		5
+63	6	test/tmp_slam_fixture/fixture_human_		1
+30	5	test/tmp_slam_fixture/fixture_human_		1
+64	0	test/tmp_slam_fixture/fixture_human_		92
+31	0	test/tmp_slam_fixture/fixture_human_		1060
+64	1	test/tmp_slam_fixture/fixture_human_		4
+31	1	test/tmp_slam_fixture/fixture_human_		109
+64	2	test/tmp_slam_fixture/fixture_human_		3
+31	2	test/tmp_slam_fixture/fixture_human_		38
+64	3	test/tmp_slam_fixture/fixture_human_		6
+31	3	test/tmp_slam_fixture/fixture_human_		23
+64	4	test/tmp_slam_fixture/fixture_human_		1
+31	4	test/tmp_slam_fixture/fixture_human_		16
+64	5	test/tmp_slam_fixture/fixture_human_		2
+64	6	test/tmp_slam_fixture/fixture_human_		3
+31	5	test/tmp_slam_fixture/fixture_human_		3
+64	7	test/tmp_slam_fixture/fixture_human_		1
+65	0	test/tmp_slam_fixture/fixture_human_		66
+32	0	test/tmp_slam_fixture/fixture_human_		980
+65	1	test/tmp_slam_fixture/fixture_human_		4
+32	1	test/tmp_slam_fixture/fixture_human_		93
+65	2	test/tmp_slam_fixture/fixture_human_		4
+32	2	test/tmp_slam_fixture/fixture_human_		45
+65	3	test/tmp_slam_fixture/fixture_human_		2
+32	3	test/tmp_slam_fixture/fixture_human_		21
+65	4	test/tmp_slam_fixture/fixture_human_		2
+65	5	test/tmp_slam_fixture/fixture_human_		2
+32	4	test/tmp_slam_fixture/fixture_human_		4
+32	5	test/tmp_slam_fixture/fixture_human_		7
+32	6	test/tmp_slam_fixture/fixture_human_		1
+65	7	test/tmp_slam_fixture/fixture_human_		1
+32	7	test/tmp_slam_fixture/fixture_human_		1
+66	0	test/tmp_slam_fixture/fixture_human_		50
+33	0	test/tmp_slam_fixture/fixture_human_		965
+66	1	test/tmp_slam_fixture/fixture_human_		1
+33	1	test/tmp_slam_fixture/fixture_human_		108
+66	2	test/tmp_slam_fixture/fixture_human_		1
+0	0	test/tmp_slam_fixture/fixture_human_		25
+33	2	test/tmp_slam_fixture/fixture_human_		38
+33	3	test/tmp_slam_fixture/fixture_human_		20
+66	4	test/tmp_slam_fixture/fixture_human_		2
+33	4	test/tmp_slam_fixture/fixture_human_		12
+33	5	test/tmp_slam_fixture/fixture_human_		2
+33	7	test/tmp_slam_fixture/fixture_human_		1
+66	10	test/tmp_slam_fixture/fixture_human_		1
+67	0	test/tmp_slam_fixture/fixture_human_		40
+34	0	test/tmp_slam_fixture/fixture_human_		1031
+67	1	test/tmp_slam_fixture/fixture_human_		5
+1	0	test/tmp_slam_fixture/fixture_human_		31
+34	1	test/tmp_slam_fixture/fixture_human_		104
+67	2	test/tmp_slam_fixture/fixture_human_		1
+34	2	test/tmp_slam_fixture/fixture_human_		46
+67	3	test/tmp_slam_fixture/fixture_human_		2
+34	3	test/tmp_slam_fixture/fixture_human_		27
+67	4	test/tmp_slam_fixture/fixture_human_		1
+34	4	test/tmp_slam_fixture/fixture_human_		3
+34	5	test/tmp_slam_fixture/fixture_human_		3
+67	7	test/tmp_slam_fixture/fixture_human_		1
+34	6	test/tmp_slam_fixture/fixture_human_		2
+34	7	test/tmp_slam_fixture/fixture_human_		3
+67	9	test/tmp_slam_fixture/fixture_human_		1
+68	0	test/tmp_slam_fixture/fixture_human_		17
+35	0	test/tmp_slam_fixture/fixture_human_		984
+68	1	test/tmp_slam_fixture/fixture_human_		6
+2	0	test/tmp_slam_fixture/fixture_human_		48
+35	1	test/tmp_slam_fixture/fixture_human_		119
+68	2	test/tmp_slam_fixture/fixture_human_		3
+35	2	test/tmp_slam_fixture/fixture_human_	Exonic	38
+2	1	test/tmp_slam_fixture/fixture_human_	Exonic	2
+68	3	test/tmp_slam_fixture/fixture_human_	Exonic	3
+35	3	test/tmp_slam_fixture/fixture_human_	Exonic	23
+68	4	test/tmp_slam_fixture/fixture_human_	Exonic	1
+35	4	test/tmp_slam_fixture/fixture_human_	Exonic	15
+35	5	test/tmp_slam_fixture/fixture_human_	Exonic	8
+35	6	test/tmp_slam_fixture/fixture_human_	Exonic	1
+69	0	test/tmp_slam_fixture/fixture_human_	Exonic	22
+36	0	test/tmp_slam_fixture/fixture_human_	Exonic	920
+69	1	test/tmp_slam_fixture/fixture_human_	Exonic	1
+36	1	test/tmp_slam_fixture/fixture_human_	Exonic	106
+3	0	test/tmp_slam_fixture/fixture_human_	Exonic	83
+69	2	test/tmp_slam_fixture/fixture_human_	Exonic	1
+36	2	test/tmp_slam_fixture/fixture_human_	Exonic	31
+69	3	test/tmp_slam_fixture/fixture_human_	Exonic	4
+3	1	test/tmp_slam_fixture/fixture_human_	Exonic	1
+36	3	test/tmp_slam_fixture/fixture_human_	Exonic	15
+36	4	test/tmp_slam_fixture/fixture_human_	Exonic	13
+36	5	test/tmp_slam_fixture/fixture_human_	Exonic	2
+36	6	test/tmp_slam_fixture/fixture_human_	Exonic	1
+70	0	test/tmp_slam_fixture/fixture_human_	Exonic	21
+37	0	test/tmp_slam_fixture/fixture_human_	Exonic	1572
+70	1	test/tmp_slam_fixture/fixture_human_	Exonic	1
+37	1	test/tmp_slam_fixture/fixture_human_	Exonic	176
+4	0	test/tmp_slam_fixture/fixture_human_	Exonic	135
+70	2	test/tmp_slam_fixture/fixture_human_	Exonic	2
+37	2	test/tmp_slam_fixture/fixture_human_	Exonic	57
+4	1	test/tmp_slam_fixture/fixture_human_	Exonic	6
+37	3	test/tmp_slam_fixture/fixture_human_	Exonic	32
+37	4	test/tmp_slam_fixture/fixture_human_	Exonic	12
+37	5	test/tmp_slam_fixture/fixture_human_	Exonic	8
+37	8	test/tmp_slam_fixture/fixture_human_	Exonic	1
+71	0	test/tmp_slam_fixture/fixture_human_	Exonic	11
+38	0	test/tmp_slam_fixture/fixture_human_	Exonic	933
+38	1	test/tmp_slam_fixture/fixture_human_	Exonic	94
+5	0	test/tmp_slam_fixture/fixture_human_	Exonic	142
+38	2	test/tmp_slam_fixture/fixture_human_	Exonic	40
+5	1	test/tmp_slam_fixture/fixture_human_	Exonic	7
+38	3	test/tmp_slam_fixture/fixture_human_	Exonic	23
+71	4	test/tmp_slam_fixture/fixture_human_	Exonic	1
+38	4	test/tmp_slam_fixture/fixture_human_	Exonic	9
+38	5	test/tmp_slam_fixture/fixture_human_	Exonic	7
+38	6	test/tmp_slam_fixture/fixture_human_	Exonic	3
+38	8	test/tmp_slam_fixture/fixture_human_	Exonic	3
+72	0	test/tmp_slam_fixture/fixture_human_	Exonic	10
+39	0	test/tmp_slam_fixture/fixture_human_	Exonic	859
+6	0	test/tmp_slam_fixture/fixture_human_	Exonic	196
+39	1	test/tmp_slam_fixture/fixture_human_	Exonic	119
+39	2	test/tmp_slam_fixture/fixture_human_	Exonic	36
+6	1	test/tmp_slam_fixture/fixture_human_	Exonic	12
+39	3	test/tmp_slam_fixture/fixture_human_	Exonic	35
+39	4	test/tmp_slam_fixture/fixture_human_	Exonic	7
+39	5	test/tmp_slam_fixture/fixture_human_	Exonic	2
+72	7	test/tmp_slam_fixture/fixture_human_	Exonic	1
+39	6	test/tmp_slam_fixture/fixture_human_	Exonic	3
+72	9	test/tmp_slam_fixture/fixture_human_	Exonic	1
+73	0	test/tmp_slam_fixture/fixture_human_	Exonic	9
+40	0	test/tmp_slam_fixture/fixture_human_	Exonic	718
+73	1	test/tmp_slam_fixture/fixture_human_	Exonic	1
+40	1	test/tmp_slam_fixture/fixture_human_	Exonic	74
+7	0	test/tmp_slam_fixture/fixture_human_	Exonic	265
+40	2	test/tmp_slam_fixture/fixture_human_	Exonic	19
+7	1	test/tmp_slam_fixture/fixture_human_	Exonic	14
+40	3	test/tmp_slam_fixture/fixture_human_	Exonic	22
+7	2	test/tmp_slam_fixture/fixture_human_	Exonic	2
+40	4	test/tmp_slam_fixture/fixture_human_	Exonic	10
+40	5	test/tmp_slam_fixture/fixture_human_	Exonic	2
+40	6	test/tmp_slam_fixture/fixture_human_	Exonic	1
+40	7	test/tmp_slam_fixture/fixture_human_	Exonic	1
+74	0	test/tmp_slam_fixture/fixture_human_	Exonic	2
+41	0	test/tmp_slam_fixture/fixture_human_	Exonic	665
+8	0	test/tmp_slam_fixture/fixture_human_	Exonic	306
+41	1	test/tmp_slam_fixture/fixture_human_	Exonic	113
+41	2	test/tmp_slam_fixture/fixture_human_	Exonic	58
+8	1	test/tmp_slam_fixture/fixture_human_	Exonic	16
+41	3	test/tmp_slam_fixture/fixture_human_	Exonic	22
+8	2	test/tmp_slam_fixture/fixture_human_	Exonic	1
+74	4	test/tmp_slam_fixture/fixture_human_	Exonic	1
+41	4	test/tmp_slam_fixture/fixture_human_	Exonic	17
+74	5	test/tmp_slam_fixture/fixture_human_	Exonic	1
+41	5	test/tmp_slam_fixture/fixture_human_	Exonic	1
+41	6	test/tmp_slam_fixture/fixture_human_	Exonic	2
+41	7	test/tmp_slam_fixture/fixture_human_	Exonic	3
+75	0	test/tmp_slam_fixture/fixture_human_	Exonic	5
+42	0	test/tmp_slam_fixture/fixture_human_	Exonic	702
+9	0	test/tmp_slam_fixture/fixture_human_	Exonic	349
+42	1	test/tmp_slam_fixture/fixture_human_	Exonic	67
+42	2	test/tmp_slam_fixture/fixture_human_	Exonic	32
+9	1	test/tmp_slam_fixture/fixture_human_	Exonic	29
+75	3	test/tmp_slam_fixture/fixture_human_	Exonic	1
+42	3	test/tmp_slam_fixture/fixture_human_	Exonic	19
+9	2	test/tmp_slam_fixture/fixture_human_	Exonic	3
+42	4	test/tmp_slam_fixture/fixture_human_	Exonic	22
+9	3	test/tmp_slam_fixture/fixture_human_	Exonic	1
+42	5	test/tmp_slam_fixture/fixture_human_	Exonic	3
+42	8	test/tmp_slam_fixture/fixture_human_	Exonic	1
+76	0	test/tmp_slam_fixture/fixture_human_	Exonic	3
+43	0	test/tmp_slam_fixture/fixture_human_	Exonic	743
+10	0	test/tmp_slam_fixture/fixture_human_	Exonic	453
+43	1	test/tmp_slam_fixture/fixture_human_	Exonic	84
+10	1	test/tmp_slam_fixture/fixture_human_	Exonic	30
+43	2	test/tmp_slam_fixture/fixture_human_	Exonic	28
+43	3	test/tmp_slam_fixture/fixture_human_	Exonic	19
+10	2	test/tmp_slam_fixture/fixture_human_	Exonic	4
+43	4	test/tmp_slam_fixture/fixture_human_	Exonic	10
+43	5	test/tmp_slam_fixture/fixture_human_	Exonic	2
+43	6	test/tmp_slam_fixture/fixture_human_	Exonic	2
+43	8	test/tmp_slam_fixture/fixture_human_	Exonic	2
+77	0	test/tmp_slam_fixture/fixture_human_	Exonic	1
+44	0	test/tmp_slam_fixture/fixture_human_	Exonic	673
+77	1	test/tmp_slam_fixture/fixture_human_	Exonic	1
+11	0	test/tmp_slam_fixture/fixture_human_	Exonic	593
+44	1	test/tmp_slam_fixture/fixture_human_	Exonic	75
+11	1	test/tmp_slam_fixture/fixture_human_	Exonic	54
+44	2	test/tmp_slam_fixture/fixture_human_	Exonic	18
+44	3	test/tmp_slam_fixture/fixture_human_	Exonic	19
+11	2	test/tmp_slam_fixture/fixture_human_	Exonic	11
+44	4	test/tmp_slam_fixture/fixture_human_	Exonic	9
+44	5	test/tmp_slam_fixture/fixture_human_	Exonic	7
+44	6	test/tmp_slam_fixture/fixture_human_	Exonic	1
+44	7	test/tmp_slam_fixture/fixture_human_	Exonic	1
+45	0	test/tmp_slam_fixture/fixture_human_	Exonic	542
+12	0	test/tmp_slam_fixture/fixture_human_	Exonic	618
+45	1	test/tmp_slam_fixture/fixture_human_	Exonic	49
+45	2	test/tmp_slam_fixture/fixture_human_	Exonic	24
+12	1	test/tmp_slam_fixture/fixture_human_	Exonic	41
+45	3	test/tmp_slam_fixture/fixture_human_	Exonic	19
+12	2	test/tmp_slam_fixture/fixture_human_	Exonic	4
+45	4	test/tmp_slam_fixture/fixture_human_	Exonic	14
+12	3	test/tmp_slam_fixture/fixture_human_	Exonic	3
+45	5	test/tmp_slam_fixture/fixture_human_	Exonic	4
+45	6	test/tmp_slam_fixture/fixture_human_	Exonic	7
+45	7	test/tmp_slam_fixture/fixture_human_	Exonic	1
+79	0	test/tmp_slam_fixture/fixture_human_	Exonic	1
+46	0	test/tmp_slam_fixture/fixture_human_	Exonic	567
+13	0	test/tmp_slam_fixture/fixture_human_	Exonic	701
+46	1	test/tmp_slam_fixture/fixture_human_	Exonic	60
+13	1	test/tmp_slam_fixture/fixture_human_	Exonic	67
+46	2	test/tmp_slam_fixture/fixture_human_	Exonic	32
+46	3	test/tmp_slam_fixture/fixture_human_	Exonic	26
+13	2	test/tmp_slam_fixture/fixture_human_	Exonic	11
+46	4	test/tmp_slam_fixture/fixture_human_	Exonic	20
+13	3	test/tmp_slam_fixture/fixture_human_	Exonic	2
+46	5	test/tmp_slam_fixture/fixture_human_	Exonic	3
+46	6	test/tmp_slam_fixture/fixture_human_	Exonic	2
+47	0	test/tmp_slam_fixture/fixture_human_	Exonic	601
+14	0	test/tmp_slam_fixture/fixture_human_	Exonic	734
+47	1	test/tmp_slam_fixture/fixture_human_	Exonic	85
+14	1	test/tmp_slam_fixture/fixture_human_	Exonic	63
+47	2	test/tmp_slam_fixture/fixture_human_	Exonic	25
+14	2	test/tmp_slam_fixture/fixture_human_	Exonic	24
+47	3	test/tmp_slam_fixture/fixture_human_	Exonic	14
+47	4	test/tmp_slam_fixture/fixture_human_	Exonic	9
+14	3	test/tmp_slam_fixture/fixture_human_	Exonic	11
+47	5	test/tmp_slam_fixture/fixture_human_	Exonic	6
+14	4	test/tmp_slam_fixture/fixture_human_	Exonic	3
+47	6	test/tmp_slam_fixture/fixture_human_	Exonic	1
+47	7	test/tmp_slam_fixture/fixture_human_	Exonic	1
+48	0	test/tmp_slam_fixture/fixture_human_	Exonic	506
+15	0	test/tmp_slam_fixture/fixture_human_	Exonic	909
+48	1	test/tmp_slam_fixture/fixture_human_	Exonic	42
+15	1	test/tmp_slam_fixture/fixture_human_	Exonic	68
+48	2	test/tmp_slam_fixture/fixture_human_	Exonic	19
+15	2	test/tmp_slam_fixture/fixture_human_	Exonic	20
+48	3	test/tmp_slam_fixture/fixture_human_	Exonic	15
+48	4	test/tmp_slam_fixture/fixture_human_	Exonic	5
+15	3	test/tmp_slam_fixture/fixture_human_	Exonic	2
+48	5	test/tmp_slam_fixture/fixture_human_	Exonic	6
+15	4	test/tmp_slam_fixture/fixture_human_	Exonic	1
+48	6	test/tmp_slam_fixture/fixture_human_	Exonic	4
+48	7	test/tmp_slam_fixture/fixture_human_	Exonic	3
+48	8	test/tmp_slam_fixture/fixture_human_	Exonic	1
+48	9	test/tmp_slam_fixture/fixture_human_	Exonic	1
+49	0	test/tmp_slam_fixture/fixture_human_	Exonic	495
+16	0	test/tmp_slam_fixture/fixture_human_	Exonic	893
+49	1	test/tmp_slam_fixture/fixture_human_	Exonic	48
+16	1	test/tmp_slam_fixture/fixture_human_	Exonic	85
+49	2	test/tmp_slam_fixture/fixture_human_	Exonic	23
+49	3	test/tmp_slam_fixture/fixture_human_	Exonic	10
+16	2	test/tmp_slam_fixture/fixture_human_	Exonic	15
+16	3	test/tmp_slam_fixture/fixture_human_	Exonic	9
+49	4	test/tmp_slam_fixture/fixture_human_	Exonic	19
+49	5	test/tmp_slam_fixture/fixture_human_	Exonic	5
+49	6	test/tmp_slam_fixture/fixture_human_	Exonic	5
+49	7	test/tmp_slam_fixture/fixture_human_	Exonic	2
+49	10	test/tmp_slam_fixture/fixture_human_	Exonic	1
+50	0	test/tmp_slam_fixture/fixture_human_	Exonic	494
+17	0	test/tmp_slam_fixture/fixture_human_	Exonic	885
+50	1	test/tmp_slam_fixture/fixture_human_	Exonic	62
+17	1	test/tmp_slam_fixture/fixture_human_	Exonic	74
+50	2	test/tmp_slam_fixture/fixture_human_	Exonic	22
+17	2	test/tmp_slam_fixture/fixture_human_	Exonic	33
+50	3	test/tmp_slam_fixture/fixture_human_	Exonic	15
+50	4	test/tmp_slam_fixture/fixture_human_	Exonic	6
+17	4	test/tmp_slam_fixture/fixture_human_	Exonic	1
+50	5	test/tmp_slam_fixture/fixture_human_	Exonic	6
+50	6	test/tmp_slam_fixture/fixture_human_	Exonic	5
+50	8	test/tmp_slam_fixture/fixture_human_	Exonic	1
+51	0	test/tmp_slam_fixture/fixture_human_	Exonic	451
+18	0	test/tmp_slam_fixture/fixture_human_	Exonic	895
+51	1	test/tmp_slam_fixture/fixture_human_	Exonic	27
+18	1	test/tmp_slam_fixture/fixture_human_	Exonic	77
+51	2	test/tmp_slam_fixture/fixture_human_	Exonic	16
+18	2	test/tmp_slam_fixture/fixture_human_	Exonic	31
+51	3	test/tmp_slam_fixture/fixture_human_	Exonic	15
+51	4	test/tmp_slam_fixture/fixture_human_	Exonic	9
+18	3	test/tmp_slam_fixture/fixture_human_	Exonic	7
+51	5	test/tmp_slam_fixture/fixture_human_	Exonic	5
+18	4	test/tmp_slam_fixture/fixture_human_	Exonic	1
+51	6	test/tmp_slam_fixture/fixture_human_	Exonic	2
+51	7	test/tmp_slam_fixture/fixture_human_	Exonic	1
+18	6	test/tmp_slam_fixture/fixture_human_	Exonic	1
+51	8	test/tmp_slam_fixture/fixture_human_	Exonic	3
+52	0	test/tmp_slam_fixture/fixture_human_	Exonic	429
+19	0	test/tmp_slam_fixture/fixture_human_	Exonic	920
+52	1	test/tmp_slam_fixture/fixture_human_	Exonic	34
+19	1	test/tmp_slam_fixture/fixture_human_	Exonic	118
+52	2	test/tmp_slam_fixture/fixture_human_	Exonic	28
+19	2	test/tmp_slam_fixture/fixture_human_	Exonic	37
+52	3	test/tmp_slam_fixture/fixture_human_	Exonic	11
+19	3	test/tmp_slam_fixture/fixture_human_	Exonic	10
+52	4	test/tmp_slam_fixture/fixture_human_	Exonic	8
+52	5	test/tmp_slam_fixture/fixture_human_	Exonic	4
+19	4	test/tmp_slam_fixture/fixture_human_	Exonic	4
+52	6	test/tmp_slam_fixture/fixture_human_	Exonic	4
+19	5	test/tmp_slam_fixture/fixture_human_	Exonic	1
+52	7	test/tmp_slam_fixture/fixture_human_	Exonic	1
+53	0	test/tmp_slam_fixture/fixture_human_	Exonic	384
+20	0	test/tmp_slam_fixture/fixture_human_	Exonic	1047
+53	1	test/tmp_slam_fixture/fixture_human_	Exonic	41
+20	1	test/tmp_slam_fixture/fixture_human_	Exonic	116
+53	2	test/tmp_slam_fixture/fixture_human_	Exonic	28
+20	2	test/tmp_slam_fixture/fixture_human_	Exonic	32
+53	3	test/tmp_slam_fixture/fixture_human_	Exonic	13
+20	3	test/tmp_slam_fixture/fixture_human_	Exonic	10
+53	4	test/tmp_slam_fixture/fixture_human_	Exonic	13
+20	4	test/tmp_slam_fixture/fixture_human_	Exonic	4
+53	5	test/tmp_slam_fixture/fixture_human_	Exonic	5
+20	5	test/tmp_slam_fixture/fixture_human_	Exonic	1
+53	6	test/tmp_slam_fixture/fixture_human_	Exonic	2
+20	6	test/tmp_slam_fixture/fixture_human_	Exonic	1
+54	0	test/tmp_slam_fixture/fixture_human_	Exonic	367
+21	0	test/tmp_slam_fixture/fixture_human_	Exonic	1106
+54	1	test/tmp_slam_fixture/fixture_human_	Exonic	38
+21	1	test/tmp_slam_fixture/fixture_human_	Exonic	135
+54	2	test/tmp_slam_fixture/fixture_human_	Exonic	15
+54	3	test/tmp_slam_fixture/fixture_human_	Exonic	15
+21	2	test/tmp_slam_fixture/fixture_human_	Exonic	37
+54	4	test/tmp_slam_fixture/fixture_human_	Exonic	7
+21	3	test/tmp_slam_fixture/fixture_human_	Exonic	9
+54	5	test/tmp_slam_fixture/fixture_human_	Exonic	7
+21	4	test/tmp_slam_fixture/fixture_human_	Exonic	2
+54	6	test/tmp_slam_fixture/fixture_human_	Exonic	1
+54	7	test/tmp_slam_fixture/fixture_human_	Exonic	1
+54	9	test/tmp_slam_fixture/fixture_human_	Exonic	1
+54	10	test/tmp_slam_fixture/fixture_human_	Exonic	1
+55	0	test/tmp_slam_fixture/fixture_human_	Exonic	368
+22	0	test/tmp_slam_fixture/fixture_human_	Exonic	1036
+55	1	test/tmp_slam_fixture/fixture_human_	Exonic	29
+22	1	test/tmp_slam_fixture/fixture_human_	Exonic	105
+55	2	test/tmp_slam_fixture/fixture_human_	Exonic	14
+22	2	test/tmp_slam_fixture/fixture_human_	Exonic	39
+55	3	test/tmp_slam_fixture/fixture_human_	Exonic	14
+55	4	test/tmp_slam_fixture/fixture_human_	Exonic	15
+22	3	test/tmp_slam_fixture/fixture_human_	Exonic	8
+55	5	test/tmp_slam_fixture/fixture_human_	Exonic	4
+22	4	test/tmp_slam_fixture/fixture_human_	Exonic	2
+22	5	test/tmp_slam_fixture/fixture_human_	Exonic	2
+55	6	test/tmp_slam_fixture/fixture_human_	Exonic	1
+55	7	test/tmp_slam_fixture/fixture_human_	Exonic	2
+56	0	test/tmp_slam_fixture/fixture_human_	Exonic	296
+23	0	test/tmp_slam_fixture/fixture_human_	Exonic	1249
+56	1	test/tmp_slam_fixture/fixture_human_	Exonic	28
+23	1	test/tmp_slam_fixture/fixture_human_	Exonic	135
+56	2	test/tmp_slam_fixture/fixture_human_	Exonic	14
+23	2	test/tmp_slam_fixture/fixture_human_	Exonic	48
+56	3	test/tmp_slam_fixture/fixture_human_	Exonic	15
+56	4	test/tmp_slam_fixture/fixture_human_	Exonic	5
+23	3	test/tmp_slam_fixture/fixture_human_	Exonic	16
+23	4	test/tmp_slam_fixture/fixture_human_	Exonic	5
+56	5	test/tmp_slam_fixture/fixture_human_	Exonic	7
+56	6	test/tmp_slam_fixture/fixture_human_	Exonic	3
+56	8	test/tmp_slam_fixture/fixture_human_	Exonic	3
+56	9	test/tmp_slam_fixture/fixture_human_	Exonic	1
+57	0	test/tmp_slam_fixture/fixture_human_	Exonic	258
+24	0	test/tmp_slam_fixture/fixture_human_	Exonic	1219
+57	1	test/tmp_slam_fixture/fixture_human_	Exonic	18
+24	1	test/tmp_slam_fixture/fixture_human_	Exonic	118
+57	2	test/tmp_slam_fixture/fixture_human_	Exonic	9
+57	3	test/tmp_slam_fixture/fixture_human_	Exonic	9
+24	2	test/tmp_slam_fixture/fixture_human_	Exonic	29
+24	3	test/tmp_slam_fixture/fixture_human_	Exonic	15
+57	4	test/tmp_slam_fixture/fixture_human_	Exonic	16
+57	5	test/tmp_slam_fixture/fixture_human_	Exonic	1
+24	4	test/tmp_slam_fixture/fixture_human_	Exonic	1
+57	6	test/tmp_slam_fixture/fixture_human_	Exonic	6
+24	5	test/tmp_slam_fixture/fixture_human_	Exonic	1
+57	8	test/tmp_slam_fixture/fixture_human_	Exonic	3
+57	9	test/tmp_slam_fixture/fixture_human_	Exonic	1
+58	0	test/tmp_slam_fixture/fixture_human_	Exonic	235
+25	0	test/tmp_slam_fixture/fixture_human_	Exonic	1012
+58	1	test/tmp_slam_fixture/fixture_human_	Exonic	20
+25	1	test/tmp_slam_fixture/fixture_human_	Exonic	93
+58	2	test/tmp_slam_fixture/fixture_human_	Exonic	16
+25	2	test/tmp_slam_fixture/fixture_human_	Exonic	39
+58	3	test/tmp_slam_fixture/fixture_human_	Exonic	14
+58	4	test/tmp_slam_fixture/fixture_human_	Exonic	7
+25	3	test/tmp_slam_fixture/fixture_human_	Exonic	16
+58	5	test/tmp_slam_fixture/fixture_human_	Exonic	7
+58	6	test/tmp_slam_fixture/fixture_human_	Exonic	1
+58	7	test/tmp_slam_fixture/fixture_human_	Exonic	1
+59	0	test/tmp_slam_fixture/fixture_human_	Exonic	169
+26	0	test/tmp_slam_fixture/fixture_human_	Exonic	1067
+59	1	test/tmp_slam_fixture/fixture_human_	Exonic	19
+59	2	test/tmp_slam_fixture/fixture_human_	Exonic	13
+26	1	test/tmp_slam_fixture/fixture_human_	Exonic	113
+26	2	test/tmp_slam_fixture/fixture_human_	Exonic	36
+59	3	test/tmp_slam_fixture/fixture_human_	Exonic	7
+26	3	test/tmp_slam_fixture/fixture_human_	Exonic	7
+59	4	test/tmp_slam_fixture/fixture_human_	Exonic	1
+59	5	test/tmp_slam_fixture/fixture_human_	Exonic	4
+26	4	test/tmp_slam_fixture/fixture_human_	Exonic	11
+26	5	test/tmp_slam_fixture/fixture_human_	Exonic	2
+59	7	test/tmp_slam_fixture/fixture_human_	Exonic	1
+59	8	test/tmp_slam_fixture/fixture_human_	Exonic	1
+59	10	test/tmp_slam_fixture/fixture_human_	Exonic	2
+60	0	test/tmp_slam_fixture/fixture_human_	Exonic	126
+27	0	test/tmp_slam_fixture/fixture_human_	Exonic	1023
+60	1	test/tmp_slam_fixture/fixture_human_	Exonic	13
+27	1	test/tmp_slam_fixture/fixture_human_	Exonic	141
+60	2	test/tmp_slam_fixture/fixture_human_	Exonic	11
+60	3	test/tmp_slam_fixture/fixture_human_	Exonic	13
+27	2	test/tmp_slam_fixture/fixture_human_	Exonic	40
+27	3	test/tmp_slam_fixture/fixture_human_	Exonic	19
+60	4	test/tmp_slam_fixture/fixture_human_	Exonic	3
+27	4	test/tmp_slam_fixture/fixture_human_	Exonic	6
+60	5	test/tmp_slam_fixture/fixture_human_	Exonic	2
+27	5	test/tmp_slam_fixture/fixture_human_	Exonic	2
+60	6	test/tmp_slam_fixture/fixture_human_	Exonic	1
+60	7	test/tmp_slam_fixture/fixture_human_	Exonic	1
+27	6	test/tmp_slam_fixture/fixture_human_	Exonic	1
+60	8	test/tmp_slam_fixture/fixture_human_	Exonic	1
+61	0	test/tmp_slam_fixture/fixture_human_	Exonic	135
+28	0	test/tmp_slam_fixture/fixture_human_	Exonic	1046
+61	1	test/tmp_slam_fixture/fixture_human_	Exonic	10
+28	1	test/tmp_slam_fixture/fixture_human_	Exonic	123
+61	2	test/tmp_slam_fixture/fixture_human_	Exonic	5
+28	2	test/tmp_slam_fixture/fixture_human_	Exonic	54
+61	3	test/tmp_slam_fixture/fixture_human_	Exonic	6
+28	3	test/tmp_slam_fixture/fixture_human_	Exonic	18
+61	4	test/tmp_slam_fixture/fixture_human_	Exonic	6
+61	5	test/tmp_slam_fixture/fixture_human_	Exonic	2
+28	4	test/tmp_slam_fixture/fixture_human_	Exonic	9
+61	6	test/tmp_slam_fixture/fixture_human_	Exonic	3
+28	5	test/tmp_slam_fixture/fixture_human_	Exonic	4
+28	6	test/tmp_slam_fixture/fixture_human_	Exonic	1
+61	7	test/tmp_slam_fixture/fixture_human_	Exonic	2
+62	0	test/tmp_slam_fixture/fixture_human_	Exonic	92
+29	0	test/tmp_slam_fixture/fixture_human_	Exonic	1087
+62	1	test/tmp_slam_fixture/fixture_human_	Exonic	7
+29	1	test/tmp_slam_fixture/fixture_human_	Exonic	129
+62	2	test/tmp_slam_fixture/fixture_human_	Exonic	9
+29	2	test/tmp_slam_fixture/fixture_human_	Exonic	56
+62	3	test/tmp_slam_fixture/fixture_human_	Exonic	6
+29	3	test/tmp_slam_fixture/fixture_human_	Exonic	14
+62	4	test/tmp_slam_fixture/fixture_human_	Exonic	1
+29	4	test/tmp_slam_fixture/fixture_human_	Exonic	12
+62	5	test/tmp_slam_fixture/fixture_human_	Exonic	2
+62	6	test/tmp_slam_fixture/fixture_human_	Exonic	4
+29	6	test/tmp_slam_fixture/fixture_human_	Exonic	1
+62	10	test/tmp_slam_fixture/fixture_human_	Exonic	1
+63	0	test/tmp_slam_fixture/fixture_human_	Exonic	84
+30	0	test/tmp_slam_fixture/fixture_human_	Exonic	1250
+63	1	test/tmp_slam_fixture/fixture_human_	Exonic	8
+30	1	test/tmp_slam_fixture/fixture_human_	Exonic	116
+63	2	test/tmp_slam_fixture/fixture_human_	Exonic	12
+30	2	test/tmp_slam_fixture/fixture_human_	Exonic	46
+63	3	test/tmp_slam_fixture/fixture_human_	Exonic	3
+30	3	test/tmp_slam_fixture/fixture_human_	Exonic	20
+63	4	test/tmp_slam_fixture/fixture_human_	Exonic	4
+30	4	test/tmp_slam_fixture/fixture_human_	Exonic	7
+63	5	test/tmp_slam_fixture/fixture_human_	Exonic	5
+63	6	test/tmp_slam_fixture/fixture_human_	Exonic	1
+30	5	test/tmp_slam_fixture/fixture_human_	Exonic	1
+64	0	test/tmp_slam_fixture/fixture_human_	Exonic	92
+31	0	test/tmp_slam_fixture/fixture_human_	Exonic	1060
+64	1	test/tmp_slam_fixture/fixture_human_	Exonic	4
+31	1	test/tmp_slam_fixture/fixture_human_	Exonic	109
+64	2	test/tmp_slam_fixture/fixture_human_	Exonic	3
+31	2	test/tmp_slam_fixture/fixture_human_	Exonic	38
+64	3	test/tmp_slam_fixture/fixture_human_	Exonic	6
+31	3	test/tmp_slam_fixture/fixture_human_	Exonic	23
+64	4	test/tmp_slam_fixture/fixture_human_	Exonic	1
+31	4	test/tmp_slam_fixture/fixture_human_	Exonic	16
+64	5	test/tmp_slam_fixture/fixture_human_	Exonic	2
+64	6	test/tmp_slam_fixture/fixture_human_	Exonic	3
+31	5	test/tmp_slam_fixture/fixture_human_	Exonic	3
+64	7	test/tmp_slam_fixture/fixture_human_	Exonic	1
+65	0	test/tmp_slam_fixture/fixture_human_	Exonic	66
+32	0	test/tmp_slam_fixture/fixture_human_	Exonic	980
+65	1	test/tmp_slam_fixture/fixture_human_	Exonic	4
+32	1	test/tmp_slam_fixture/fixture_human_	Exonic	93
+65	2	test/tmp_slam_fixture/fixture_human_	Exonic	4
+32	2	test/tmp_slam_fixture/fixture_human_	Exonic	45
+65	3	test/tmp_slam_fixture/fixture_human_	Exonic	2
+32	3	test/tmp_slam_fixture/fixture_human_	Exonic	21
+65	4	test/tmp_slam_fixture/fixture_human_	Exonic	2
+65	5	test/tmp_slam_fixture/fixture_human_	Exonic	2
+32	4	test/tmp_slam_fixture/fixture_human_	Exonic	4
+32	5	test/tmp_slam_fixture/fixture_human_	Exonic	7
+32	6	test/tmp_slam_fixture/fixture_human_	Exonic	1
+65	7	test/tmp_slam_fixture/fixture_human_	Exonic	1
+32	7	test/tmp_slam_fixture/fixture_human_	Exonic	1
+66	0	test/tmp_slam_fixture/fixture_human_	Exonic	50
+33	0	test/tmp_slam_fixture/fixture_human_	Exonic	965
+66	1	test/tmp_slam_fixture/fixture_human_	Exonic	1
+33	1	test/tmp_slam_fixture/fixture_human_	Exonic	108
+66	2	test/tmp_slam_fixture/fixture_human_	Exonic	1
+0	0	test/tmp_slam_fixture/fixture_human_	Exonic	25
+33	2	test/tmp_slam_fixture/fixture_human_	Exonic	38
+33	3	test/tmp_slam_fixture/fixture_human_	Exonic	20
+66	4	test/tmp_slam_fixture/fixture_human_	Exonic	2
+33	4	test/tmp_slam_fixture/fixture_human_	Exonic	12
+33	5	test/tmp_slam_fixture/fixture_human_	Exonic	2
+33	7	test/tmp_slam_fixture/fixture_human_	Exonic	1
+66	10	test/tmp_slam_fixture/fixture_human_	Exonic	1
+67	0	test/tmp_slam_fixture/fixture_human_	Exonic	40
+34	0	test/tmp_slam_fixture/fixture_human_	Exonic	1031
+67	1	test/tmp_slam_fixture/fixture_human_	Exonic	5
+1	0	test/tmp_slam_fixture/fixture_human_	Exonic	31
+34	1	test/tmp_slam_fixture/fixture_human_	Exonic	104
+67	2	test/tmp_slam_fixture/fixture_human_	Exonic	1
+34	2	test/tmp_slam_fixture/fixture_human_	Exonic	46
+67	3	test/tmp_slam_fixture/fixture_human_	Exonic	2
+34	3	test/tmp_slam_fixture/fixture_human_	Exonic	27
+67	4	test/tmp_slam_fixture/fixture_human_	Exonic	1
+34	4	test/tmp_slam_fixture/fixture_human_	Exonic	3
+34	5	test/tmp_slam_fixture/fixture_human_	Exonic	3
+67	7	test/tmp_slam_fixture/fixture_human_	Exonic	1
+34	6	test/tmp_slam_fixture/fixture_human_	Exonic	2
+34	7	test/tmp_slam_fixture/fixture_human_	Exonic	3
+67	9	test/tmp_slam_fixture/fixture_human_	Exonic	1
+68	0	test/tmp_slam_fixture/fixture_human_	Exonic	17
+35	0	test/tmp_slam_fixture/fixture_human_	Exonic	984
+68	1	test/tmp_slam_fixture/fixture_human_	Exonic	6
+2	0	test/tmp_slam_fixture/fixture_human_	Exonic	48
+35	1	test/tmp_slam_fixture/fixture_human_	Exonic	119
+68	2	test/tmp_slam_fixture/fixture_human_	Exonic	3
+2	1	test/tmp_slam_fixture/fixture_human_	Intronic	4
+68	3	test/tmp_slam_fixture/fixture_human_	Intronic	1
+35	2	test/tmp_slam_fixture/fixture_human_	Intronic	18
+35	3	test/tmp_slam_fixture/fixture_human_	Intronic	13
+35	4	test/tmp_slam_fixture/fixture_human_	Intronic	9
+68	6	test/tmp_slam_fixture/fixture_human_	Intronic	1
+35	5	test/tmp_slam_fixture/fixture_human_	Intronic	4
+35	6	test/tmp_slam_fixture/fixture_human_	Intronic	1
+52	0	test/tmp_slam_fixture/fixture_human_	Intronic	11
+19	0	test/tmp_slam_fixture/fixture_human_	Intronic	113
+19	1	test/tmp_slam_fixture/fixture_human_	Intronic	55
+52	2	test/tmp_slam_fixture/fixture_human_	Intronic	1
+19	2	test/tmp_slam_fixture/fixture_human_	Intronic	32
+19	3	test/tmp_slam_fixture/fixture_human_	Intronic	19
+52	4	test/tmp_slam_fixture/fixture_human_	Intronic	4
+19	4	test/tmp_slam_fixture/fixture_human_	Intronic	3
+19	5	test/tmp_slam_fixture/fixture_human_	Intronic	1
+52	8	test/tmp_slam_fixture/fixture_human_	Intronic	1
+52	9	test/tmp_slam_fixture/fixture_human_	Intronic	1
+69	0	test/tmp_slam_fixture/fixture_human_	Intronic	1
+36	0	test/tmp_slam_fixture/fixture_human_	Intronic	32
+3	0	test/tmp_slam_fixture/fixture_human_	Intronic	54
+36	1	test/tmp_slam_fixture/fixture_human_	Intronic	16
+36	2	test/tmp_slam_fixture/fixture_human_	Intronic	11
+3	1	test/tmp_slam_fixture/fixture_human_	Intronic	2
+36	3	test/tmp_slam_fixture/fixture_human_	Intronic	6
+36	4	test/tmp_slam_fixture/fixture_human_	Intronic	3
+36	5	test/tmp_slam_fixture/fixture_human_	Intronic	7
+36	6	test/tmp_slam_fixture/fixture_human_	Intronic	1
+36	8	test/tmp_slam_fixture/fixture_human_	Intronic	1
+53	0	test/tmp_slam_fixture/fixture_human_	Intronic	5
+20	0	test/tmp_slam_fixture/fixture_human_	Intronic	122
+53	1	test/tmp_slam_fixture/fixture_human_	Intronic	2
+20	1	test/tmp_slam_fixture/fixture_human_	Intronic	50
+53	2	test/tmp_slam_fixture/fixture_human_	Intronic	2
+20	2	test/tmp_slam_fixture/fixture_human_	Intronic	35
+53	3	test/tmp_slam_fixture/fixture_human_	Intronic	3
+20	3	test/tmp_slam_fixture/fixture_human_	Intronic	16
+53	4	test/tmp_slam_fixture/fixture_human_	Intronic	1
+53	5	test/tmp_slam_fixture/fixture_human_	Intronic	2
+20	4	test/tmp_slam_fixture/fixture_human_	Intronic	1
+20	5	test/tmp_slam_fixture/fixture_human_	Intronic	1
+37	0	test/tmp_slam_fixture/fixture_human_	Intronic	33
+4	0	test/tmp_slam_fixture/fixture_human_	Intronic	48
+37	1	test/tmp_slam_fixture/fixture_human_	Intronic	24
+37	2	test/tmp_slam_fixture/fixture_human_	Intronic	13
+4	1	test/tmp_slam_fixture/fixture_human_	Intronic	4
+37	3	test/tmp_slam_fixture/fixture_human_	Intronic	7
+4	2	test/tmp_slam_fixture/fixture_human_	Intronic	1
+37	4	test/tmp_slam_fixture/fixture_human_	Intronic	9
+37	5	test/tmp_slam_fixture/fixture_human_	Intronic	1
+70	8	test/tmp_slam_fixture/fixture_human_	Intronic	1
+37	10	test/tmp_slam_fixture/fixture_human_	Intronic	1
+54	0	test/tmp_slam_fixture/fixture_human_	Intronic	8
+21	0	test/tmp_slam_fixture/fixture_human_	Intronic	74
+54	1	test/tmp_slam_fixture/fixture_human_	Intronic	6
+21	1	test/tmp_slam_fixture/fixture_human_	Intronic	45
+54	2	test/tmp_slam_fixture/fixture_human_	Intronic	3
+21	2	test/tmp_slam_fixture/fixture_human_	Intronic	26
+54	3	test/tmp_slam_fixture/fixture_human_	Intronic	2
+21	3	test/tmp_slam_fixture/fixture_human_	Intronic	14
+21	4	test/tmp_slam_fixture/fixture_human_	Intronic	7
+54	5	test/tmp_slam_fixture/fixture_human_	Intronic	1
+21	6	test/tmp_slam_fixture/fixture_human_	Intronic	1
+38	0	test/tmp_slam_fixture/fixture_human_	Intronic	39
+5	0	test/tmp_slam_fixture/fixture_human_	Intronic	53
+38	1	test/tmp_slam_fixture/fixture_human_	Intronic	15
+5	1	test/tmp_slam_fixture/fixture_human_	Intronic	5
+38	2	test/tmp_slam_fixture/fixture_human_	Intronic	8
+38	3	test/tmp_slam_fixture/fixture_human_	Intronic	8
+5	2	test/tmp_slam_fixture/fixture_human_	Intronic	0
+38	4	test/tmp_slam_fixture/fixture_human_	Intronic	6
+38	5	test/tmp_slam_fixture/fixture_human_	Intronic	6
+38	6	test/tmp_slam_fixture/fixture_human_	Intronic	1
+55	0	test/tmp_slam_fixture/fixture_human_	Intronic	5
+22	0	test/tmp_slam_fixture/fixture_human_	Intronic	132
+55	1	test/tmp_slam_fixture/fixture_human_	Intronic	3
+22	1	test/tmp_slam_fixture/fixture_human_	Intronic	53
+55	2	test/tmp_slam_fixture/fixture_human_	Intronic	1
+22	2	test/tmp_slam_fixture/fixture_human_	Intronic	22
+55	3	test/tmp_slam_fixture/fixture_human_	Intronic	2
+22	3	test/tmp_slam_fixture/fixture_human_	Intronic	7
+55	4	test/tmp_slam_fixture/fixture_human_	Intronic	1
+55	5	test/tmp_slam_fixture/fixture_human_	Intronic	4
+22	4	test/tmp_slam_fixture/fixture_human_	Intronic	3
+39	0	test/tmp_slam_fixture/fixture_human_	Intronic	48
+6	0	test/tmp_slam_fixture/fixture_human_	Intronic	70
+39	1	test/tmp_slam_fixture/fixture_human_	Intronic	13
+6	1	test/tmp_slam_fixture/fixture_human_	Intronic	14
+39	2	test/tmp_slam_fixture/fixture_human_	Intronic	13
+39	3	test/tmp_slam_fixture/fixture_human_	Intronic	8
+6	2	test/tmp_slam_fixture/fixture_human_	Intronic	1
+39	4	test/tmp_slam_fixture/fixture_human_	Intronic	8
+39	5	test/tmp_slam_fixture/fixture_human_	Intronic	2
+39	6	test/tmp_slam_fixture/fixture_human_	Intronic	1
+39	7	test/tmp_slam_fixture/fixture_human_	Intronic	1
+56	0	test/tmp_slam_fixture/fixture_human_	Intronic	3
+23	0	test/tmp_slam_fixture/fixture_human_	Intronic	91
+56	1	test/tmp_slam_fixture/fixture_human_	Intronic	2
+23	1	test/tmp_slam_fixture/fixture_human_	Intronic	47
+23	2	test/tmp_slam_fixture/fixture_human_	Intronic	25
+23	3	test/tmp_slam_fixture/fixture_human_	Intronic	15
+23	4	test/tmp_slam_fixture/fixture_human_	Intronic	2
+40	0	test/tmp_slam_fixture/fixture_human_	Intronic	34
+7	0	test/tmp_slam_fixture/fixture_human_	Intronic	80
+40	1	test/tmp_slam_fixture/fixture_human_	Intronic	11
+7	1	test/tmp_slam_fixture/fixture_human_	Intronic	10
+40	2	test/tmp_slam_fixture/fixture_human_	Intronic	6
+40	3	test/tmp_slam_fixture/fixture_human_	Intronic	8
+7	2	test/tmp_slam_fixture/fixture_human_	Intronic	1
+40	4	test/tmp_slam_fixture/fixture_human_	Intronic	3
+40	5	test/tmp_slam_fixture/fixture_human_	Intronic	1
+40	6	test/tmp_slam_fixture/fixture_human_	Intronic	1
+40	7	test/tmp_slam_fixture/fixture_human_	Intronic	1
+57	0	test/tmp_slam_fixture/fixture_human_	Intronic	10
+24	0	test/tmp_slam_fixture/fixture_human_	Intronic	94
+57	1	test/tmp_slam_fixture/fixture_human_	Intronic	3
+24	1	test/tmp_slam_fixture/fixture_human_	Intronic	41
+57	2	test/tmp_slam_fixture/fixture_human_	Intronic	1
+24	2	test/tmp_slam_fixture/fixture_human_	Intronic	26
+57	3	test/tmp_slam_fixture/fixture_human_	Intronic	4
+24	3	test/tmp_slam_fixture/fixture_human_	Intronic	14
+57	4	test/tmp_slam_fixture/fixture_human_	Intronic	2
+57	5	test/tmp_slam_fixture/fixture_human_	Intronic	3
+24	5	test/tmp_slam_fixture/fixture_human_	Intronic	2
+57	9	test/tmp_slam_fixture/fixture_human_	Intronic	1
+41	0	test/tmp_slam_fixture/fixture_human_	Intronic	24
+8	0	test/tmp_slam_fixture/fixture_human_	Intronic	70
+41	1	test/tmp_slam_fixture/fixture_human_	Intronic	10
+8	1	test/tmp_slam_fixture/fixture_human_	Intronic	18
+41	2	test/tmp_slam_fixture/fixture_human_	Intronic	10
+41	3	test/tmp_slam_fixture/fixture_human_	Intronic	17
+8	2	test/tmp_slam_fixture/fixture_human_	Intronic	3
+41	4	test/tmp_slam_fixture/fixture_human_	Intronic	12
+41	5	test/tmp_slam_fixture/fixture_human_	Intronic	3
+8	4	test/tmp_slam_fixture/fixture_human_	Intronic	1
+41	6	test/tmp_slam_fixture/fixture_human_	Intronic	3
+41	7	test/tmp_slam_fixture/fixture_human_	Intronic	1
+58	0	test/tmp_slam_fixture/fixture_human_	Intronic	6
+25	0	test/tmp_slam_fixture/fixture_human_	Intronic	120
+58	1	test/tmp_slam_fixture/fixture_human_	Intronic	1
+25	1	test/tmp_slam_fixture/fixture_human_	Intronic	46
+58	2	test/tmp_slam_fixture/fixture_human_	Intronic	2
+25	2	test/tmp_slam_fixture/fixture_human_	Intronic	15
+58	3	test/tmp_slam_fixture/fixture_human_	Intronic	1
+25	3	test/tmp_slam_fixture/fixture_human_	Intronic	19
+25	4	test/tmp_slam_fixture/fixture_human_	Intronic	10
+25	5	test/tmp_slam_fixture/fixture_human_	Intronic	1
+58	7	test/tmp_slam_fixture/fixture_human_	Intronic	1
+58	9	test/tmp_slam_fixture/fixture_human_	Intronic	1
+42	0	test/tmp_slam_fixture/fixture_human_	Intronic	25
+9	0	test/tmp_slam_fixture/fixture_human_	Intronic	81
+42	1	test/tmp_slam_fixture/fixture_human_	Intronic	9
+9	1	test/tmp_slam_fixture/fixture_human_	Intronic	28
+42	2	test/tmp_slam_fixture/fixture_human_	Intronic	11
+9	2	test/tmp_slam_fixture/fixture_human_	Intronic	7
+42	3	test/tmp_slam_fixture/fixture_human_	Intronic	10
+9	3	test/tmp_slam_fixture/fixture_human_	Intronic	1
+42	4	test/tmp_slam_fixture/fixture_human_	Intronic	9
+42	5	test/tmp_slam_fixture/fixture_human_	Intronic	1
+42	6	test/tmp_slam_fixture/fixture_human_	Intronic	2
+42	10	test/tmp_slam_fixture/fixture_human_	Intronic	1
+59	0	test/tmp_slam_fixture/fixture_human_	Intronic	12
+26	0	test/tmp_slam_fixture/fixture_human_	Intronic	94
+59	2	test/tmp_slam_fixture/fixture_human_	Intronic	1
+26	1	test/tmp_slam_fixture/fixture_human_	Intronic	44
+26	2	test/tmp_slam_fixture/fixture_human_	Intronic	34
+59	3	test/tmp_slam_fixture/fixture_human_	Intronic	4
+26	3	test/tmp_slam_fixture/fixture_human_	Intronic	12
+59	4	test/tmp_slam_fixture/fixture_human_	Intronic	3
+26	4	test/tmp_slam_fixture/fixture_human_	Intronic	6
+59	5	test/tmp_slam_fixture/fixture_human_	Intronic	2
+26	5	test/tmp_slam_fixture/fixture_human_	Intronic	4
+59	6	test/tmp_slam_fixture/fixture_human_	Intronic	1
+26	6	test/tmp_slam_fixture/fixture_human_	Intronic	1
+59	7	test/tmp_slam_fixture/fixture_human_	Intronic	1
+43	0	test/tmp_slam_fixture/fixture_human_	Intronic	23
+10	0	test/tmp_slam_fixture/fixture_human_	Intronic	57
+43	1	test/tmp_slam_fixture/fixture_human_	Intronic	8
+43	2	test/tmp_slam_fixture/fixture_human_	Intronic	7
+10	1	test/tmp_slam_fixture/fixture_human_	Intronic	23
+43	3	test/tmp_slam_fixture/fixture_human_	Intronic	9
+10	2	test/tmp_slam_fixture/fixture_human_	Intronic	4
+10	3	test/tmp_slam_fixture/fixture_human_	Intronic	1
+43	4	test/tmp_slam_fixture/fixture_human_	Intronic	2
+43	5	test/tmp_slam_fixture/fixture_human_	Intronic	1
+10	5	test/tmp_slam_fixture/fixture_human_	Intronic	1
+43	6	test/tmp_slam_fixture/fixture_human_	Intronic	1
+60	0	test/tmp_slam_fixture/fixture_human_	Intronic	5
+27	0	test/tmp_slam_fixture/fixture_human_	Intronic	96
+27	1	test/tmp_slam_fixture/fixture_human_	Intronic	46
+60	2	test/tmp_slam_fixture/fixture_human_	Intronic	1
+27	2	test/tmp_slam_fixture/fixture_human_	Intronic	31
+60	3	test/tmp_slam_fixture/fixture_human_	Intronic	2
+27	3	test/tmp_slam_fixture/fixture_human_	Intronic	7
+60	5	test/tmp_slam_fixture/fixture_human_	Intronic	1
+27	4	test/tmp_slam_fixture/fixture_human_	Intronic	4
+27	6	test/tmp_slam_fixture/fixture_human_	Intronic	1
+60	7	test/tmp_slam_fixture/fixture_human_	Intronic	1
+44	0	test/tmp_slam_fixture/fixture_human_	Intronic	13
+11	0	test/tmp_slam_fixture/fixture_human_	Intronic	104
+44	1	test/tmp_slam_fixture/fixture_human_	Intronic	6
+11	1	test/tmp_slam_fixture/fixture_human_	Intronic	30
+44	2	test/tmp_slam_fixture/fixture_human_	Intronic	5
+11	2	test/tmp_slam_fixture/fixture_human_	Intronic	13
+44	3	test/tmp_slam_fixture/fixture_human_	Intronic	5
+44	4	test/tmp_slam_fixture/fixture_human_	Intronic	2
+11	3	test/tmp_slam_fixture/fixture_human_	Intronic	2
+44	5	test/tmp_slam_fixture/fixture_human_	Intronic	3
+61	0	test/tmp_slam_fixture/fixture_human_	Intronic	2
+28	0	test/tmp_slam_fixture/fixture_human_	Intronic	113
+28	1	test/tmp_slam_fixture/fixture_human_	Intronic	32
+28	2	test/tmp_slam_fixture/fixture_human_	Intronic	37
+61	3	test/tmp_slam_fixture/fixture_human_	Intronic	1
+28	3	test/tmp_slam_fixture/fixture_human_	Intronic	16
+28	4	test/tmp_slam_fixture/fixture_human_	Intronic	6
+28	5	test/tmp_slam_fixture/fixture_human_	Intronic	1
+28	6	test/tmp_slam_fixture/fixture_human_	Intronic	1
+45	0	test/tmp_slam_fixture/fixture_human_	Intronic	17
+12	0	test/tmp_slam_fixture/fixture_human_	Intronic	108
+45	1	test/tmp_slam_fixture/fixture_human_	Intronic	12
+12	1	test/tmp_slam_fixture/fixture_human_	Intronic	37
+45	2	test/tmp_slam_fixture/fixture_human_	Intronic	3
+12	2	test/tmp_slam_fixture/fixture_human_	Intronic	11
+45	3	test/tmp_slam_fixture/fixture_human_	Intronic	3
+45	4	test/tmp_slam_fixture/fixture_human_	Intronic	3
+12	3	test/tmp_slam_fixture/fixture_human_	Intronic	4
+45	5	test/tmp_slam_fixture/fixture_human_	Intronic	2
+45	6	test/tmp_slam_fixture/fixture_human_	Intronic	1
+45	7	test/tmp_slam_fixture/fixture_human_	Intronic	3
+45	9	test/tmp_slam_fixture/fixture_human_	Intronic	2
+29	0	test/tmp_slam_fixture/fixture_human_	Intronic	108
+29	1	test/tmp_slam_fixture/fixture_human_	Intronic	34
+29	2	test/tmp_slam_fixture/fixture_human_	Intronic	34
+29	3	test/tmp_slam_fixture/fixture_human_	Intronic	12
+29	4	test/tmp_slam_fixture/fixture_human_	Intronic	4
+29	5	test/tmp_slam_fixture/fixture_human_	Intronic	3
+29	6	test/tmp_slam_fixture/fixture_human_	Intronic	3
+46	0	test/tmp_slam_fixture/fixture_human_	Intronic	19
+13	0	test/tmp_slam_fixture/fixture_human_	Intronic	169
+46	1	test/tmp_slam_fixture/fixture_human_	Intronic	8
+13	1	test/tmp_slam_fixture/fixture_human_	Intronic	45
+46	2	test/tmp_slam_fixture/fixture_human_	Intronic	5
+13	2	test/tmp_slam_fixture/fixture_human_	Intronic	17
+46	3	test/tmp_slam_fixture/fixture_human_	Intronic	7
+46	4	test/tmp_slam_fixture/fixture_human_	Intronic	3
+13	3	test/tmp_slam_fixture/fixture_human_	Intronic	4
+46	5	test/tmp_slam_fixture/fixture_human_	Intronic	5
+30	0	test/tmp_slam_fixture/fixture_human_	Intronic	108
+30	1	test/tmp_slam_fixture/fixture_human_	Intronic	39
+63	2	test/tmp_slam_fixture/fixture_human_	Intronic	2
+30	2	test/tmp_slam_fixture/fixture_human_	Intronic	16
+30	3	test/tmp_slam_fixture/fixture_human_	Intronic	14
+30	4	test/tmp_slam_fixture/fixture_human_	Intronic	12
+30	5	test/tmp_slam_fixture/fixture_human_	Intronic	6
+30	6	test/tmp_slam_fixture/fixture_human_	Intronic	2
+63	7	test/tmp_slam_fixture/fixture_human_	Intronic	1
+47	0	test/tmp_slam_fixture/fixture_human_	Intronic	41
+14	0	test/tmp_slam_fixture/fixture_human_	Intronic	115
+47	1	test/tmp_slam_fixture/fixture_human_	Intronic	5
+14	1	test/tmp_slam_fixture/fixture_human_	Intronic	50
+47	2	test/tmp_slam_fixture/fixture_human_	Intronic	7
+14	2	test/tmp_slam_fixture/fixture_human_	Intronic	29
+47	3	test/tmp_slam_fixture/fixture_human_	Intronic	7
+47	4	test/tmp_slam_fixture/fixture_human_	Intronic	5
+14	3	test/tmp_slam_fixture/fixture_human_	Intronic	4
+47	5	test/tmp_slam_fixture/fixture_human_	Intronic	7
+14	4	test/tmp_slam_fixture/fixture_human_	Intronic	8
+64	0	test/tmp_slam_fixture/fixture_human_	Intronic	4
+31	0	test/tmp_slam_fixture/fixture_human_	Intronic	65
+31	1	test/tmp_slam_fixture/fixture_human_	Intronic	31
+31	2	test/tmp_slam_fixture/fixture_human_	Intronic	19
+31	3	test/tmp_slam_fixture/fixture_human_	Intronic	12
+31	4	test/tmp_slam_fixture/fixture_human_	Intronic	5
+31	5	test/tmp_slam_fixture/fixture_human_	Intronic	4
+48	0	test/tmp_slam_fixture/fixture_human_	Intronic	23
+15	0	test/tmp_slam_fixture/fixture_human_	Intronic	162
+48	1	test/tmp_slam_fixture/fixture_human_	Intronic	4
+15	1	test/tmp_slam_fixture/fixture_human_	Intronic	75
+48	2	test/tmp_slam_fixture/fixture_human_	Intronic	4
+15	2	test/tmp_slam_fixture/fixture_human_	Intronic	25
+48	3	test/tmp_slam_fixture/fixture_human_	Intronic	6
+48	4	test/tmp_slam_fixture/fixture_human_	Intronic	4
+15	3	test/tmp_slam_fixture/fixture_human_	Intronic	1
+48	5	test/tmp_slam_fixture/fixture_human_	Intronic	2
+15	4	test/tmp_slam_fixture/fixture_human_	Intronic	2
+48	6	test/tmp_slam_fixture/fixture_human_	Intronic	1
+48	7	test/tmp_slam_fixture/fixture_human_	Intronic	1
+48	8	test/tmp_slam_fixture/fixture_human_	Intronic	1
+65	0	test/tmp_slam_fixture/fixture_human_	Intronic	2
+32	0	test/tmp_slam_fixture/fixture_human_	Intronic	59
+32	1	test/tmp_slam_fixture/fixture_human_	Intronic	33
+32	2	test/tmp_slam_fixture/fixture_human_	Intronic	13
+32	3	test/tmp_slam_fixture/fixture_human_	Intronic	18
+65	5	test/tmp_slam_fixture/fixture_human_	Intronic	4
+32	4	test/tmp_slam_fixture/fixture_human_	Intronic	6
+32	5	test/tmp_slam_fixture/fixture_human_	Intronic	2
+32	6	test/tmp_slam_fixture/fixture_human_	Intronic	1
+65	7	test/tmp_slam_fixture/fixture_human_	Intronic	1
+32	7	test/tmp_slam_fixture/fixture_human_	Intronic	1
+49	0	test/tmp_slam_fixture/fixture_human_	Intronic	9
+16	0	test/tmp_slam_fixture/fixture_human_	Intronic	133
+49	1	test/tmp_slam_fixture/fixture_human_	Intronic	1
+16	1	test/tmp_slam_fixture/fixture_human_	Intronic	60
+49	2	test/tmp_slam_fixture/fixture_human_	Intronic	1
+16	2	test/tmp_slam_fixture/fixture_human_	Intronic	35
+49	3	test/tmp_slam_fixture/fixture_human_	Intronic	3
+16	3	test/tmp_slam_fixture/fixture_human_	Intronic	8
+49	4	test/tmp_slam_fixture/fixture_human_	Intronic	3
+49	5	test/tmp_slam_fixture/fixture_human_	Intronic	6
+49	7	test/tmp_slam_fixture/fixture_human_	Intronic	1
+66	0	test/tmp_slam_fixture/fixture_human_	Intronic	4
+33	0	test/tmp_slam_fixture/fixture_human_	Intronic	56
+33	1	test/tmp_slam_fixture/fixture_human_	Intronic	19
+0	0	test/tmp_slam_fixture/fixture_human_	Intronic	64
+33	2	test/tmp_slam_fixture/fixture_human_	Intronic	12
+33	3	test/tmp_slam_fixture/fixture_human_	Intronic	10
+33	4	test/tmp_slam_fixture/fixture_human_	Intronic	7
+33	5	test/tmp_slam_fixture/fixture_human_	Intronic	2
+33	6	test/tmp_slam_fixture/fixture_human_	Intronic	2
+50	0	test/tmp_slam_fixture/fixture_human_	Intronic	7
+17	0	test/tmp_slam_fixture/fixture_human_	Intronic	135
+50	1	test/tmp_slam_fixture/fixture_human_	Intronic	9
+17	1	test/tmp_slam_fixture/fixture_human_	Intronic	83
+50	2	test/tmp_slam_fixture/fixture_human_	Intronic	3
+17	2	test/tmp_slam_fixture/fixture_human_	Intronic	27
+50	3	test/tmp_slam_fixture/fixture_human_	Intronic	7
+17	3	test/tmp_slam_fixture/fixture_human_	Intronic	10
+50	4	test/tmp_slam_fixture/fixture_human_	Intronic	1
+50	5	test/tmp_slam_fixture/fixture_human_	Intronic	4
+17	4	test/tmp_slam_fixture/fixture_human_	Intronic	1
+50	6	test/tmp_slam_fixture/fixture_human_	Intronic	3
+17	5	test/tmp_slam_fixture/fixture_human_	Intronic	1
+34	0	test/tmp_slam_fixture/fixture_human_	Intronic	37
+1	0	test/tmp_slam_fixture/fixture_human_	Intronic	48
+34	1	test/tmp_slam_fixture/fixture_human_	Intronic	21
+1	1	test/tmp_slam_fixture/fixture_human_	Intronic	1
+34	2	test/tmp_slam_fixture/fixture_human_	Intronic	19
+34	3	test/tmp_slam_fixture/fixture_human_	Intronic	10
+67	4	test/tmp_slam_fixture/fixture_human_	Intronic	1
+34	4	test/tmp_slam_fixture/fixture_human_	Intronic	8
+34	5	test/tmp_slam_fixture/fixture_human_	Intronic	4
+51	0	test/tmp_slam_fixture/fixture_human_	Intronic	10
+18	0	test/tmp_slam_fixture/fixture_human_	Intronic	161
+51	1	test/tmp_slam_fixture/fixture_human_	Intronic	6
+18	1	test/tmp_slam_fixture/fixture_human_	Intronic	68
+51	2	test/tmp_slam_fixture/fixture_human_	Intronic	1
+18	2	test/tmp_slam_fixture/fixture_human_	Intronic	42
+51	3	test/tmp_slam_fixture/fixture_human_	Intronic	1
+18	3	test/tmp_slam_fixture/fixture_human_	Intronic	7
+51	4	test/tmp_slam_fixture/fixture_human_	Intronic	1
+18	4	test/tmp_slam_fixture/fixture_human_	Intronic	6
+51	5	test/tmp_slam_fixture/fixture_human_	Intronic	3
+51	6	test/tmp_slam_fixture/fixture_human_	Intronic	1
+18	5	test/tmp_slam_fixture/fixture_human_	Intronic	1
+35	0	test/tmp_slam_fixture/fixture_human_	Intronic	41
+2	0	test/tmp_slam_fixture/fixture_human_	Intronic	39
+35	1	test/tmp_slam_fixture/fixture_human_	Intronic	18
