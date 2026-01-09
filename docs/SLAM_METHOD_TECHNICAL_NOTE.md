@@ -79,7 +79,8 @@ expected parity in this repository.
 ### SNP mask from BED (slamSnpBed)
 
 This is the most direct parity mode because the reference fixture was generated
-using the same SNP mask.
+using the same SNP mask. Use a BED only when a sample-specific VCF/BED is known;
+otherwise prefer internal SNP detection for production data.
 
 | Threshold | Filter | N Genes | NTR Pearson | NTR Spearman | k/nT Pearson | k/nT Spearman |
 |-----------|--------|---------|-------------|--------------|--------------|---------------|
@@ -90,7 +91,8 @@ using the same SNP mask.
 ### Internal SNP detection (slamSnpDetect 1)
 
 This mode is expected to diverge slightly from the BED-based reference (different
-SNP calling), but still provides strong agreement.
+SNP calling), but still provides strong agreement. This is the recommended
+default when no external SNP set is available.
 
 | Threshold | Filter | N Genes | NTR Pearson | NTR Spearman | k/nT Pearson | k/nT Spearman |
 |-----------|--------|---------|-------------|--------------|--------------|---------------|

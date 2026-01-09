@@ -58,6 +58,7 @@ bash tests/run_slam_solver_test.sh
 - ✅ STAR started successfully
 - ✅ Genome loaded: 3.1 GB (3,138,387,968 bytes)
 - ✅ SLAM SNP BED loaded: 1,050 positions from `test/fixtures/slam/ref/snps.bed`
+  - Note: this fixture BED was generated from GRAND-SLAM SNP detection for the test dataset and is used for parity only; for production runs without a known VCF/BED, use `--slamSnpDetect 1`.
 - ✅ Threads created: 4 worker threads
 - ✅ Mapping completed successfully
 - ✅ SLAM quantification completed successfully

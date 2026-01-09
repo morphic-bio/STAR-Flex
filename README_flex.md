@@ -85,8 +85,8 @@ This fork adds several features beyond upstream STAR:
 - **SLAM-seq (STAR-SLAM) gene-level quantification**: Enable SLAM quantification directly in STAR.
   - **Required**: `--slamQuantMode 1`
   - **SNP handling** (choose one):
-    - `--slamSnpBed /path/to/snps.bed` (recommended for parity with a known SNP mask)
-    - `--slamSnpDetect 1` (internal SNP detection; ignored if `--slamSnpBed` is set)
+    - `--slamSnpDetect 1` (internal SNP detection; default choice when no sample-specific VCF is available)
+    - `--slamSnpBed /path/to/snps.bed` (use only when a sample-specific VCF/BED is known; if set, it disables internal detection)
   - **Optional**: `--slamErrorRate`, `--slamConvRate`, `--slamOutFile`
   - **Example:**
     ```bash
@@ -97,7 +97,7 @@ This fork adds several features beyond upstream STAR:
       --readFilesCommand zcat \
       --outSAMtype None \
       --slamQuantMode 1 \
-      --slamSnpBed /path/to/snps.bed \
+      --slamSnpDetect 1 \
       --outFileNamePrefix out/
     ```
   - For GRAND-SLAM parity from BAM, include `--outSAMattributes MD NH` and avoid soft-clipping (end-to-end + trim).
