@@ -87,6 +87,8 @@ This fork adds several features beyond upstream STAR:
   - **SNP handling** (choose one):
     - `--slamSnpDetect 1` (internal SNP detection; default choice when no sample-specific VCF is available)
     - `--slamSnpBed /path/to/snps.bed` (use only when a sample-specific VCF/BED is known; if set, it disables internal detection)
+  - **Strandness filter** (optional): `--slamStrandness Unspecific|Sense|Antisense` (default: `Unspecific`).
+  - **Debug instrumentation** (optional): `--slamDebugGeneList`, `--slamDebugReadList`, `--slamDebugOutPrefix`, `--slamDebugMaxReads`.
   - **Optional**: `--slamErrorRate`, `--slamConvRate`, `--slamOutFile`
   - **Example:**
     ```bash

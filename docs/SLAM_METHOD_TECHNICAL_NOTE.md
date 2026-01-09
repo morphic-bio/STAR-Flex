@@ -68,6 +68,20 @@ acceptance threshold for STAR-SLAM vs GRAND-SLAM parity.
   (annotation, SNP mask, trimming, mapping mode).
 - Systematic deviations are often concentrated in mitochondrial and ribosomal
   genes or low-complexity regions; document these explicitly.
+- If the library is stranded, set `--slamStrandness Sense` (or Antisense) in
+  STAR-SLAM to mirror GEDI's strand-aware model; default `Unspecific` keeps all
+  reads regardless of strand.
+
+## Debug instrumentation (STAR-SLAM)
+
+To pinpoint divergences, use targeted debug outputs:
+
+- `--slamDebugGeneList` and/or `--slamDebugReadList` with `--slamDebugOutPrefix`
+  to emit `<prefix>.gene.tsv` and `<prefix>.reads.tsv`.
+- The gene file includes per-gene weighted counts plus strand/intronic splits
+  and drop counts (SNP mask, strandness).
+- The read file captures per-read assignments, drop reasons, and conversion
+  positions for the selected genes/reads.
 
 ## Fixture parity benchmarks (STAR-SLAM vs GRAND-SLAM)
 
