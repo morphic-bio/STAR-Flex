@@ -1,5 +1,6 @@
 #include "Transcriptome.h"
 #include "ReadAlign.h"
+#include "SlamCompat.h"
 #include "serviceFuns.cpp"
 #include "AlignVsTranscript.h"
 #include "ReadAnnotations.h"
@@ -174,7 +175,7 @@ int alignToTranscriptMinOverlap(Transcript &aG, uint trS1, uint32 *exSE1, uint16
     };
 };
 
-void Transcriptome::classifyAlign (Transcript **alignG, uint64 nAlignG, ReadAnnotations &readAnnot) 
+void Transcriptome::classifyAlign (Transcript **alignG, uint64 nAlignG, ReadAnnotations &readAnnot, SlamCompat* slamCompat) 
 {
     // readAnnot.transcriptConcordant={};
     // readAnnot.trVelocytoType={};
@@ -186,7 +187,8 @@ void Transcriptome::classifyAlign (Transcript **alignG, uint64 nAlignG, ReadAnno
     // annFeat.fAlign = {};       
     // annFeat.ovType = 0;
 
-    annFeat.fAlign.resize(nAlignG);    
+    annFeat.fAlign.resize(nAlignG);
+    annFeat.lenientAcceptByAlign.assign(nAlignG, 0);  // Initialize per-alignment lenient flags
     uint32 reGe=(uint32)-2;//so that the first gene can be recorded
     std::bitset<velocytoTypeGeneBits> reAnn; //initialized to 0 (false)
        
@@ -223,6 +225,30 @@ void Transcriptome::classifyAlign (Transcript **alignG, uint64 nAlignG, ReadAnno
 
                 annFeat.fSet.insert(trGene[tr1]);//genes for all alignments
                 annFeat.fAlign[iag].insert(trGene[tr1]);
+            } else if (slamCompat && slamCompat->cfg().lenientOverlap) {
+                // Lenient acceptance: 50% overlap + intron consistency
+                uint32_t readMappedLen = static_cast<uint32_t>(aG.mappedLength);
+                
+                // Compute overlap using SlamCompat helper
+                uint32_t overlap = slamCompat->computeExonOverlap(aG, trS[tr1], trExN[tr1],
+                                                                   exSE+2*trExI[tr1]);
+                
+                // 50% threshold check
+                if (2 * overlap >= readMappedLen) {
+                    // Check intron consistency using local static helper
+                    // Signature: alignToTranscriptMinOverlap(aG, trS1, exSE1, exN1, minOverlapMinusOne)
+                    int lenientStatus = alignToTranscriptMinOverlap(aG, trS[tr1], 
+                                                                     exSE+2*trExI[tr1], trExN[tr1], 0);
+                    
+                    // Accept only if intron-consistent (NOT purely intronic)
+                    if (lenientStatus == AlignVsTranscript::Concordant ||
+                        lenientStatus == AlignVsTranscript::ExonIntron) {
+                        annFeat.fSet.insert(trGene[tr1]);
+                        annFeat.fAlign[iag].insert(trGene[tr1]);
+                        // Mark this alignment as lenient-accepted (at most once per alignment)
+                        annFeat.lenientAcceptByAlign[iag] = 1;
+                    }
+                }
             };
             
             if ((P.pSolo.featureYes[SoloFeatureTypes::Velocyto] || P.pSolo.featureYes[SoloFeatureTypes::VelocytoSimple]) && nAlignG==1) {//another calculation for velocyto with minOverlapMinusOne=6

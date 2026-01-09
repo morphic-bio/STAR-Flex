@@ -12,9 +12,10 @@ public:
     vector<set<uint32>> fAlign; //gene for each alignment of this read
     uint32 ovType;
     enum overlapTypes {none, exonic, exonicAS, exonic50p, exonic50pAS, intronic, intronicAS, intergenic, N};
+    vector<uint8_t> lenientAcceptByAlign;  // Per-alignment flag: 1 if alignment was lenient-accepted
 
     void reset() {
-        fSet={}; fAlign={}; ovType = 0;
+        fSet={}; fAlign={}; ovType = 0; lenientAcceptByAlign.clear();
     };
 };
 

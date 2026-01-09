@@ -1,5 +1,6 @@
 #include "ReadAlign.h"
 #include "SlamQuant.h"
+#include "SlamCompat.h"
 #include "SampleDetector.h"
 #include "GlobalVariables.h"
 #include "ErrorWarning.h"
@@ -107,33 +108,64 @@ void ReadAlign::outputAlignments() {
                     // Track nTr distribution
                     slamQuant->diagnostics().nTrDistribution[nTr]++;
                     
+                    // Compute read-level gene count for weighting (union across all alignments)
+                    size_t readLevelGeneCount = annFeat.fSet.size();
+                    
                     // Count alignments with gene assignments
                     size_t nAlignWithGene = 0;
                     double sumWeight = 0.0;
                     bool trackIntronic = annFeat.fSet.empty() &&
                         annFeatFull.ovType == ReadAnnotFeature::overlapTypes::intronic;
                     
-                    // Use nTr as denominator for weight (matches GRAND-SLAM behavior)
-                    // Weight is applied only to alignments that have gene assignments
-                    double weight = 1.0 / static_cast<double>(nTr);
-                    
                     // Iterate over all nTr alignments
                     for (size_t ia = 0; ia < nTrSize; ++ia) {
+                        // Weight is applied only to alignments that have gene assignments
+                        double weight = 1.0;
+                        if (P.quant.slam.weightMode == 0) {
+                            weight = 1.0 / static_cast<double>(nTr);
+                        }
+                        
+                        // Apply compat overlap weighting if enabled (per alignment, using read-level count)
+                        if (slamCompat && slamCompat->cfg().overlapWeight && readLevelGeneCount > 1) {
+                            weight = slamCompat->compatOverlapWeight(weight, readLevelGeneCount);
+                            slamQuant->diagnostics().compatAlignsOverlapWeightApplied++;
+                        }
                         if (ia < annFeat.fAlign.size()) {
-                            const auto &genes = annFeat.fAlign[ia];
+                            const auto &exonicGenes = annFeat.fAlign[ia];
                             // Track gene set size distribution
-                            slamQuant->diagnostics().geneSetSizeDistribution[genes.size()]++;
-                            if (!genes.empty()) {
+                            slamQuant->diagnostics().geneSetSizeDistribution[exonicGenes.size()]++;
+                            if (!exonicGenes.empty()) {
                                 nAlignWithGene++;
                                 sumWeight += weight;
                                 // Apply same weight to all genes in the set (current approach)
-                                slamCollect(*trMult[ia], genes, weight, false);
+                                slamCollect(*trMult[ia], exonicGenes, weight, false);
+                            } else if (slamCompat && slamCompat->cfg().intronic) {
+                                // No exonic assignment - try compat intronic classification
+                                // Candidate genes from GeneFull_ExonOverIntron (gene body overlap)
+                                if (ia < annFeatFull.fAlign.size()) {
+                                    const auto &candidateGenes = annFeatFull.fAlign[ia];
+                                    if (!candidateGenes.empty()) {
+                                        std::set<uint32_t> intronicGenes;
+                                        if (slamCompat->compatIsIntronic(*trMult[ia], candidateGenes, intronicGenes)) {
+                                            slamCollect(*trMult[ia], intronicGenes, weight, true);
+                                            slamQuant->diagnostics().compatAlignsReclassifiedIntronic++;
+                                        }
+                                    }
+                                }
                             } else if (trackIntronic && ia < annFeatFull.fAlign.size()) {
+                                // Fallback to existing intronic logic (non-compat mode)
                                 const auto &intronicGenes = annFeatFull.fAlign[ia];
                                 if (!intronicGenes.empty()) {
                                     slamCollect(*trMult[ia], intronicGenes, weight, true);
                                 }
                             }
+                        }
+                    }
+                    
+                    // Track lenient acceptance count (per-alignment, not per-transcript)
+                    for (size_t la = 0; la < annFeat.lenientAcceptByAlign.size(); ++la) {
+                        if (annFeat.lenientAcceptByAlign[la]) {
+                            slamQuant->diagnostics().compatAlignsLenientAccepted++;
                         }
                     }
                     
@@ -924,11 +956,11 @@ void ReadAlign::alignedAnnotation()
     };   
     //solo-Gene
     if ( P.quant.gene.yes ) {
-        chunkTr->classifyAlign(trMult, nTr, readAnnot);
+        chunkTr->classifyAlign(trMult, nTr, readAnnot, slamCompat);
     };
     // SLAM quantification needs gene annotations for alignments (if not already done above)
     if ( P.quant.slam.yes && !P.quant.gene.yes ) {
-        chunkTr->classifyAlign(trMult, nTr, readAnnot);
+        chunkTr->classifyAlign(trMult, nTr, readAnnot, slamCompat);
     }
     //solo-GeneFull_ExonOverIntron
     if ( P.quant.geneFull_ExonOverIntron.yes ) {

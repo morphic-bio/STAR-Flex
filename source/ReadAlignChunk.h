@@ -15,6 +15,7 @@ namespace libem {
     class Transcriptome;
 }
 class SlamQuant;
+class SlamCompat;
 
 class ReadAlignChunk {//chunk of reads and alignments
 public:
@@ -23,6 +24,7 @@ public:
 
     Transcriptome *chunkTr;
     SlamQuant *slamQuant;
+    SlamCompat *slamCompat;
 
     char **chunkIn; //space for the chunk of input reads
     array<uint64, MAX_N_MATES> chunkInSizeBytesTotal;    
@@ -46,6 +48,7 @@ public:
 
     ReadAlignChunk(Parameters& Pin, Genome &genomeIn, Transcriptome *TrIn, int iChunk,
                    const libem::Transcriptome* libemTr = nullptr);
+    ~ReadAlignChunk();  // Destructor to clean up owned resources
     void processChunks();
     void mapChunk();
     void chunkFstreamOpen(string filePrefix, int iChunk, fstream &fstreamOut);

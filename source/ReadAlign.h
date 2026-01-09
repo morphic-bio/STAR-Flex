@@ -22,6 +22,7 @@ class SampleDetector;
 class TranscriptQuantEC;
 class SlamQuant;
 class SlamSnpMask;
+class SlamCompat;
 namespace libem {
 class Transcriptome;
 }
@@ -161,6 +162,7 @@ class ReadAlign {
         // SLAM quantification (optional)
         SlamQuant* slamQuant = nullptr;
         const SlamSnpMask* slamSnpMask = nullptr;
+        SlamCompat* slamCompat = nullptr;  // SLAM compatibility mode helper
     private:
 
         //mapping time

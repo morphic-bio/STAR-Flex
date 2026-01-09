@@ -1,5 +1,7 @@
 #include "ReadAlign.h"
 #include "SlamQuant.h"
+#include "SlamCompat.h"
+#include <sstream>
 
 namespace {
 struct GenomicInterval {
@@ -43,15 +45,60 @@ inline bool isOppositeStrand(const Transcriptome& tr, const std::set<uint32_t>& 
     }
     return anyOpposite;
 }
+
+inline std::string buildReadLoc(const Transcript& trOut, const Genome& genOut) {
+    if (trOut.Chr >= genOut.chrName.size()) {
+        return "";
+    }
+    std::ostringstream oss;
+    oss << genOut.chrName[trOut.Chr];
+    oss << (trOut.Str == 1 ? "-" : "+");
+    oss << ":";
+    uint64 chrStart = (trOut.Chr < genOut.chrStart.size()) ? genOut.chrStart[trOut.Chr] : 0;
+    for (uint iex = 0; iex < trOut.nExons; ++iex) {
+        uint64 gStart = trOut.exons[iex][EX_G];
+        if (gStart >= chrStart) {
+            gStart -= chrStart;
+        }
+        uint64 len = trOut.exons[iex][EX_L];
+        uint64 gEnd = gStart + len;
+        if (iex > 0) {
+            oss << "|";
+        }
+        oss << gStart << "-" << gEnd;
+    }
+    return oss.str();
+}
 } // namespace
 
 bool ReadAlign::slamCollect(const Transcript& trOut, const std::set<uint32_t>& geneIds, double weight, bool isIntronic) {
     if (slamQuant == nullptr || weight <= 0.0) {
         return false;
     }
+    bool debugEnabled = slamQuant->debugEnabled();
+    bool debugReadMatch = false;
+    if (debugEnabled) {
+        debugReadMatch = slamQuant->debugReadMatch(readName);
+    }
     if (geneIds.empty()) {
         if (!isIntronic) {
             slamQuant->diagnostics().readsZeroGenes++;
+        }
+        if (debugEnabled && debugReadMatch) {
+            std::string name(readName ? readName : "");
+            size_t end = name.find_first_of(" \t");
+            if (end != std::string::npos) {
+                name = name.substr(0, end);
+            }
+            if (!name.empty() && name[0] == '@') {
+                name.erase(0, 1);
+            }
+            SlamDebugReadRecord rec;
+            rec.readName = name;
+            rec.readLoc = buildReadLoc(trOut, genOut);
+            rec.status = SlamDebugDropReason::NoGenes;
+            rec.readLength = static_cast<uint32_t>(readLength[0] + readLength[1]);
+            slamQuant->debugLogRead(rec);
         }
         return false;
     }
@@ -59,10 +106,87 @@ bool ReadAlign::slamCollect(const Transcript& trOut, const std::set<uint32_t>& g
     char* R = Read1[trOut.roStr == 0 ? 0 : 2];
     bool isMinus = (trOut.Str == 1);
     bool oppositeStrand = isOppositeStrand(*chunkTr, geneIds, trOut.Str);
+    bool debugGeneMatch = false;
+    if (debugEnabled && slamQuant->debugGenesEnabled()) {
+        for (uint32_t geneId : geneIds) {
+            if (slamQuant->debugGeneEnabled(geneId)) {
+                debugGeneMatch = true;
+                break;
+            }
+        }
+    }
+    bool debugThisRead = debugReadMatch || debugGeneMatch;
+    std::string readNameStr;
+    std::string readLocStr;
+    uint32_t readLen = static_cast<uint32_t>(readLength[0] + readLength[1]);
+    if (debugEnabled && debugThisRead) {
+        readNameStr = readName ? readName : "";
+        size_t end = readNameStr.find_first_of(" \t");
+        if (end != std::string::npos) {
+            readNameStr = readNameStr.substr(0, end);
+        }
+        if (!readNameStr.empty() && readNameStr[0] == '@') {
+            readNameStr.erase(0, 1);
+        }
+        readLocStr = buildReadLoc(trOut, genOut);
+    }
+    if (P.quant.slam.strandness == 1 && oppositeStrand) {
+        slamQuant->diagnostics().readsDroppedStrandness++;
+        if (debugEnabled) {
+            for (uint32_t geneId : geneIds) {
+                if (slamQuant->debugGeneEnabled(geneId)) {
+                    slamQuant->debugCountDrop(geneId, SlamDebugDropReason::Strandness);
+                }
+                if (debugReadMatch || slamQuant->debugGeneEnabled(geneId)) {
+                    SlamDebugReadRecord rec;
+                    rec.readName = readNameStr;
+                    rec.readLoc = readLocStr;
+                    rec.geneId = geneId;
+                    rec.intronic = isIntronic;
+                    rec.oppositeStrand = oppositeStrand;
+                    rec.weight = weight;
+                    rec.readLength = readLen;
+                    rec.status = SlamDebugDropReason::Strandness;
+                    slamQuant->debugLogRead(rec);
+                }
+            }
+        }
+        return false;
+    }
+    if (P.quant.slam.strandness == 2 && !oppositeStrand) {
+        slamQuant->diagnostics().readsDroppedStrandness++;
+        if (debugEnabled) {
+            for (uint32_t geneId : geneIds) {
+                if (slamQuant->debugGeneEnabled(geneId)) {
+                    slamQuant->debugCountDrop(geneId, SlamDebugDropReason::Strandness);
+                }
+                if (debugReadMatch || slamQuant->debugGeneEnabled(geneId)) {
+                    SlamDebugReadRecord rec;
+                    rec.readName = readNameStr;
+                    rec.readLoc = readLocStr;
+                    rec.geneId = geneId;
+                    rec.intronic = isIntronic;
+                    rec.oppositeStrand = oppositeStrand;
+                    rec.weight = weight;
+                    rec.readLength = readLen;
+                    rec.status = SlamDebugDropReason::Strandness;
+                    slamQuant->debugLogRead(rec);
+                }
+            }
+        }
+        return false;
+    }
     SlamMismatchCategory category = isIntronic ? SlamMismatchCategory::Intronic : SlamMismatchCategory::Exonic;
     SlamMismatchCategory senseCategory = isIntronic ? SlamMismatchCategory::IntronicSense : SlamMismatchCategory::ExonicSense;
     bool snpDetect = slamQuant->snpDetectEnabled() && !isIntronic;
     std::vector<uint32_t> mismatchPositions;
+    std::vector<uint32_t> debugConvReadPos;
+    std::vector<uint64_t> debugConvGenPos;
+    bool capturePositions = debugThisRead && !isIntronic;
+    if (capturePositions) {
+        debugConvReadPos.reserve(8);
+        debugConvGenPos.reserve(8);
+    }
 
     uint16_t nT = 0;
     uint16_t k = 0;
@@ -75,6 +199,25 @@ bool ReadAlign::slamCollect(const Transcript& trOut, const std::set<uint32_t>& g
                 uint64 gpos = gStart + ii;
                 if (slamSnpMask->contains(gpos)) {
                     slamQuant->diagnostics().readsDroppedSnpMask++;
+                    if (debugEnabled) {
+                        for (uint32_t geneId : geneIds) {
+                            if (slamQuant->debugGeneEnabled(geneId)) {
+                                slamQuant->debugCountDrop(geneId, SlamDebugDropReason::SnpMask);
+                            }
+                            if (debugReadMatch || slamQuant->debugGeneEnabled(geneId)) {
+                                SlamDebugReadRecord rec;
+                                rec.readName = readNameStr;
+                                rec.readLoc = readLocStr;
+                                rec.geneId = geneId;
+                                rec.intronic = isIntronic;
+                                rec.oppositeStrand = oppositeStrand;
+                                rec.weight = weight;
+                                rec.readLength = readLen;
+                                rec.status = SlamDebugDropReason::SnpMask;
+                                slamQuant->debugLogRead(rec);
+                            }
+                        }
+                    }
                     return false; // discard read if it overlaps SNP mask
                 }
             }
@@ -141,6 +284,31 @@ bool ReadAlign::slamCollect(const Transcript& trOut, const std::set<uint32_t>& g
                     overlap = containsPos(mate2Intervals, mate2Idx, gpos);
                 }
             }
+            
+            // Compat position filtering (overlap and trim)
+            if (slamCompat) {
+                // Check overlap skip first (only when compatIgnoreOverlap is enabled)
+                if (slamCompat->cfg().ignoreOverlap && overlap) {
+                    slamQuant->diagnostics().compatPositionsSkippedOverlap++;
+                    continue;
+                }
+                // Convert concatenated readPos to mate-local coordinates
+                uint32_t mateLocalPos;
+                uint32_t mateLen;
+                if (secondMate) {
+                    mateLocalPos = readPos - static_cast<uint32_t>(readLength[0]);
+                    mateLen = static_cast<uint32_t>(readLength[1]);
+                } else {
+                    mateLocalPos = readPos;
+                    mateLen = static_cast<uint32_t>(readLength[0]);
+                }
+                // Check trim guards (applies even in overlap regions if ignoreOverlap is off)
+                if (!slamCompat->compatShouldCountPos(mateLocalPos, mateLen)) {
+                    slamQuant->diagnostics().compatPositionsSkippedTrim++;
+                    continue;
+                }
+            }
+            
             bool skipMismatch = overlap && secondMate;
             if (!skipMismatch) {
                 slamQuant->addTransitionBase(category, readPos, secondMate, overlap, oppositeStrand, g1, r1, weight);
@@ -154,6 +322,10 @@ bool ReadAlign::slamCollect(const Transcript& trOut, const std::set<uint32_t>& g
                         ++nT;
                         if (r1 == 1) { // C
                             ++k;
+                            if (capturePositions) {
+                                debugConvReadPos.push_back(readPos);
+                                debugConvGenPos.push_back(gpos);
+                            }
                             if (snpDetect) {
                                 mismatchPositions.push_back(static_cast<uint32_t>(gpos));
                             }
@@ -164,6 +336,10 @@ bool ReadAlign::slamCollect(const Transcript& trOut, const std::set<uint32_t>& g
                         ++nT;
                         if (r1 == 2) { // G
                             ++k;
+                            if (capturePositions) {
+                                debugConvReadPos.push_back(readPos);
+                                debugConvGenPos.push_back(gpos);
+                            }
                             if (snpDetect) {
                                 mismatchPositions.push_back(static_cast<uint32_t>(gpos));
                             }
@@ -174,13 +350,67 @@ bool ReadAlign::slamCollect(const Transcript& trOut, const std::set<uint32_t>& g
         }
     }
 
+    uint8_t k8 = static_cast<uint8_t>(k > 255 ? 255 : k);
+    if (debugEnabled && slamQuant->debugGenesEnabled()) {
+        for (uint32_t geneId : geneIds) {
+            slamQuant->debugAddAssignment(geneId, weight, isIntronic, oppositeStrand, nT, k8);
+        }
+    }
+    std::string convReadPosStr;
+    std::string convGenPosStr;
+    if (debugEnabled && debugThisRead && capturePositions) {
+        auto joinU32 = [](const std::vector<uint32_t>& vec) -> std::string {
+            std::ostringstream oss;
+            for (size_t i = 0; i < vec.size(); ++i) {
+                if (i > 0) {
+                    oss << ",";
+                }
+                oss << vec[i];
+            }
+            return oss.str();
+        };
+        auto joinU64 = [](const std::vector<uint64_t>& vec) -> std::string {
+            std::ostringstream oss;
+            for (size_t i = 0; i < vec.size(); ++i) {
+                if (i > 0) {
+                    oss << ",";
+                }
+                oss << vec[i];
+            }
+            return oss.str();
+        };
+        convReadPosStr = joinU32(debugConvReadPos);
+        convGenPosStr = joinU64(debugConvGenPos);
+    }
+    bool snpBuffered = (snpDetect && !mismatchPositions.empty());
+    if (debugEnabled && debugThisRead) {
+        for (uint32_t geneId : geneIds) {
+            if (debugReadMatch || slamQuant->debugGeneEnabled(geneId)) {
+                SlamDebugReadRecord rec;
+                rec.readName = readNameStr;
+                rec.readLoc = readLocStr;
+                rec.geneId = geneId;
+                rec.intronic = isIntronic;
+                rec.oppositeStrand = oppositeStrand;
+                rec.weight = weight;
+                rec.nT = nT;
+                rec.k = k8;
+                rec.readLength = readLen;
+                rec.status = SlamDebugDropReason::None;
+                rec.snpBuffered = snpBuffered;
+                rec.convReadPos = convReadPosStr;
+                rec.convGenPos = convGenPosStr;
+                slamQuant->debugLogRead(rec);
+            }
+        }
+    }
+
     if (!isIntronic) {
         if (snpDetect && !mismatchPositions.empty()) {
             for (uint32_t geneId : geneIds) {
                 slamQuant->bufferSnpRead(geneId, nT, mismatchPositions, weight);
             }
         } else {
-            uint8_t k8 = static_cast<uint8_t>(k > 255 ? 255 : k);
             for (uint32_t geneId : geneIds) {
                 slamQuant->addRead(geneId, nT, k8, weight);
             }

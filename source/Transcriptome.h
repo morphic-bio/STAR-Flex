@@ -10,6 +10,8 @@
 #include "AlignVsTranscript.h"
 #include "ReadAnnotations.h"
 
+class SlamCompat;
+
 class Transcriptome {
 public:
     string trInfoDir;
@@ -54,7 +56,7 @@ public:
     void geneFullAlignOverlap(uint nA, Transcript **aAll, int32 strandType, ReadAnnotFeature &annFeat);
     void geneFullAlignOverlap_ExonOverIntron(uint nA, Transcript **aAll, int32 strandType, ReadAnnotFeature &annFeat, ReadAnnotFeature &annFeatGeneConcordant);
     //void geneFullAlignOverlap_CR(uint nA, Transcript **aAll, int32 strandType, ReadAnnotations &readAnnot);
-    void classifyAlign(Transcript **alignG, uint64 nAlignG, ReadAnnotations &readAnnot);
+    void classifyAlign(Transcript **alignG, uint64 nAlignG, ReadAnnotations &readAnnot, SlamCompat* slamCompat = nullptr);
     void alignExonOverlap(uint nA, Transcript **aAll, int32 strandType, ReadAnnotFeature &annFeat);
 
 private:

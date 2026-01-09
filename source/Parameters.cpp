@@ -10,6 +10,7 @@
 #include "signalFromBAM.h"
 #include "bamRemoveDuplicates.h"
 #include "streamFuns.h"
+#include <fstream>
 
 // Define global atomic counter for processed read groups (matches Salmon's processedReads)
 // Used for pre-burn-in gating: aux params are enabled when this count >= numPreBurninFrags (5000)
@@ -393,9 +394,22 @@ Parameters::Parameters() {//initalize parameters info
     parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "slamQuantMode", &quant.slam.modeInt));
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamSnpBed", &quant.slam.snpBed));
     parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "slamSnpDetect", &quant.slam.snpDetectInt));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamStrandness", &quant.slam.strandnessStr));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamWeightMode", &quant.slam.weightModeStr));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamDebugGeneList", &quant.slam.debugGeneList));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamDebugReadList", &quant.slam.debugReadList));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamDebugOutPrefix", &quant.slam.debugOutPrefix));
+    parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "slamDebugMaxReads", &quant.slam.debugMaxReads));
     parArray.push_back(new ParameterInfoScalar <double>   (-1, -1, "slamErrorRate", &quant.slam.errorRate));
     parArray.push_back(new ParameterInfoScalar <double>   (-1, -1, "slamConvRate", &quant.slam.convRate));
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamOutFile", &quant.slam.outFile));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamCompatMode", &quant.slam.compatModeStr));
+    parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "slamCompatIntronic", &quant.slam.compatIntronicInt));
+    parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "slamCompatLenientOverlap", &quant.slam.compatLenientOverlapInt));
+    parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "slamCompatOverlapWeight", &quant.slam.compatOverlapWeightInt));
+    parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "slamCompatIgnoreOverlap", &quant.slam.compatIgnoreOverlapInt));
+    parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "slamCompatTrim5p", &quant.slam.compatTrim5p));
+    parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "slamCompatTrim3p", &quant.slam.compatTrim3p));
 
     //2-pass
     parArray.push_back(new ParameterInfoScalar <uint>   (-1, -1, "twopass1readsN", &twoPass.pass1readsN));
@@ -1338,6 +1352,137 @@ void Parameters::inputParameters (int argInN, char* argIn[]) {//input parameters
         if (quant.slam.snpDetect && !quant.slam.snpBed.empty()) {
             inOut->logMain << "WARNING: --slamSnpDetect ignored because --slamSnpBed is set.\n";
             quant.slam.snpDetect = false;
+        }
+        string strandLower = quant.slam.strandnessStr;
+        if (strandLower.empty() || strandLower == "-") {
+            strandLower = "unspecific";
+        }
+        for (auto& c : strandLower) c = std::tolower(c);
+        if (strandLower == "sense" || strandLower == "forward") {
+            quant.slam.strandness = 1;
+            quant.slam.strandnessStr = "Sense";
+        } else if (strandLower == "antisense" || strandLower == "reverse") {
+            quant.slam.strandness = 2;
+            quant.slam.strandnessStr = "Antisense";
+        } else if (strandLower == "unspecific" || strandLower == "unstranded" ||
+                   strandLower == "auto" || strandLower == "autodetect") {
+            quant.slam.strandness = 0;
+            quant.slam.strandnessStr = "Unspecific";
+            if (strandLower == "auto" || strandLower == "autodetect") {
+                inOut->logMain << "WARNING: --slamStrandness AutoDetect treated as Unspecific; "
+                               << "STAR-SLAM does not auto-detect strandness.\n";
+            }
+        } else {
+            ostringstream errOut;
+            errOut << "EXITING because of FATAL PARAMETER ERROR: "
+                   << "--slamStrandness must be Unspecific, Sense, or Antisense\n"
+                   << "Got: " << quant.slam.strandnessStr << "\n";
+            exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
+        }
+        string weightModeLower = quant.slam.weightModeStr;
+        if (weightModeLower.empty() || weightModeLower == "-") {
+            weightModeLower = "alignments";
+        }
+        for (auto& c : weightModeLower) c = std::tolower(c);
+        if (weightModeLower == "alignments" || weightModeLower == "nh" || weightModeLower == "ntr" ||
+            weightModeLower == "weight") {
+            quant.slam.weightMode = 0;
+            quant.slam.weightModeStr = "Alignments";
+        } else if (weightModeLower == "uniform" || weightModeLower == "none" || weightModeLower == "all") {
+            quant.slam.weightMode = 1;
+            quant.slam.weightModeStr = "Uniform";
+        } else {
+            ostringstream errOut;
+            errOut << "EXITING because of FATAL PARAMETER ERROR: "
+                   << "--slamWeightMode must be Alignments or Uniform\n"
+                   << "Got: " << quant.slam.weightModeStr << "\n";
+            exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
+        }
+        auto trimLine = [](const std::string& input) -> std::string {
+            size_t start = input.find_first_not_of(" \t\r\n");
+            if (start == std::string::npos) {
+                return "";
+            }
+            size_t end = input.find_last_not_of(" \t\r\n");
+            return input.substr(start, end - start + 1);
+        };
+        auto loadListFile = [&](const std::string& path, std::unordered_set<std::string>& out, bool stripAt) {
+            std::ifstream in(path.c_str());
+            if (!in.good()) {
+                ostringstream errOut;
+                errOut << "EXITING because of FATAL PARAMETER ERROR: "
+                       << "cannot open " << path << "\n";
+                exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
+            }
+            std::string line;
+            while (std::getline(in, line)) {
+                line = trimLine(line);
+                if (line.empty() || line[0] == '#') {
+                    continue;
+                }
+                if (stripAt && line[0] == '@') {
+                    line.erase(0, 1);
+                }
+                if (!line.empty()) {
+                    out.insert(line);
+                }
+            }
+        };
+        if (quant.slam.debugMaxReads < 0) {
+            ostringstream errOut;
+            errOut << "EXITING because of FATAL PARAMETER ERROR: "
+                   << "--slamDebugMaxReads must be >= 0\n";
+            exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
+        }
+        if (!quant.slam.debugGeneList.empty() && quant.slam.debugGeneList != "-" &&
+            quant.slam.debugGeneList != "None" && quant.slam.debugGeneList != "none") {
+            loadListFile(quant.slam.debugGeneList, quant.slam.debugGenes, false);
+        }
+        if (!quant.slam.debugReadList.empty() && quant.slam.debugReadList != "-" &&
+            quant.slam.debugReadList != "None" && quant.slam.debugReadList != "none") {
+            loadListFile(quant.slam.debugReadList, quant.slam.debugReads, true);
+        }
+        quant.slam.debugEnabled = !quant.slam.debugGenes.empty() || !quant.slam.debugReads.empty();
+        if (quant.slam.debugEnabled) {
+            if (quant.slam.debugOutPrefix.empty() || quant.slam.debugOutPrefix == "-") {
+                quant.slam.debugOutPrefix = outFileNamePrefix + "SlamQuant.debug";
+            }
+        } else {
+            quant.slam.debugOutPrefix.clear();
+        }
+        
+        // Parse compatibility mode
+        string compatModeLower = quant.slam.compatModeStr;
+        if (compatModeLower.empty() || compatModeLower == "-") {
+            compatModeLower = "none";
+        }
+        for (auto& c : compatModeLower) c = std::tolower(c);
+        if (compatModeLower == "gedi") {
+            quant.slam.compatIntronic = true;
+            quant.slam.compatLenientOverlap = true;
+            quant.slam.compatOverlapWeight = true;
+            quant.slam.compatIgnoreOverlap = false;  // NOT enabled by default in gedi mode
+        } else if (compatModeLower != "none") {
+            ostringstream errOut;
+            errOut << "EXITING because of FATAL PARAMETER ERROR: "
+                   << "--slamCompatMode must be none or gedi\n"
+                   << "Got: " << quant.slam.compatModeStr << "\n";
+            exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
+        }
+        
+        // Apply granular overrides (if explicitly set via int flags, they override mode defaults)
+        // Sentinel is -1 (not set), so any value >= 0 is an explicit override (including 0 to disable)
+        if (quant.slam.compatIntronicInt >= 0) {
+            quant.slam.compatIntronic = (quant.slam.compatIntronicInt != 0);
+        }
+        if (quant.slam.compatLenientOverlapInt >= 0) {
+            quant.slam.compatLenientOverlap = (quant.slam.compatLenientOverlapInt != 0);
+        }
+        if (quant.slam.compatOverlapWeightInt >= 0) {
+            quant.slam.compatOverlapWeight = (quant.slam.compatOverlapWeightInt != 0);
+        }
+        if (quant.slam.compatIgnoreOverlapInt >= 0) {
+            quant.slam.compatIgnoreOverlap = (quant.slam.compatIgnoreOverlapInt != 0);
         }
     }
     

@@ -1,6 +1,7 @@
 #include "ReadAlignChunk.h"
 #include "alignment_model.h"  // For Transcriptome
 #include "SlamQuant.h"
+#include "SlamCompat.h"
 #include <pthread.h>
 #include "ErrorWarning.h"
 #include "ProbeListIndex.h"
@@ -73,8 +74,28 @@ ReadAlignChunk::ReadAlignChunk(Parameters& Pin, Genome &genomeIn, Transcriptome 
     };
 
     slamQuant = nullptr;
+    slamCompat = nullptr;
     if (P.quant.slam.yes && chunkTr != nullptr) {
         slamQuant = new SlamQuant(chunkTr->nGe, buildSlamAllowedGenes(*chunkTr), P.quant.slam.snpDetect);
+        if (P.quant.slam.debugEnabled) {
+            slamQuant->initDebug(*chunkTr, P.quant.slam.debugGenes, P.quant.slam.debugReads,
+                                 static_cast<size_t>(P.quant.slam.debugMaxReads),
+                                 P.quant.slam.debugOutPrefix);
+        }
+        
+        // Create SlamCompat if any compat mode is enabled
+        if (P.quant.slam.compatIntronic || P.quant.slam.compatLenientOverlap ||
+            P.quant.slam.compatOverlapWeight || P.quant.slam.compatIgnoreOverlap ||
+            P.quant.slam.compatTrim5p != 0 || P.quant.slam.compatTrim3p != 0) {
+            SlamCompatConfig cfg;
+            cfg.intronic = P.quant.slam.compatIntronic;
+            cfg.lenientOverlap = P.quant.slam.compatLenientOverlap;
+            cfg.overlapWeight = P.quant.slam.compatOverlapWeight;
+            cfg.ignoreOverlap = P.quant.slam.compatIgnoreOverlap;
+            cfg.trim5p = P.quant.slam.compatTrim5p;
+            cfg.trim3p = P.quant.slam.compatTrim3p;
+            slamCompat = new SlamCompat(*chunkTr, cfg);
+        }
     }
 
     RA = new ReadAlign(P, mapGen, chunkTr, iChunk, libemTr);//new local copy of RA for each chunk
@@ -82,6 +103,7 @@ ReadAlignChunk::ReadAlignChunk(Parameters& Pin, Genome &genomeIn, Transcriptome 
     RA->iRead=0;
     RA->slamQuant = slamQuant;
     RA->slamSnpMask = P.quant.slam.snpMask;
+    RA->slamCompat = slamCompat;
 
     chunkIn=new char* [P.readNends];
     readInStream=new istringstream* [P.readNends];
@@ -208,6 +230,14 @@ ReadAlignChunk::ReadAlignChunk(Parameters& Pin, Genome &genomeIn, Transcriptome 
         RA->peMergeRA->outBAMunsorted=RA->outBAMunsorted;
         RA->peMergeRA->outBAMcoord=RA->outBAMcoord;
     };
+};
+
+ReadAlignChunk::~ReadAlignChunk() {
+    // Clean up owned resources
+    delete slamCompat;
+    // Note: slamQuant is merged into global stats before destruction in STAR.cpp,
+    // but we should still clean up the per-chunk instance
+    delete slamQuant;
 };
 
 ///////////////

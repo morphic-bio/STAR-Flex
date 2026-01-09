@@ -388,8 +388,32 @@ class Parameters {
                 string snpBed;              // Optional SNP BED for prefilter
                 int snpDetectInt=0;         // CLI flag (0/1) for internal SNP detection
                 bool snpDetect=false;       // Enable internal SNP detection + masking
+                string strandnessStr="Unspecific"; // Unspecific | Sense | Antisense
+                uint8_t strandness=0;       // 0=Unspecific, 1=Sense, 2=Antisense
+                string weightModeStr="Alignments"; // Alignments | Uniform
+                uint8_t weightMode=0;       // 0=Alignments (1/nTr), 1=Uniform (1.0)
+                string debugGeneList;       // File with gene IDs/names to instrument
+                string debugReadList;       // File with read names to instrument
+                string debugOutPrefix;      // Prefix for debug outputs
+                int debugMaxReads=2000;     // Max debug read records (0 disables)
+                unordered_set<string> debugGenes; // Parsed gene list
+                unordered_set<string> debugReads; // Parsed read list
+                bool debugEnabled=false;    // Debug logging enabled
                 string outFile;             // Output file path
                 SlamSnpMask* snpMask=nullptr; // Loaded SNP mask (if any)
+                
+                // Compatibility mode
+                string compatModeStr = "none";    // CLI: none|gedi
+                int compatIntronicInt = -1;       // Parsing: -1=not set, 0=disable, 1=enable
+                int compatLenientOverlapInt = -1; // Parsing: -1=not set, 0=disable, 1=enable
+                int compatOverlapWeightInt = -1;  // Parsing: -1=not set, 0=disable, 1=enable
+                int compatIgnoreOverlapInt = -1;  // Parsing: -1=not set, 0=disable, 1=enable
+                bool compatIntronic = false;      // GEDI-style intronic predicate
+                bool compatLenientOverlap = false;// 50% overlap + SJ concordance
+                bool compatOverlapWeight = false; // Divide weight by gene count
+                bool compatIgnoreOverlap = false; // Skip PE overlap positions
+                int compatTrim5p = 0;             // 5' trim guard
+                int compatTrim3p = 0;             // 3' trim guard
             } slam;
 
             struct {

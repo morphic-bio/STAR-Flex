@@ -976,6 +976,24 @@ slamSnpBed                            -
 slamSnpDetect                         0
     int: 0/1 - enable internal SNP detection and masking (ignored if slamSnpBed is set)
 
+slamStrandness                        Unspecific
+    string: SLAM-seq strandness (Unspecific, Sense, Antisense)
+
+slamWeightMode                        Alignments
+    string: SLAM-seq weighting mode for multimappers (Alignments, Uniform)
+
+slamDebugGeneList                     -
+    string: Optional file of gene IDs/names to instrument (one per line)
+
+slamDebugReadList                     -
+    string: Optional file of read names to instrument (one per line)
+
+slamDebugOutPrefix                    -
+    string: Optional prefix for debug output files (default: <prefix>SlamQuant.debug)
+
+slamDebugMaxReads                     2000
+    int: Max debug read records (0 disables per-read logging)
+
 slamErrorRate                         0.001
     double: Background error rate for SLAM EM solver
 
@@ -984,6 +1002,27 @@ slamConvRate                          0.05
 
 slamOutFile                           -
     string: Output file for SlamQuant (default: <prefix>SlamQuant.out)
+
+slamCompatMode                        none
+    string: SLAM compatibility mode (none, gedi)
+
+slamCompatIntronic                   -1
+    int: -1/0/1 - Enable GEDI-style intronic classification (-1=use mode default, 0=disable, 1=enable)
+
+slamCompatLenientOverlap             -1
+    int: -1/0/1 - Enable lenient overlap acceptance (-1=use mode default, 0=disable, 1=enable)
+
+slamCompatOverlapWeight              -1
+    int: -1/0/1 - Divide read weight by number of overlapping genes (-1=use mode default, 0=disable, 1=enable)
+
+slamCompatIgnoreOverlap              -1
+    int: -1/0/1 - Skip all PE overlap positions (-1=use mode default, 0=disable, 1=enable)
+
+slamCompatTrim5p                     0
+    int: Number of bases to trim from 5' end of each mate
+
+slamCompatTrim3p                     0
+    int: Number of bases to trim from 3' end of each mate
 
 quantTranscriptomeSAMoutput BanSingleEnd_BanIndels_ExtendSoftclip
     string: alignment filtering for TranscriptomeSAM output

@@ -32,6 +32,7 @@ struct SlamGeneStats {
 
 struct SlamDiagnostics {
     uint64_t readsDroppedSnpMask = 0;
+    uint64_t readsDroppedStrandness = 0;
     uint64_t readsZeroGenes = 0;
     uint64_t readsProcessed = 0;
     uint64_t readsNAlignWithGeneZero = 0;  // reads where nAlignWithGene == 0
@@ -40,6 +41,16 @@ struct SlamDiagnostics {
     std::map<size_t, uint64_t> geneSetSizeDistribution;  // gene set size -> count
     std::map<size_t, uint64_t> nAlignWithGeneDistribution;  // nAlignWithGene -> count
     std::map<double, uint64_t> sumWeightDistribution;  // sumWeight bucket -> count (bucketed)
+    
+    // Compat mode counters (incremented by callers, not SlamCompat)
+    // NOTE: Alignment-level counters (one per alignment, not per read)
+    uint64_t compatAlignsReclassifiedIntronic = 0;  // Alignments reclassified as intronic
+    uint64_t compatAlignsLenientAccepted = 0;       // Alignments accepted via lenient overlap
+    uint64_t compatAlignsOverlapWeightApplied = 0;  // Alignments where weight was adjusted
+    
+    // Position-level counters (one per genomic position)
+    uint64_t compatPositionsSkippedOverlap = 0;     // Positions skipped due to PE overlap
+    uint64_t compatPositionsSkippedTrim = 0;        // Positions skipped due to trim guards
 };
 
 struct SlamSnpBufferStats {
@@ -62,6 +73,43 @@ struct SlamTransitionStats {
 struct SlamPositionStats {
     double coverage[2][2][4] = {};
     double mismatches[2][2][4][4] = {};
+};
+
+enum class SlamDebugDropReason : uint8_t {
+    None = 0,
+    NoGenes = 1,
+    SnpMask = 2,
+    Strandness = 3,
+    ZeroWeight = 4
+};
+
+struct SlamDebugGeneStats {
+    double exonicWeight = 0.0;
+    double intronicWeight = 0.0;
+    double senseWeight = 0.0;
+    double antisenseWeight = 0.0;
+    double conversions = 0.0;
+    double coverage = 0.0;
+    uint64_t readsAssigned = 0;
+    uint64_t readsAssignedIntronic = 0;
+    uint64_t dropsSnpMask = 0;
+    uint64_t dropsStrandness = 0;
+};
+
+struct SlamDebugReadRecord {
+    std::string readName;
+    std::string readLoc;
+    uint32_t geneId = 0;
+    bool intronic = false;
+    bool oppositeStrand = false;
+    double weight = 0.0;
+    uint16_t nT = 0;
+    uint16_t k = 0;
+    uint32_t readLength = 0;
+    SlamDebugDropReason status = SlamDebugDropReason::None;
+    bool snpBuffered = false;
+    std::string convReadPos;
+    std::string convGenPos;
 };
 
 enum class SlamMismatchCategory : uint8_t {
@@ -97,6 +145,20 @@ public:
     void writeMismatchDetails(const std::string& outFile) const;
     void writeTopMismatches(const Transcriptome& tr, const std::string& refFile,
                            const std::string& mismatchFile, size_t topN) const;
+    void initDebug(const Transcriptome& tr,
+                   const std::unordered_set<std::string>& debugGenes,
+                   const std::unordered_set<std::string>& debugReads,
+                   size_t maxReads,
+                   const std::string& outPrefix);
+    bool debugEnabled() const { return debugEnabled_; }
+    bool debugGenesEnabled() const { return debugEnabled_ && !debugGeneMask_.empty(); }
+    bool debugGeneEnabled(uint32_t geneId) const;
+    bool debugReadMatch(const char* readName) const;
+    void debugCountDrop(uint32_t geneId, SlamDebugDropReason reason);
+    void debugAddAssignment(uint32_t geneId, double weight, bool intronic,
+                            bool oppositeStrand, uint16_t nT, uint8_t k);
+    void debugLogRead(const SlamDebugReadRecord& record);
+    void writeDebug(const Transcriptome& tr, double errorRate, double convRate) const;
 
     const std::vector<SlamGeneStats>& genes() const { return geneStats_; }
     SlamDiagnostics& diagnostics() { return diag_; }
@@ -115,6 +177,13 @@ private:
     std::vector<uint32_t> snpReadBuffer_;
     std::vector<double> snpReadWeights_;
     std::vector<uint8_t> allowedGenes_;
+    bool debugEnabled_ = false;
+    size_t debugMaxReads_ = 0;
+    std::string debugOutPrefix_;
+    std::vector<uint8_t> debugGeneMask_;
+    std::vector<SlamDebugGeneStats> debugGeneStats_;
+    std::unordered_set<std::string> debugReadSet_;
+    std::vector<SlamDebugReadRecord> debugReadRecords_;
 };
 
 #endif

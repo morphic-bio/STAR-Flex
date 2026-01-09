@@ -760,6 +760,11 @@ int main(int argInN, char *argIn[])
         P.inOut->logMain << timeMonthDayTime() << " ..... started SLAM quantification\n";
 
         SlamQuant mergedSlam(transcriptomeMain->nGe, P.quant.slam.snpDetect);
+        if (P.quant.slam.debugEnabled) {
+            mergedSlam.initDebug(*transcriptomeMain, P.quant.slam.debugGenes, P.quant.slam.debugReads,
+                                 static_cast<size_t>(P.quant.slam.debugMaxReads),
+                                 P.quant.slam.debugOutPrefix);
+        }
         for (int ichunk = 0; ichunk < P.runThreadN; ++ichunk) {
             if (RAchunk[ichunk] != nullptr && RAchunk[ichunk]->RA != nullptr &&
                 RAchunk[ichunk]->RA->slamQuant != nullptr) {
@@ -791,6 +796,9 @@ int main(int argInN, char *argIn[])
         mergedSlam.writeMismatches(mismatchFile, P.outFileNamePrefix);
         std::string mismatchDetailsFile = P.quant.slam.outFile + ".mismatchdetails.tsv";
         mergedSlam.writeMismatchDetails(mismatchDetailsFile);
+        if (P.quant.slam.debugEnabled) {
+            mergedSlam.writeDebug(*transcriptomeMain, P.quant.slam.errorRate, P.quant.slam.convRate);
+        }
         
         // Write top mismatches if reference file exists
         std::string refFile = P.pGe.gDir + "/../expected/fixture_ref_human.tsv.gz";
@@ -810,12 +818,29 @@ int main(int argInN, char *argIn[])
                          << P.quant.slam.outFile << "\n";
         P.inOut->logMain << "SLAM diagnostics written to: "
                          << diagFile << "\n";
+        
+        // Log compat mode summary if enabled
+        if (P.quant.slam.compatIntronic || P.quant.slam.compatLenientOverlap ||
+            P.quant.slam.compatOverlapWeight || P.quant.slam.compatIgnoreOverlap ||
+            P.quant.slam.compatTrim5p != 0 || P.quant.slam.compatTrim3p != 0) {
+            P.inOut->logMain << "SLAM compat(" << P.quant.slam.compatModeStr << "): "
+                             << "alignsIntronic=" << mergedSlam.diagnostics().compatAlignsReclassifiedIntronic
+                             << " alignsLenient=" << mergedSlam.diagnostics().compatAlignsLenientAccepted
+                             << " alignsWeightAdj=" << mergedSlam.diagnostics().compatAlignsOverlapWeightApplied
+                             << " posSkipOvlp=" << mergedSlam.diagnostics().compatPositionsSkippedOverlap
+                             << " posSkipTrim=" << mergedSlam.diagnostics().compatPositionsSkippedTrim << "\n";
+        }
         P.inOut->logMain << "SLAM transition summary written to: "
                          << transitionsFile << "\n";
         P.inOut->logMain << "SLAM mismatch summary written to: "
                          << mismatchFile << "\n";
         P.inOut->logMain << "SLAM mismatch details written to: "
                          << mismatchDetailsFile << "\n";
+        if (P.quant.slam.debugEnabled) {
+            P.inOut->logMain << "SLAM debug outputs written to: "
+                             << P.quant.slam.debugOutPrefix << ".gene.tsv and "
+                             << P.quant.slam.debugOutPrefix << ".reads.tsv\n";
+        }
         *P.inOut->logStdOut << timeMonthDayTime() << " ..... finished SLAM quantification\n"
                             << flush;
         P.inOut->logMain << timeMonthDayTime() << " ..... finished SLAM quantification\n";

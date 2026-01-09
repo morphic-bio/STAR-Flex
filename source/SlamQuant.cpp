@@ -15,6 +15,22 @@
 namespace {
 constexpr uint32_t kSnpMinCoverage = 10;
 constexpr double kSnpMinMismatchFrac = 0.5;
+const char* debugDropReasonName(SlamDebugDropReason reason) {
+    switch (reason) {
+        case SlamDebugDropReason::None:
+            return "PASS";
+        case SlamDebugDropReason::NoGenes:
+            return "DROP_NO_GENES";
+        case SlamDebugDropReason::SnpMask:
+            return "DROP_SNP_MASK";
+        case SlamDebugDropReason::Strandness:
+            return "DROP_STRANDNESS";
+        case SlamDebugDropReason::ZeroWeight:
+            return "DROP_ZERO_WEIGHT";
+        default:
+            return "UNKNOWN";
+    }
+}
 }
 
 SlamQuant::SlamQuant(uint32_t nGenes, bool snpDetect)
@@ -23,6 +39,124 @@ SlamQuant::SlamQuant(uint32_t nGenes, bool snpDetect)
 SlamQuant::SlamQuant(uint32_t nGenes, std::vector<uint8_t> allowedGenes, bool snpDetect)
     : geneStats_(nGenes), snpDetectEnabled_(snpDetect),
       allowedGenes_(std::move(allowedGenes)) {}
+
+void SlamQuant::initDebug(const Transcriptome& tr,
+                          const std::unordered_set<std::string>& debugGenes,
+                          const std::unordered_set<std::string>& debugReads,
+                          size_t maxReads,
+                          const std::string& outPrefix) {
+    debugEnabled_ = !debugGenes.empty() || !debugReads.empty();
+    debugMaxReads_ = maxReads;
+    debugOutPrefix_ = outPrefix;
+    debugReadRecords_.clear();
+    debugReadSet_.clear();
+    debugGeneMask_.clear();
+    debugGeneStats_.clear();
+    if (!debugEnabled_) {
+        return;
+    }
+    debugReadSet_ = debugReads;
+    if (!debugGenes.empty()) {
+        debugGeneMask_.assign(tr.nGe, 0);
+        debugGeneStats_.assign(tr.nGe, SlamDebugGeneStats());
+        std::unordered_set<uint32_t> numericGenes;
+        for (const auto& name : debugGenes) {
+            if (name.empty()) {
+                continue;
+            }
+            bool numeric = true;
+            for (char c : name) {
+                if (c < '0' || c > '9') {
+                    numeric = false;
+                    break;
+                }
+            }
+            if (numeric) {
+                uint32_t gid = static_cast<uint32_t>(std::stoul(name));
+                if (gid < tr.nGe) {
+                    numericGenes.insert(gid);
+                }
+            }
+        }
+        for (uint32_t i = 0; i < tr.nGe; ++i) {
+            if (numericGenes.count(i) > 0) {
+                debugGeneMask_[i] = 1;
+                continue;
+            }
+            const std::string& gid = tr.geID[i];
+            const std::string& gname = tr.geName[i];
+            const std::string& gcanon = (i < tr.geIDCanonical.size()) ? tr.geIDCanonical[i] : std::string();
+            if ((!gid.empty() && debugGenes.count(gid) > 0) ||
+                (!gname.empty() && debugGenes.count(gname) > 0) ||
+                (!gcanon.empty() && debugGenes.count(gcanon) > 0)) {
+                debugGeneMask_[i] = 1;
+            }
+        }
+    }
+}
+
+bool SlamQuant::debugGeneEnabled(uint32_t geneId) const {
+    return debugEnabled_ && geneId < debugGeneMask_.size() && debugGeneMask_[geneId];
+}
+
+bool SlamQuant::debugReadMatch(const char* readName) const {
+    if (!debugEnabled_ || debugReadSet_.empty() || readName == nullptr) {
+        return false;
+    }
+    std::string name(readName);
+    size_t end = name.find_first_of(" \t");
+    if (end != std::string::npos) {
+        name = name.substr(0, end);
+    }
+    if (!name.empty() && name[0] == '@') {
+        name.erase(0, 1);
+    }
+    return debugReadSet_.count(name) > 0;
+}
+
+void SlamQuant::debugCountDrop(uint32_t geneId, SlamDebugDropReason reason) {
+    if (!debugGeneEnabled(geneId)) {
+        return;
+    }
+    SlamDebugGeneStats& stats = debugGeneStats_[geneId];
+    if (reason == SlamDebugDropReason::SnpMask) {
+        stats.dropsSnpMask++;
+    } else if (reason == SlamDebugDropReason::Strandness) {
+        stats.dropsStrandness++;
+    }
+}
+
+void SlamQuant::debugAddAssignment(uint32_t geneId, double weight, bool intronic,
+                                   bool oppositeStrand, uint16_t nT, uint8_t k) {
+    if (!debugGeneEnabled(geneId)) {
+        return;
+    }
+    SlamDebugGeneStats& stats = debugGeneStats_[geneId];
+    stats.readsAssigned++;
+    if (intronic) {
+        stats.readsAssignedIntronic++;
+        stats.intronicWeight += weight;
+    } else {
+        stats.exonicWeight += weight;
+        stats.coverage += static_cast<double>(nT) * weight;
+        stats.conversions += static_cast<double>(k) * weight;
+    }
+    if (oppositeStrand) {
+        stats.antisenseWeight += weight;
+    } else {
+        stats.senseWeight += weight;
+    }
+}
+
+void SlamQuant::debugLogRead(const SlamDebugReadRecord& record) {
+    if (!debugEnabled_ || debugMaxReads_ == 0) {
+        return;
+    }
+    if (debugReadRecords_.size() >= debugMaxReads_) {
+        return;
+    }
+    debugReadRecords_.push_back(record);
+}
 
 const char* slamMismatchCategoryName(SlamMismatchCategory cat) {
     switch (cat) {
@@ -209,9 +343,15 @@ void SlamQuant::merge(const SlamQuant& other) {
     }
     // Merge diagnostics
     diag_.readsDroppedSnpMask += other.diag_.readsDroppedSnpMask;
+    diag_.readsDroppedStrandness += other.diag_.readsDroppedStrandness;
     diag_.readsZeroGenes += other.diag_.readsZeroGenes;
     diag_.readsProcessed += other.diag_.readsProcessed;
     diag_.readsNAlignWithGeneZero += other.diag_.readsNAlignWithGeneZero;
+    diag_.compatAlignsReclassifiedIntronic += other.diag_.compatAlignsReclassifiedIntronic;
+    diag_.compatAlignsLenientAccepted += other.diag_.compatAlignsLenientAccepted;
+    diag_.compatAlignsOverlapWeightApplied += other.diag_.compatAlignsOverlapWeightApplied;
+    diag_.compatPositionsSkippedOverlap += other.diag_.compatPositionsSkippedOverlap;
+    diag_.compatPositionsSkippedTrim += other.diag_.compatPositionsSkippedTrim;
     diag_.readsSumWeightLessThanOne += other.diag_.readsSumWeightLessThanOne;
     for (const auto& kv : other.diag_.nTrDistribution) {
         diag_.nTrDistribution[kv.first] += kv.second;
@@ -270,6 +410,32 @@ void SlamQuant::merge(const SlamQuant& other) {
         snpReadBuffer_.insert(snpReadBuffer_.end(), other.snpReadBuffer_.begin(), other.snpReadBuffer_.end());
         snpReadWeights_.insert(snpReadWeights_.end(), other.snpReadWeights_.begin(), other.snpReadWeights_.end());
     }
+    if (debugEnabled_ && other.debugEnabled_) {
+        if (debugGeneStats_.size() == other.debugGeneStats_.size()) {
+            for (size_t i = 0; i < debugGeneStats_.size(); ++i) {
+                SlamDebugGeneStats& dst = debugGeneStats_[i];
+                const SlamDebugGeneStats& src = other.debugGeneStats_[i];
+                dst.exonicWeight += src.exonicWeight;
+                dst.intronicWeight += src.intronicWeight;
+                dst.senseWeight += src.senseWeight;
+                dst.antisenseWeight += src.antisenseWeight;
+                dst.conversions += src.conversions;
+                dst.coverage += src.coverage;
+                dst.readsAssigned += src.readsAssigned;
+                dst.readsAssignedIntronic += src.readsAssignedIntronic;
+                dst.dropsSnpMask += src.dropsSnpMask;
+                dst.dropsStrandness += src.dropsStrandness;
+            }
+        }
+        if (debugMaxReads_ != 0 && !other.debugReadRecords_.empty()) {
+            for (const auto& rec : other.debugReadRecords_) {
+                if (debugReadRecords_.size() >= debugMaxReads_) {
+                    break;
+                }
+                debugReadRecords_.push_back(rec);
+            }
+        }
+    }
 }
 
 void SlamQuant::write(const Transcriptome& tr, const std::string& outFile,
@@ -309,6 +475,7 @@ void SlamQuant::writeDiagnostics(const std::string& diagFile) const {
     out << "Metric\tValue\n";
     out << "readsProcessed\t" << diag_.readsProcessed << "\n";
     out << "readsDroppedSnpMask\t" << diag_.readsDroppedSnpMask << "\n";
+    out << "readsDroppedStrandness\t" << diag_.readsDroppedStrandness << "\n";
     out << "readsZeroGenes\t" << diag_.readsZeroGenes << "\n";
     out << "readsNAlignWithGeneZero\t" << diag_.readsNAlignWithGeneZero << "\n";
     out << "readsSumWeightLessThanOne\t" << diag_.readsSumWeightLessThanOne << "\n";
@@ -329,6 +496,90 @@ void SlamQuant::writeDiagnostics(const std::string& diagFile) const {
         double bucketStart = kv.first * 0.1;
         double bucketEnd = (kv.first == 10) ? 999.0 : (kv.first + 1) * 0.1;
         out << "sumWeight_" << bucketStart << "_to_" << bucketEnd << "\t" << kv.second << "\n";
+    }
+    
+    // Compat mode counters
+    if (diag_.compatAlignsReclassifiedIntronic > 0 || diag_.compatAlignsLenientAccepted > 0 ||
+        diag_.compatAlignsOverlapWeightApplied > 0 || diag_.compatPositionsSkippedOverlap > 0 ||
+        diag_.compatPositionsSkippedTrim > 0) {
+        out << "\nCompatModeCounters:\n";
+        out << "compatAlignsReclassifiedIntronic\t" << diag_.compatAlignsReclassifiedIntronic << "\n";
+        out << "compatAlignsLenientAccepted\t" << diag_.compatAlignsLenientAccepted << "\n";
+        out << "compatAlignsOverlapWeightApplied\t" << diag_.compatAlignsOverlapWeightApplied << "\n";
+        out << "compatPositionsSkippedOverlap\t" << diag_.compatPositionsSkippedOverlap << "\n";
+        out << "compatPositionsSkippedTrim\t" << diag_.compatPositionsSkippedTrim << "\n";
+    }
+}
+
+void SlamQuant::writeDebug(const Transcriptome& tr, double errorRate, double convRate) const {
+    if (!debugEnabled_) {
+        return;
+    }
+    std::string base = debugOutPrefix_.empty() ? "SlamQuant.debug" : debugOutPrefix_;
+    if (!debugGeneStats_.empty()) {
+        std::ofstream out((base + ".gene.tsv").c_str());
+        if (out.good()) {
+            out << "Gene\tSymbol\tReadCount\tConversions\tCoverage\tNTR\tk_over_nT\t"
+                << "DebugExonicWeight\tDebugIntronicWeight\tDebugSenseWeight\tDebugAntisenseWeight\t"
+                << "DebugReadsAssigned\tDebugReadsIntronic\tDropsSnpMask\tDropsStrandness\n";
+            SlamSolver solver(errorRate, convRate);
+            for (size_t i = 0; i < debugGeneStats_.size(); ++i) {
+                if (debugGeneMask_.empty() || debugGeneMask_[i] == 0) {
+                    continue;
+                }
+                const SlamGeneStats& stats = geneStats_[i];
+                SlamResult res = solver.solve(stats.histogram);
+                const std::string& geneId = tr.geID[i];
+                const std::string& geneName = tr.geName[i].empty() ? tr.geID[i] : tr.geName[i];
+                const SlamDebugGeneStats& dbg = debugGeneStats_[i];
+                double kOverNT = (stats.coverage > 0.0) ? (stats.conversions / stats.coverage) : 0.0;
+                out << geneId << "\t"
+                    << geneName << "\t"
+                    << stats.readCount << "\t"
+                    << stats.conversions << "\t"
+                    << stats.coverage << "\t"
+                    << res.ntr << "\t"
+                    << kOverNT << "\t"
+                    << dbg.exonicWeight << "\t"
+                    << dbg.intronicWeight << "\t"
+                    << dbg.senseWeight << "\t"
+                    << dbg.antisenseWeight << "\t"
+                    << dbg.readsAssigned << "\t"
+                    << dbg.readsAssignedIntronic << "\t"
+                    << dbg.dropsSnpMask << "\t"
+                    << dbg.dropsStrandness << "\n";
+            }
+        }
+    }
+    if (!debugReadRecords_.empty() && debugMaxReads_ != 0) {
+        std::ofstream out((base + ".reads.tsv").c_str());
+        if (out.good()) {
+            out << "ReadName\tReadLoc\tGene\tSymbol\tStatus\tIntronic\tOppositeStrand\tWeight\t"
+                << "nT\tk\tReadLength\tSnpBuffered\tConvReadPos\tConvGenPos\n";
+            for (const auto& rec : debugReadRecords_) {
+                std::string geneId = "NA";
+                std::string geneName = "NA";
+                if (rec.geneId < tr.geID.size()) {
+                    geneId = tr.geID[rec.geneId];
+                    const std::string& gname = tr.geName[rec.geneId];
+                    geneName = gname.empty() ? geneId : gname;
+                }
+                out << rec.readName << "\t"
+                    << rec.readLoc << "\t"
+                    << geneId << "\t"
+                    << geneName << "\t"
+                    << debugDropReasonName(rec.status) << "\t"
+                    << (rec.intronic ? 1 : 0) << "\t"
+                    << (rec.oppositeStrand ? 1 : 0) << "\t"
+                    << rec.weight << "\t"
+                    << rec.nT << "\t"
+                    << rec.k << "\t"
+                    << rec.readLength << "\t"
+                    << (rec.snpBuffered ? 1 : 0) << "\t"
+                    << rec.convReadPos << "\t"
+                    << rec.convGenPos << "\n";
+            }
+        }
     }
 }
 
