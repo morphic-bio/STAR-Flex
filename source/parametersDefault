@@ -973,6 +973,9 @@ slamQuantMode                         0
 slamSnpBed                            -
     string: BED file of SNP positions to prefilter reads (optional)
 
+slamSnpDetect                         0
+    int: 0/1 - enable internal SNP detection and masking (ignored if slamSnpBed is set)
+
 slamErrorRate                         0.001
     double: Background error rate for SLAM EM solver
 

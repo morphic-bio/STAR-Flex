@@ -11,6 +11,11 @@ import csv
 import gzip
 import math
 import sys
+try:
+    from scipy.stats import spearmanr
+    HAS_SCIPY = True
+except ImportError:
+    HAS_SCIPY = False
 
 
 def open_text(path):
@@ -131,12 +136,36 @@ def pearson(xs, ys):
     return num / den
 
 
+def spearman(xs, ys):
+    """Compute Spearman rank correlation."""
+    if len(xs) < 2 or len(ys) < 2 or len(xs) != len(ys):
+        return float("nan")
+    if not HAS_SCIPY:
+        # Manual implementation if scipy not available
+        n = len(xs)
+        rank_x = sorted(range(n), key=lambda i: xs[i])
+        rank_y = sorted(range(n), key=lambda i: ys[i])
+        rank_x_dict = {rank_x[i]: i + 1 for i in range(n)}
+        rank_y_dict = {rank_y[i]: i + 1 for i in range(n)}
+        d_sq = sum((rank_x_dict[i] - rank_y_dict[i]) ** 2 for i in range(n))
+        return 1.0 - (6.0 * d_sq) / (n * (n * n - 1))
+    try:
+        corr, _ = spearmanr(xs, ys)
+        return corr if not math.isnan(corr) else float("nan")
+    except:
+        return float("nan")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Compare STAR-Slam output to GRAND-SLAM fixture.")
     parser.add_argument("--reference", required=True, help="GRAND-SLAM fixture TSV(.gz)")
     parser.add_argument("--test", required=True, help="STAR-Slam output TSV")
-    parser.add_argument("--min-read-count", type=float, default=50.0,
-                        help="Minimum read count for NTR correlation")
+    parser.add_argument("--min-read-count", type=float, default=None,
+                        help="Minimum read count threshold (single threshold mode, overrides --thresholds)")
+    parser.add_argument("--min-coverage", type=float, default=None,
+                        help="Minimum coverage (nT) threshold (single threshold mode, overrides --thresholds)")
+    parser.add_argument("--thresholds", type=str, default="20,50,100",
+                        help="Comma-separated thresholds for correlation table (default: 20,50,100; ignored if --min-read-count or --min-coverage set)")
     parser.add_argument("--count-tol", type=float, default=0.0,
                         help="Tolerance for read/conversion/coverage deltas")
     parser.add_argument("--ntr-abs-max", type=float, default=1e-3,
@@ -168,21 +197,84 @@ def main():
     conv_deltas = collect_deltas("conversions")
     cov_deltas = collect_deltas("coverage")
 
+    # Determine thresholds to use
+    if args.min_read_count is not None or args.min_coverage is not None:
+        # Single threshold mode (backward compatibility)
+        thresholds = []
+        if args.min_read_count is not None:
+            thresholds = [(args.min_read_count, "readcount")]
+        elif args.min_coverage is not None:
+            thresholds = [(args.min_coverage, "coverage")]
+    else:
+        # Multi-threshold mode
+        threshold_values = [float(t.strip()) for t in args.thresholds.split(",")]
+        thresholds = [(t, "readcount") for t in threshold_values]
+
+    # Collect pairs for correlation analysis
+    def get_filtered_pairs(threshold, filter_field):
+        pairs = []
+        for gene in shared:
+            if ref[gene][filter_field] < threshold:
+                continue
+            pairs.append((gene, ref[gene], test[gene]))
+        return pairs
+
+    # Compute correlations for each threshold
+    correlation_results = []
+    for threshold, filter_field in thresholds:
+        pairs = get_filtered_pairs(threshold, filter_field)
+        if len(pairs) < 2:
+            continue
+        
+        # NTR pairs
+        ntr_ref = [ref_data["ntr"] for _, ref_data, _ in pairs]
+        ntr_test = [test_data["ntr"] for _, _, test_data in pairs]
+        ntr_pearson = pearson(ntr_ref, ntr_test)
+        ntr_spearman = spearman(ntr_ref, ntr_test)
+        
+        # Conversion fraction (k/nT) pairs
+        conv_frac_ref = []
+        conv_frac_test = []
+        for _, ref_data, test_data in pairs:
+            if ref_data["coverage"] > 0:
+                conv_frac_ref.append(ref_data["conversions"] / ref_data["coverage"])
+            else:
+                conv_frac_ref.append(0.0)
+            if test_data["coverage"] > 0:
+                conv_frac_test.append(test_data["conversions"] / test_data["coverage"])
+            else:
+                conv_frac_test.append(0.0)
+        
+        conv_frac_pearson = pearson(conv_frac_ref, conv_frac_test)
+        conv_frac_spearman = spearman(conv_frac_ref, conv_frac_test)
+        
+        correlation_results.append({
+            "threshold": threshold,
+            "filter_field": filter_field,
+            "n_genes": len(pairs),
+            "ntr_pearson": ntr_pearson,
+            "ntr_spearman": ntr_spearman,
+            "conv_frac_pearson": conv_frac_pearson,
+            "conv_frac_spearman": conv_frac_spearman,
+        })
+
+    # For backward compatibility, use first threshold for NTR bad check
     ntr_pairs = []
     ntr_bad = []
-    for gene in shared:
-        if ref[gene]["readcount"] < args.min_read_count:
-            continue
-        r = ref[gene]["ntr"]
-        t = test[gene]["ntr"]
-        ntr_pairs.append((r, t, gene))
-        if abs(r - t) > args.ntr_abs_max:
-            ntr_bad.append((abs(r - t), gene, r, t))
-    ntr_bad.sort(reverse=True)
-
-    xs = [r for r, _, _ in ntr_pairs]
-    ys = [t for _, t, _ in ntr_pairs]
-    corr = pearson(xs, ys) if ntr_pairs else float("nan")
+    if thresholds:
+        threshold, filter_field = thresholds[0]
+        for gene in shared:
+            if ref[gene][filter_field] < threshold:
+                continue
+            r = ref[gene]["ntr"]
+            t = test[gene]["ntr"]
+            ntr_pairs.append((r, t, gene))
+            if abs(r - t) > args.ntr_abs_max:
+                ntr_bad.append((abs(r - t), gene, r, t))
+        ntr_bad.sort(reverse=True)
+    
+    # Use first threshold result for backward compatibility
+    corr = correlation_results[0]["ntr_pearson"] if correlation_results else float("nan")
 
     ok = True
     if read_deltas:
@@ -210,12 +302,35 @@ def main():
         for delta, gene, r, t in ntr_bad[:args.max_report]:
             print(f"  {gene}\tref={r}\ttest={t}\tdelta={delta}")
 
+    # Print correlation table
+    if correlation_results:
+        print("\n=== Correlation Metrics (Pearson + Spearman) ===")
+        print(f"{'Threshold':<12} {'Filter':<12} {'N Genes':<10} {'NTR Pearson':<15} {'NTR Spearman':<15} {'k/nT Pearson':<15} {'k/nT Spearman':<15}")
+        print("-" * 100)
+        for result in correlation_results:
+            threshold_label = f">={result['threshold']:.0f}" if result['threshold'] >= 1 else f">={result['threshold']}"
+            print(f"{threshold_label:<12} {result['filter_field']:<12} {result['n_genes']:<10} "
+                  f"{result['ntr_pearson']:>14.6f} {result['ntr_spearman']:>14.6f} "
+                  f"{result['conv_frac_pearson']:>14.6f} {result['conv_frac_spearman']:>14.6f}")
+        print()
+
     if ok:
         print("PASS: STAR-Slam parity checks")
         print(f"  Genes compared: {len(shared)}")
-        print(f"  NTR correlation: {corr:.6f} (min {args.corr_min})")
-        if ntr_pairs:
-            print(f"  NTR genes (readcount >= {args.min_read_count}): {len(ntr_pairs)}")
+        if correlation_results:
+            first = correlation_results[0]
+            print(f"  NTR correlation (Pearson): {first['ntr_pearson']:.6f} (min {args.corr_min})")
+            print(f"  NTR correlation (Spearman): {first['ntr_spearman']:.6f}")
+            print(f"  Conversion fraction correlation (Pearson): {first['conv_frac_pearson']:.6f}")
+            print(f"  Conversion fraction correlation (Spearman): {first['conv_frac_spearman']:.6f}")
+            if ntr_pairs:
+                threshold, filter_field = thresholds[0]
+                print(f"  NTR genes ({filter_field} >= {threshold}): {len(ntr_pairs)}")
+        else:
+            print(f"  NTR correlation: {corr:.6f} (min {args.corr_min})")
+            if ntr_pairs:
+                threshold, filter_field = thresholds[0] if thresholds else (args.min_read_count or 50.0, "readcount")
+                print(f"  NTR genes ({filter_field} >= {threshold}): {len(ntr_pairs)}")
         return 0
 
     return 1

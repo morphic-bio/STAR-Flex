@@ -30,6 +30,7 @@ Transcriptome::Transcriptome (Parameters &Pin) : P(Pin){
         stream1 >> geID[ii] >> geName[ii] >> geBiotype[ii];
     };
     geStream.close();
+    geStr.assign(nGe, 0);
 
     // Pre-compute canonical gene IDs for ZG tags. Some references include placeholder
     // entries (e.g. "MissingGeneType") where gene_id matches gene_name. Resolve those
@@ -81,6 +82,9 @@ Transcriptome::Transcriptome (Parameters &Pin) : P(Pin){
             uint16 str1;
             trinfo >> trID[itr] >> trS[itr] >> trE[itr] >> trEmax[itr] >> str1 >> trExN[itr] >> trExI[itr] >> trGene[itr];
             trStr[itr]=str1;
+            if (trGene[itr] < nGe && geStr[trGene[itr]] == 0) {
+                geStr[trGene[itr]] = trStr[itr];
+            }
 
             if (!trinfo.good()) {
                 ostringstream errOut;
@@ -131,7 +135,7 @@ Transcriptome::Transcriptome (Parameters &Pin) : P(Pin){
         };
     };
 
-    if ( P.quant.geneFull.yes || P.quant.geneFull_ExonOverIntron.yes ) {
+    if ( P.quant.geneFull.yes || P.quant.geneFull_ExonOverIntron.yes || P.quant.slam.yes ) {
         ifstream & exinfo = ifstrOpen(trInfoDir+"/exonGeTrInfo.tab", ERROR_OUT, "SOLUTION: utilize --sjdbGTFfile /path/to/annotantions.gtf option at the genome generation step or mapping step", P);
         exinfo >> exG.nEx;
 
@@ -152,6 +156,9 @@ Transcriptome::Transcriptome (Parameters &Pin) : P(Pin){
             geneFull.s[g1]=min(geneFull.s[g1],s1);
             geneFull.e[g1]=max(geneFull.e[g1],e1);
             geneFull.str[g1] = (uint8) str1;
+            if (g1 < geStr.size()) {
+                geStr[g1] = (uint8) str1;
+            }
         };
         exinfo.close();
 

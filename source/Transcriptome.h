@@ -17,6 +17,7 @@ public:
     vector <string> trID, geID, geName, geBiotype; //transcript/gene IDs
     vector <string> geIDCanonical;                 //canonical gene IDs used for ZG tags
     uint32 nTr, nGe; //number of transcript/genes
+    vector<uint8_t> geStr; //gene strand (1=+, 2=-), index by gene id
 
     uint *trS, *trE, *trEmax; //transcripts start,end,end-max
 

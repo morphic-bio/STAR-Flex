@@ -759,12 +759,23 @@ int main(int argInN, char *argIn[])
                             << flush;
         P.inOut->logMain << timeMonthDayTime() << " ..... started SLAM quantification\n";
 
-        SlamQuant mergedSlam(transcriptomeMain->nGe);
+        SlamQuant mergedSlam(transcriptomeMain->nGe, P.quant.slam.snpDetect);
         for (int ichunk = 0; ichunk < P.runThreadN; ++ichunk) {
             if (RAchunk[ichunk] != nullptr && RAchunk[ichunk]->RA != nullptr &&
                 RAchunk[ichunk]->RA->slamQuant != nullptr) {
                 mergedSlam.merge(*RAchunk[ichunk]->RA->slamQuant);
             }
+        }
+        SlamSnpBufferStats snpStats;
+        mergedSlam.finalizeSnpMask(&snpStats);
+        if (mergedSlam.snpDetectEnabled()) {
+            P.inOut->logMain << "SLAM SNP detect: buffered_reads=" << snpStats.bufferedReads
+                             << " avg_mismatches=" << snpStats.avgMismatches
+                             << " avg_mismatches_kept=" << snpStats.avgMismatchesKept
+                             << " buffer_bytes=" << snpStats.bufferBytes
+                             << " snp_sites=" << snpStats.maskEntries
+                             << " snp_blacklist=" << snpStats.blacklistEntries
+                             << "\n";
         }
         mergedSlam.write(*transcriptomeMain, P.quant.slam.outFile,
                          P.quant.slam.errorRate, P.quant.slam.convRate);

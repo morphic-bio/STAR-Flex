@@ -5,7 +5,9 @@
 
 #include <cstdint>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
+#include <array>
 #include <vector>
 
 class Genome;
@@ -40,18 +42,52 @@ struct SlamDiagnostics {
     std::map<double, uint64_t> sumWeightDistribution;  // sumWeight bucket -> count (bucketed)
 };
 
+struct SlamSnpBufferStats {
+    uint64_t bufferedReads = 0;
+    uint64_t bufferedMismatches = 0;
+    uint64_t bufferedMismatchesKept = 0;
+    uint64_t bufferEntries = 0;
+    uint64_t bufferBytes = 0;
+    uint64_t maskEntries = 0;
+    uint64_t blacklistEntries = 0;
+    double avgMismatches = 0.0;
+    double avgMismatchesKept = 0.0;
+};
+
 struct SlamTransitionStats {
     double coverage[4] = {0.0, 0.0, 0.0, 0.0};
     double mismatches[4][4] = {{0.0}};
 };
 
+struct SlamPositionStats {
+    double coverage[2][2][4] = {};
+    double mismatches[2][2][4][4] = {};
+};
+
+enum class SlamMismatchCategory : uint8_t {
+    Exonic = 0,
+    ExonicSense = 1,
+    Intronic = 2,
+    IntronicSense = 3,
+    Count
+};
+
+constexpr size_t kSlamMismatchCategoryCount = static_cast<size_t>(SlamMismatchCategory::Count);
+const char* slamMismatchCategoryName(SlamMismatchCategory cat);
+
 class SlamQuant {
 public:
-    explicit SlamQuant(uint32_t nGenes);
-    SlamQuant(uint32_t nGenes, std::vector<uint8_t> allowedGenes);
+    explicit SlamQuant(uint32_t nGenes, bool snpDetect = false);
+    SlamQuant(uint32_t nGenes, std::vector<uint8_t> allowedGenes, bool snpDetect = false);
 
     void addRead(uint32_t geneId, uint16_t nT, uint8_t k, double weight);
-    void addTransitionBase(uint32_t readPos, bool secondMate, int genomicBase, int readBase, double weight);
+    void addTransitionBase(SlamMismatchCategory category, uint32_t readPos, bool secondMate,
+                           bool overlap, bool opposite, int genomicBase, int readBase, double weight);
+    bool snpDetectEnabled() const { return snpDetectEnabled_; }
+    void recordSnpObservation(uint64_t pos, bool isMismatch);
+    void bufferSnpRead(uint32_t geneId, uint16_t nT,
+                       const std::vector<uint32_t>& mismatchPositions, double weight);
+    void finalizeSnpMask(SlamSnpBufferStats* outStats = nullptr);
     void merge(const SlamQuant& other);
     void write(const Transcriptome& tr, const std::string& outFile,
                double errorRate, double convRate) const;
@@ -69,10 +105,15 @@ public:
 private:
     std::vector<SlamGeneStats> geneStats_;
     SlamDiagnostics diag_;
-    SlamTransitionStats transitions_;
-    SlamTransitionStats transitionsFirst_;
-    SlamTransitionStats transitionsSecond_;
-    std::vector<SlamTransitionStats> positionTransitions_;
+    std::array<SlamTransitionStats, kSlamMismatchCategoryCount> transitions_;
+    std::array<SlamTransitionStats, kSlamMismatchCategoryCount> transitionsFirst_;
+    std::array<SlamTransitionStats, kSlamMismatchCategoryCount> transitionsSecond_;
+    std::array<std::vector<SlamPositionStats>, kSlamMismatchCategoryCount> positionTransitions_;
+    bool snpDetectEnabled_ = false;
+    bool snpFinalized_ = false;
+    std::unordered_map<uint64_t, uint32_t> snpMask_;
+    std::vector<uint32_t> snpReadBuffer_;
+    std::vector<double> snpReadWeights_;
     std::vector<uint8_t> allowedGenes_;
 };
 

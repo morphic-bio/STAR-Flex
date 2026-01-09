@@ -12,10 +12,32 @@
 #include <cmath>
 #include <cstdio>
 
-SlamQuant::SlamQuant(uint32_t nGenes) : geneStats_(nGenes) {}
+namespace {
+constexpr uint32_t kSnpMinCoverage = 10;
+constexpr double kSnpMinMismatchFrac = 0.5;
+}
 
-SlamQuant::SlamQuant(uint32_t nGenes, std::vector<uint8_t> allowedGenes)
-    : geneStats_(nGenes), allowedGenes_(std::move(allowedGenes)) {}
+SlamQuant::SlamQuant(uint32_t nGenes, bool snpDetect)
+    : geneStats_(nGenes), snpDetectEnabled_(snpDetect) {}
+
+SlamQuant::SlamQuant(uint32_t nGenes, std::vector<uint8_t> allowedGenes, bool snpDetect)
+    : geneStats_(nGenes), snpDetectEnabled_(snpDetect),
+      allowedGenes_(std::move(allowedGenes)) {}
+
+const char* slamMismatchCategoryName(SlamMismatchCategory cat) {
+    switch (cat) {
+        case SlamMismatchCategory::Exonic:
+            return "Exonic";
+        case SlamMismatchCategory::ExonicSense:
+            return "ExonicSense";
+        case SlamMismatchCategory::Intronic:
+            return "Intronic";
+        case SlamMismatchCategory::IntronicSense:
+            return "IntronicSense";
+        default:
+            return "Unknown";
+    }
+}
 
 void SlamQuant::addRead(uint32_t geneId, uint16_t nT, uint8_t k, double weight) {
     if (geneId >= geneStats_.size() || weight <= 0.0) {
@@ -34,32 +56,146 @@ void SlamQuant::addRead(uint32_t geneId, uint16_t nT, uint8_t k, double weight) 
     stats.coverage += weight * static_cast<double>(nT);
 }
 
-void SlamQuant::addTransitionBase(uint32_t readPos, bool secondMate, int genomicBase, int readBase, double weight) {
+void SlamQuant::recordSnpObservation(uint64_t pos, bool isMismatch) {
+    if (!snpDetectEnabled_) {
+        return;
+    }
+    uint32_t &entry = snpMask_[pos];
+    uint32_t cov = entry >> 16;
+    uint32_t mis = entry & 0xFFFF;
+    if (cov < 0xFFFF) {
+        ++cov;
+    }
+    if (isMismatch && mis < 0xFFFF) {
+        ++mis;
+    }
+    entry = (cov << 16) | mis;
+}
+
+void SlamQuant::bufferSnpRead(uint32_t geneId, uint16_t nT,
+                              const std::vector<uint32_t>& mismatchPositions, double weight) {
+    if (!snpDetectEnabled_ || mismatchPositions.empty() || weight <= 0.0) {
+        return;
+    }
+    if (!allowedGenes_.empty() && geneId < allowedGenes_.size() && allowedGenes_[geneId] == 0) {
+        return;
+    }
+    uint16_t k = static_cast<uint16_t>(mismatchPositions.size() > 0xFFFF
+                                           ? 0xFFFF
+                                           : mismatchPositions.size());
+    snpReadBuffer_.push_back(geneId);
+    snpReadBuffer_.push_back((static_cast<uint32_t>(k) << 16) | nT);
+    for (uint16_t i = 0; i < k; ++i) {
+        snpReadBuffer_.push_back(mismatchPositions[i]);
+    }
+    snpReadWeights_.push_back(weight);
+}
+
+void SlamQuant::finalizeSnpMask(SlamSnpBufferStats* outStats) {
+    if (outStats) {
+        *outStats = SlamSnpBufferStats();
+        outStats->bufferedReads = snpReadWeights_.size();
+        outStats->bufferEntries = snpReadBuffer_.size();
+        outStats->maskEntries = snpMask_.size();
+        outStats->bufferBytes =
+            static_cast<uint64_t>(snpReadBuffer_.size()) * sizeof(uint32_t) +
+            static_cast<uint64_t>(snpReadWeights_.size()) * sizeof(double);
+    }
+    if (!snpDetectEnabled_ || snpFinalized_) {
+        return;
+    }
+    snpFinalized_ = true;
+    if (snpReadBuffer_.empty()) {
+        return;
+    }
+    std::unordered_set<uint64_t> blacklist;
+    blacklist.reserve(snpMask_.size());
+    for (const auto &kv : snpMask_) {
+        uint32_t cov = kv.second >> 16;
+        uint32_t mis = kv.second & 0xFFFF;
+        if (cov > kSnpMinCoverage && cov > 0) {
+            double rate = static_cast<double>(mis) / static_cast<double>(cov);
+            if (rate > kSnpMinMismatchFrac) {
+                blacklist.insert(kv.first);
+            }
+        }
+    }
+    if (outStats) {
+        outStats->blacklistEntries = blacklist.size();
+    }
+    uint64_t totalMismatches = 0;
+    uint64_t totalMismatchesKept = 0;
+    size_t idx = 0;
+    size_t readIdx = 0;
+    while (idx + 1 < snpReadBuffer_.size() && readIdx < snpReadWeights_.size()) {
+        uint32_t geneId = snpReadBuffer_[idx++];
+        uint32_t header = snpReadBuffer_[idx++];
+        uint16_t nT = static_cast<uint16_t>(header & 0xFFFF);
+        uint16_t k = static_cast<uint16_t>(header >> 16);
+        uint16_t validK = 0;
+        totalMismatches += k;
+        for (uint16_t i = 0; i < k && idx < snpReadBuffer_.size(); ++i, ++idx) {
+            uint32_t pos = snpReadBuffer_[idx];
+            if (blacklist.find(pos) == blacklist.end()) {
+                ++validK;
+            }
+        }
+        totalMismatchesKept += validK;
+        uint8_t k8 = static_cast<uint8_t>(validK > 255 ? 255 : validK);
+        addRead(geneId, nT, k8, snpReadWeights_[readIdx]);
+        ++readIdx;
+    }
+    if (outStats) {
+        outStats->bufferedMismatches = totalMismatches;
+        outStats->bufferedMismatchesKept = totalMismatchesKept;
+        uint64_t reads = snpReadWeights_.size();
+        if (reads > 0) {
+            outStats->avgMismatches = static_cast<double>(totalMismatches) /
+                static_cast<double>(reads);
+            outStats->avgMismatchesKept = static_cast<double>(totalMismatchesKept) /
+                static_cast<double>(reads);
+        }
+    }
+    snpReadBuffer_.clear();
+    snpReadWeights_.clear();
+    snpMask_.clear();
+}
+
+void SlamQuant::addTransitionBase(SlamMismatchCategory category, uint32_t readPos, bool secondMate,
+                                  bool overlap, bool opposite, int genomicBase, int readBase, double weight) {
     if (weight <= 0.0 || genomicBase < 0 || genomicBase > 3 || readBase < 0 || readBase > 3) {
         return;
     }
-    transitions_.coverage[genomicBase] += weight;
+    const size_t cat = static_cast<size_t>(category);
+    transitions_[cat].coverage[genomicBase] += weight;
     if (genomicBase != readBase) {
-        transitions_.mismatches[genomicBase][readBase] += weight;
+        transitions_[cat].mismatches[genomicBase][readBase] += weight;
     }
-    SlamTransitionStats& orient = secondMate ? transitionsSecond_ : transitionsFirst_;
-    orient.coverage[genomicBase] += weight;
+    if (!overlap) {
+        SlamTransitionStats& orient = secondMate ? transitionsSecond_[cat] : transitionsFirst_[cat];
+        orient.coverage[genomicBase] += weight;
+        if (genomicBase != readBase) {
+            orient.mismatches[genomicBase][readBase] += weight;
+        }
+    }
+    if (readPos >= positionTransitions_[cat].size()) {
+        positionTransitions_[cat].resize(readPos + 1);
+    }
+    SlamPositionStats& pos = positionTransitions_[cat][readPos];
+    const size_t ov = overlap ? 1 : 0;
+    const size_t opp = opposite ? 1 : 0;
+    pos.coverage[ov][opp][genomicBase] += weight;
     if (genomicBase != readBase) {
-        orient.mismatches[genomicBase][readBase] += weight;
-    }
-    if (readPos >= positionTransitions_.size()) {
-        positionTransitions_.resize(readPos + 1);
-    }
-    SlamTransitionStats& pos = positionTransitions_[readPos];
-    pos.coverage[genomicBase] += weight;
-    if (genomicBase != readBase) {
-        pos.mismatches[genomicBase][readBase] += weight;
+        pos.mismatches[ov][opp][genomicBase][readBase] += weight;
     }
 }
 
 void SlamQuant::merge(const SlamQuant& other) {
     if (other.geneStats_.size() != geneStats_.size()) {
         return;
+    }
+    if (other.snpDetectEnabled_) {
+        snpDetectEnabled_ = true;
     }
     for (size_t i = 0; i < geneStats_.size(); ++i) {
         SlamGeneStats& dst = geneStats_[i];
@@ -89,30 +225,50 @@ void SlamQuant::merge(const SlamQuant& other) {
     for (const auto& kv : other.diag_.sumWeightDistribution) {
         diag_.sumWeightDistribution[kv.first] += kv.second;
     }
-    for (int g = 0; g < 4; ++g) {
-        transitions_.coverage[g] += other.transitions_.coverage[g];
-        for (int r = 0; r < 4; ++r) {
-            transitions_.mismatches[g][r] += other.transitions_.mismatches[g][r];
-        }
-    }
-    for (int g = 0; g < 4; ++g) {
-        transitionsFirst_.coverage[g] += other.transitionsFirst_.coverage[g];
-        transitionsSecond_.coverage[g] += other.transitionsSecond_.coverage[g];
-        for (int r = 0; r < 4; ++r) {
-            transitionsFirst_.mismatches[g][r] += other.transitionsFirst_.mismatches[g][r];
-            transitionsSecond_.mismatches[g][r] += other.transitionsSecond_.mismatches[g][r];
-        }
-    }
-    if (other.positionTransitions_.size() > positionTransitions_.size()) {
-        positionTransitions_.resize(other.positionTransitions_.size());
-    }
-    for (size_t i = 0; i < other.positionTransitions_.size(); ++i) {
+    for (size_t c = 0; c < kSlamMismatchCategoryCount; ++c) {
         for (int g = 0; g < 4; ++g) {
-            positionTransitions_[i].coverage[g] += other.positionTransitions_[i].coverage[g];
+            transitions_[c].coverage[g] += other.transitions_[c].coverage[g];
+            transitionsFirst_[c].coverage[g] += other.transitionsFirst_[c].coverage[g];
+            transitionsSecond_[c].coverage[g] += other.transitionsSecond_[c].coverage[g];
             for (int r = 0; r < 4; ++r) {
-                positionTransitions_[i].mismatches[g][r] += other.positionTransitions_[i].mismatches[g][r];
+                transitions_[c].mismatches[g][r] += other.transitions_[c].mismatches[g][r];
+                transitionsFirst_[c].mismatches[g][r] += other.transitionsFirst_[c].mismatches[g][r];
+                transitionsSecond_[c].mismatches[g][r] += other.transitionsSecond_[c].mismatches[g][r];
             }
         }
+        if (other.positionTransitions_[c].size() > positionTransitions_[c].size()) {
+            positionTransitions_[c].resize(other.positionTransitions_[c].size());
+        }
+        for (size_t i = 0; i < other.positionTransitions_[c].size(); ++i) {
+            for (int ov = 0; ov < 2; ++ov) {
+                for (int opp = 0; opp < 2; ++opp) {
+                    for (int g = 0; g < 4; ++g) {
+                        positionTransitions_[c][i].coverage[ov][opp][g] +=
+                            other.positionTransitions_[c][i].coverage[ov][opp][g];
+                        for (int r = 0; r < 4; ++r) {
+                            positionTransitions_[c][i].mismatches[ov][opp][g][r] +=
+                                other.positionTransitions_[c][i].mismatches[ov][opp][g][r];
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if (!other.snpMask_.empty()) {
+        for (const auto &kv : other.snpMask_) {
+            uint32_t &entry = snpMask_[kv.first];
+            uint32_t cov = entry >> 16;
+            uint32_t mis = entry & 0xFFFF;
+            uint32_t addCov = kv.second >> 16;
+            uint32_t addMis = kv.second & 0xFFFF;
+            cov = std::min<uint32_t>(0xFFFF, cov + addCov);
+            mis = std::min<uint32_t>(0xFFFF, mis + addMis);
+            entry = (cov << 16) | mis;
+        }
+    }
+    if (!other.snpReadBuffer_.empty()) {
+        snpReadBuffer_.insert(snpReadBuffer_.end(), other.snpReadBuffer_.begin(), other.snpReadBuffer_.end());
+        snpReadWeights_.insert(snpReadWeights_.end(), other.snpReadWeights_.begin(), other.snpReadWeights_.end());
     }
 }
 
@@ -183,14 +339,15 @@ void SlamQuant::writeTransitions(const std::string& outFile) const {
     }
     static const char bases[4] = {'A', 'C', 'G', 'T'};
     out << "Genomic\tRead\tCoverage\tMismatches\n";
+    const SlamTransitionStats& stats = transitions_[static_cast<size_t>(SlamMismatchCategory::Exonic)];
     for (int g = 0; g < 4; ++g) {
         for (int r = 0; r < 4; ++r) {
             if (g == r) {
                 continue;
             }
             out << bases[g] << "\t" << bases[r] << "\t"
-                << transitions_.coverage[g] << "\t"
-                << transitions_.mismatches[g][r] << "\n";
+                << stats.coverage[g] << "\t"
+                << stats.mismatches[g][r] << "\n";
         }
     }
 }
@@ -198,51 +355,72 @@ void SlamQuant::writeTransitions(const std::string& outFile) const {
 void SlamQuant::writeMismatches(const std::string& outFile, const std::string& condition) const {
     std::ofstream out(outFile.c_str());
     if (!out.good()) {
-        return;
+        // Try to create parent directory if it doesn't exist
+        size_t lastSlash = outFile.find_last_of("/\\");
+        if (lastSlash != std::string::npos) {
+            std::string dir = outFile.substr(0, lastSlash);
+            system(("mkdir -p " + dir).c_str());
+            out.open(outFile.c_str());
+        }
+        if (!out.good()) {
+            return;
+        }
     }
     static const char bases[4] = {'A', 'C', 'G', 'T'};
     out << "Category\tCondition\tOrientation\tGenomic\tRead\tCoverage\tMismatches\n";
-    const SlamTransitionStats* orientations[2] = {&transitionsFirst_, &transitionsSecond_};
     const char* labels[2] = {"First", "Second"};
-    for (int o = 0; o < 2; ++o) {
-        const SlamTransitionStats& stats = *orientations[o];
-        for (int g = 0; g < 4; ++g) {
-            for (int r = 0; r < 4; ++r) {
-                if (g == r) {
-                    continue;
+    for (size_t c = 0; c < kSlamMismatchCategoryCount; ++c) {
+        const char* category = slamMismatchCategoryName(static_cast<SlamMismatchCategory>(c));
+        const SlamTransitionStats* orientations[2] = {&transitionsFirst_[c], &transitionsSecond_[c]};
+        for (int o = 0; o < 2; ++o) {
+            const SlamTransitionStats& stats = *orientations[o];
+            for (int g = 0; g < 4; ++g) {
+                for (int r = 0; r < 4; ++r) {
+                    if (g == r) {
+                        continue;
+                    }
+                    out << category << "\t" << condition << "\t" << labels[o] << "\t"
+                        << bases[g] << "\t" << bases[r] << "\t"
+                        << stats.coverage[g] << "\t" << stats.mismatches[g][r] << "\n";
                 }
-                out << "Exonic\t" << condition << "\t" << labels[o] << "\t"
-                    << bases[g] << "\t" << bases[r] << "\t"
-                    << stats.coverage[g] << "\t" << stats.mismatches[g][r] << "\n";
             }
         }
     }
 }
 
 void SlamQuant::writeMismatchDetails(const std::string& outFile) const {
-    std::ofstream out(outFile.c_str());
-    if (!out.good()) {
+    std::ofstream out(outFile.c_str(), std::ios::out | std::ios::trunc);
+    if (!out.is_open()) {
         return;
     }
     static const char bases[4] = {'A', 'C', 'G', 'T'};
     out << "Category\tGenomic\tRead\tPosition\tOverlap\tOpposite\tCoverage\tMismatches\n";
-    for (size_t pos = 0; pos < positionTransitions_.size(); ++pos) {
-        const SlamTransitionStats& stats = positionTransitions_[pos];
-        for (int g = 0; g < 4; ++g) {
-            double cov = stats.coverage[g];
-            if (cov <= 0.0) {
-                continue;
-            }
-            for (int r = 0; r < 4; ++r) {
-                if (g == r) {
-                    continue;
+    for (size_t c = 0; c < kSlamMismatchCategoryCount; ++c) {
+        const char* category = slamMismatchCategoryName(static_cast<SlamMismatchCategory>(c));
+        const auto& positions = positionTransitions_[c];
+        for (size_t pos = 0; pos < positions.size(); ++pos) {
+            const SlamPositionStats& stats = positions[pos];
+            for (int ov = 0; ov < 2; ++ov) {
+                for (int opp = 0; opp < 2; ++opp) {
+                    for (int g = 0; g < 4; ++g) {
+                        double cov = stats.coverage[ov][opp][g];
+                        if (cov <= 0.0) {
+                            continue;
+                        }
+                        for (int r = 0; r < 4; ++r) {
+                            if (g == r) {
+                                continue;
+                            }
+                            out << category << "\t" << bases[g] << "\t" << bases[r] << "\t"
+                                << pos << "\t" << ov << "\t" << opp << "\t" << cov << "\t"
+                                << stats.mismatches[ov][opp][g][r] << "\n";
+                        }
+                    }
                 }
-                out << "Exonic\t" << bases[g] << "\t" << bases[r] << "\t"
-                    << pos << "\t0\t0\t" << cov << "\t"
-                    << stats.mismatches[g][r] << "\n";
             }
         }
     }
+    out.close();
 }
 
 void SlamQuant::writeTopMismatches(const Transcriptome& tr, const std::string& refFile,

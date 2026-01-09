@@ -90,6 +90,7 @@ void ReadAlign::outputAlignments() {
             
             if (P.quant.slam.yes && slamQuant != nullptr) {
                 auto &annFeat = readAnnot.annotFeatures[SoloFeatureTypes::Gene];
+                auto &annFeatFull = readAnnot.annotFeatures[SoloFeatureTypes::GeneFull_ExonOverIntron];
                 size_t nAlign = annFeat.fAlign.size();
                 if (nTr > 0) {
                     size_t nTrSize = static_cast<size_t>(nTr);
@@ -109,6 +110,8 @@ void ReadAlign::outputAlignments() {
                     // Count alignments with gene assignments
                     size_t nAlignWithGene = 0;
                     double sumWeight = 0.0;
+                    bool trackIntronic = annFeat.fSet.empty() &&
+                        annFeatFull.ovType == ReadAnnotFeature::overlapTypes::intronic;
                     
                     // Use nTr as denominator for weight (matches GRAND-SLAM behavior)
                     // Weight is applied only to alignments that have gene assignments
@@ -124,7 +127,12 @@ void ReadAlign::outputAlignments() {
                                 nAlignWithGene++;
                                 sumWeight += weight;
                                 // Apply same weight to all genes in the set (current approach)
-                                slamCollect(*trMult[ia], genes, weight);
+                                slamCollect(*trMult[ia], genes, weight, false);
+                            } else if (trackIntronic && ia < annFeatFull.fAlign.size()) {
+                                const auto &intronicGenes = annFeatFull.fAlign[ia];
+                                if (!intronicGenes.empty()) {
+                                    slamCollect(*trMult[ia], intronicGenes, weight, true);
+                                }
                             }
                         }
                     }
@@ -924,6 +932,10 @@ void ReadAlign::alignedAnnotation()
     }
     //solo-GeneFull_ExonOverIntron
     if ( P.quant.geneFull_ExonOverIntron.yes ) {
+        chunkTr->geneFullAlignOverlap_ExonOverIntron(nTr, trMult, P.pSolo.strand, readAnnot.annotFeatures[SoloFeatureTypes::GeneFull_ExonOverIntron], readAnnot.annotFeatures[SoloFeatureTypes::Gene]);
+    };
+    // SLAM needs intronic/exonic classification for mismatch reporting
+    if ( P.quant.slam.yes && !P.quant.geneFull_ExonOverIntron.yes ) {
         chunkTr->geneFullAlignOverlap_ExonOverIntron(nTr, trMult, P.pSolo.strand, readAnnot.annotFeatures[SoloFeatureTypes::GeneFull_ExonOverIntron], readAnnot.annotFeatures[SoloFeatureTypes::Gene]);
     };
     //solo-GeneFull_Ex50pAS

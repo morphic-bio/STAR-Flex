@@ -386,6 +386,8 @@ class Parameters {
                 double errorRate=0.001;     // Background error rate
                 double convRate=0.05;       // Conversion rate for labeled reads
                 string snpBed;              // Optional SNP BED for prefilter
+                int snpDetectInt=0;         // CLI flag (0/1) for internal SNP detection
+                bool snpDetect=false;       // Enable internal SNP detection + masking
                 string outFile;             // Output file path
                 SlamSnpMask* snpMask=nullptr; // Loaded SNP mask (if any)
             } slam;

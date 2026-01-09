@@ -82,6 +82,26 @@ This fork adds several features beyond upstream STAR:
     - tximport parity tests (STAR vs R tximport, and CLI tool): `tests/tximport/star_tximport_e2e_test.sh`
     - On the JAX PE validation runs, gene-level correlations between STAR and Salmon tximport-style summaries are typically very high (Spearman/Pearson ~0.99+), and base-vs-auto (trimming) parity is expected to be ~1.0.
 
+- **SLAM-seq (STAR-SLAM) gene-level quantification**: Enable SLAM quantification directly in STAR.
+  - **Required**: `--slamQuantMode 1`
+  - **SNP handling** (choose one):
+    - `--slamSnpBed /path/to/snps.bed` (recommended for parity with a known SNP mask)
+    - `--slamSnpDetect 1` (internal SNP detection; ignored if `--slamSnpBed` is set)
+  - **Optional**: `--slamErrorRate`, `--slamConvRate`, `--slamOutFile`
+  - **Example:**
+    ```bash
+    STAR \
+      --runMode alignReads \
+      --genomeDir /path/to/star_index \
+      --readFilesIn reads.fastq.gz \
+      --readFilesCommand zcat \
+      --outSAMtype None \
+      --slamQuantMode 1 \
+      --slamSnpBed /path/to/snps.bed \
+      --outFileNamePrefix out/
+    ```
+  - For GRAND-SLAM parity from BAM, include `--outSAMattributes MD NH` and avoid soft-clipping (end-to-end + trim).
+
 - **Samtools-style spill-to-disk BAM sorting** (`--outBAMsortMethod samtools`): Optional coordinate-sorting backend that uses a spill-to-disk strategy (bounded by `--limitBAMsortRAM`) to reduce temporary disk usage compared to STAR’s legacy bin-based sorter.
   - Rationale: the legacy STAR sorter partitions alignments into many genomic bins and can create large temporary files; the spill-to-disk sorter keeps in-memory buffers up to the RAM cap and only writes spill files as needed.
   - Usage:

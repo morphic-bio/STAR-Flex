@@ -74,7 +74,7 @@ ReadAlignChunk::ReadAlignChunk(Parameters& Pin, Genome &genomeIn, Transcriptome 
 
     slamQuant = nullptr;
     if (P.quant.slam.yes && chunkTr != nullptr) {
-        slamQuant = new SlamQuant(chunkTr->nGe, buildSlamAllowedGenes(*chunkTr));
+        slamQuant = new SlamQuant(chunkTr->nGe, buildSlamAllowedGenes(*chunkTr), P.quant.slam.snpDetect);
     }
 
     RA = new ReadAlign(P, mapGen, chunkTr, iChunk, libemTr);//new local copy of RA for each chunk

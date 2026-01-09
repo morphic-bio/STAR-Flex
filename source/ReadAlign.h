@@ -297,7 +297,7 @@ class ReadAlign {
         void writeFastxRecord(uint imate, bool isY);  // Write FASTQ/FASTA record to Y or noY stream
         void spliceGraphWriteSAM();
         void alignedAnnotation();
-        bool slamCollect(const Transcript& trOut, const std::set<uint32_t>& geneIds, double weight);
+        bool slamCollect(const Transcript& trOut, const std::set<uint32_t>& geneIds, double weight, bool isIntronic);
         void writeSAM(uint64 nTrOutSAM, Transcript **trOutSAM, Transcript *trBestSAM);
         void recordSJ(uint64 nTrO, Transcript **trO, OutSJ *cSJ);
 

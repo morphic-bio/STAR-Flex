@@ -392,6 +392,7 @@ Parameters::Parameters() {//initalize parameters info
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "quantVBErrorModel", &quant.transcriptVB.errorModelMode));
     parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "slamQuantMode", &quant.slam.modeInt));
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamSnpBed", &quant.slam.snpBed));
+    parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "slamSnpDetect", &quant.slam.snpDetectInt));
     parArray.push_back(new ParameterInfoScalar <double>   (-1, -1, "slamErrorRate", &quant.slam.errorRate));
     parArray.push_back(new ParameterInfoScalar <double>   (-1, -1, "slamConvRate", &quant.slam.convRate));
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamOutFile", &quant.slam.outFile));
@@ -1332,6 +1333,11 @@ void Parameters::inputParameters (int argInN, char* argIn[]) {//input parameters
         }
         if (quant.slam.snpBed == "-" || quant.slam.snpBed == "None") {
             quant.slam.snpBed.clear();
+        }
+        quant.slam.snpDetect = (quant.slam.snpDetectInt != 0);
+        if (quant.slam.snpDetect && !quant.slam.snpBed.empty()) {
+            inOut->logMain << "WARNING: --slamSnpDetect ignored because --slamSnpBed is set.\n";
+            quant.slam.snpDetect = false;
         }
     }
     
