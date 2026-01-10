@@ -60,8 +60,7 @@ if [[ "${RUN_STAR_SLAM:-0}" -eq 1 ]]; then
         --readFilesCommand zcat \
         --outFileNamePrefix "$OUT_PREFIX" \
         --outSAMtype None \
-        --clip3pAdapterSeq AGATCGGAAGAG \
-        --clip3pAdapterMMp 0.1 \
+        --alignEndsType EndToEnd \
         ${STAR_SLAM_ARGS} \
         > "${OUT_PREFIX}slam.log" 2>&1
 fi

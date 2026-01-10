@@ -20,6 +20,9 @@ Preprocessing guidance emphasizes:
 - Mapped reads must include `MD` (and preferably `NH`) tags.
 - Avoid soft-clipping; use end-to-end mapping and trim 5' and 3' to remove
   read-end artifacts detected via mismatch-position plots.
+- If reads are already fixed-length and adapter-free (e.g., SE50), disable
+  adapter clipping (`--clip3pAdapterSeq` / `--clip3pAdapterMMp`) and keep
+  `--alignEndsType EndToEnd`.
 
 ## Published inter-method comparison benchmarks
 
@@ -59,6 +62,36 @@ pulseR and GRAND-SLAM decay-rate estimates across 11,603 genes is:
 Note: these correlations are for decay-rate estimates (not NTR). They are
 useful as a sanity range for cross-method agreement but are not a direct
 acceptance threshold for STAR-SLAM vs GRAND-SLAM parity.
+
+## Controls and "gold set" references for SLAM-seq
+
+There is **no universal public gold-standard SLAM-seq spike-in set**. The
+original SLAM-seq paper validated conversion detection using controlled inputs
+and reported public datasets, but not a standardized benchmark panel.
+
+Documented controls from the literature:
+- **Synthetic RNA oligos with defined s4U** (conversion ground truth):
+  - Herzog et al. 2017 (Nat Methods, SLAM-seq) used let-7 RNA oligos, including
+    a single-s4U position (`let-7-s4Up9`) to validate conversion behavior.
+  - Sequences are in the paper’s supplementary tables (not a packaged dataset).
+- **Spike-in RNA for small RNA libraries**:
+  - The same paper added *Arabidopsis thaliana* total RNA as a spike-in before
+    size selection for small RNA libraries (library-normalization control).
+  - This is **not** a SLAM conversion gold set.
+- **Public SLAM-seq datasets**:
+  - Sequencing data from the SLAM-seq paper is available in GEO:
+    https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE99978
+  - The paper notes that UTR/counting-window BED files are included in the GEO
+    datasets, which are relevant for reproducing their quantification choices.
+- **Protocol-level QC guidance**:
+  - The SLAM-seq protocol paper (Methods Mol Biol 2020, PMCID: PMC7611866)
+    mentions low-depth spike-in approaches for QC but does not publish a
+    standard spike-in dataset.
+
+Practical implication: if we need a true gold set, we should generate one
+internally (e.g., defined mixtures of labeled/unlabeled IVT RNA or synthetic
+oligos) and treat public SLAM-seq datasets as **reference benchmarks**, not
+ground truth.
 
 ## Implications for STAR-SLAM testing
 

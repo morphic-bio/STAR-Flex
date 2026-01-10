@@ -88,8 +88,12 @@ This fork adds several features beyond upstream STAR:
     - `--slamSnpDetect 1` (internal SNP detection; default choice when no sample-specific VCF is available)
     - `--slamSnpBed /path/to/snps.bed` (use only when a sample-specific VCF/BED is known; if set, it disables internal detection)
   - **Strandness filter** (optional): `--slamStrandness Unspecific|Sense|Antisense` (default: `Unspecific`).
+  - **Alignment mode** (recommended): `--alignEndsType EndToEnd` to avoid soft-clipping artifacts.
+  - **Adapter clipping**: leave off for fixed-length, adapter-free reads (e.g., SE50). Only set
+    `--clip3pAdapterSeq` / `--clip3pAdapterMMp` when adapters are present.
   - **Debug instrumentation** (optional): `--slamDebugGeneList`, `--slamDebugReadList`, `--slamDebugOutPrefix`, `--slamDebugMaxReads`.
   - **Optional**: `--slamErrorRate`, `--slamConvRate`, `--slamOutFile`
+  - **Run script** (fixture parity): `tests/run_slam_fixture_parity.sh` (set `RUN_STAR_SLAM=1` and `STAR_SLAM_ARGS`).
   - **Example:**
     ```bash
     STAR \
@@ -98,11 +102,12 @@ This fork adds several features beyond upstream STAR:
       --readFilesIn reads.fastq.gz \
       --readFilesCommand zcat \
       --outSAMtype None \
+      --alignEndsType EndToEnd \
       --slamQuantMode 1 \
       --slamSnpDetect 1 \
       --outFileNamePrefix out/
     ```
-  - For GRAND-SLAM parity from BAM, include `--outSAMattributes MD NH` and avoid soft-clipping (end-to-end + trim).
+  - For GRAND-SLAM parity from BAM, include `--outSAMattributes MD NH` and avoid soft-clipping (end-to-end; trim/clip only if adapters are present or mismatch-position plots show artifacts).
 
 - **Samtools-style spill-to-disk BAM sorting** (`--outBAMsortMethod samtools`): Optional coordinate-sorting backend that uses a spill-to-disk strategy (bounded by `--limitBAMsortRAM`) to reduce temporary disk usage compared to STAR’s legacy bin-based sorter.
   - Rationale: the legacy STAR sorter partitions alignments into many genomic bins and can create large temporary files; the spill-to-disk sorter keeps in-memory buffers up to the RAM cap and only writes spill files as needed.
