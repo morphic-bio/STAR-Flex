@@ -1037,7 +1037,12 @@ autoTrim                             -
     string: Auto-trim mode: "variance" for variance-based trimming, "-" to disable
 
 trimScope                            first
-    string: Trim scope for multi-file runs: "first" (shared trim from first file, default) or "per-file" (per-file trim)
+    string: Trim scope for multi-file runs:
+        "first"    ... shared trim computed from first file and applied to all files (default)
+        "per-file" ... separate trim computed and applied for each file
+    Note: "per-file" mode requires FILE markers in the read stream, which are automatically
+    generated when using comma-separated --readFilesIn (e.g., file1.fq,file2.fq,file3.fq)
+    or when using --readFilesCommand with multiple files.
 
 autoTrimMaxReads                     100000
     int: Maximum number of reads to scan for variance analysis (0=unlimited)
