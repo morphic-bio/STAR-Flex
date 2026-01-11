@@ -5,6 +5,9 @@
 uint ReadAlign::outputTranscriptSAM(Transcript const &trOut, uint nTrOut, uint iTrOut, uint mateChr, uint mateStart, char mateStrand, int unmapType, bool *mateMap, ostream *outStream) {
 
     if (P.outSAMmode=="None") return 0; //no SAM output
+    
+    // Skip output during auto-trim detection pass
+    if (P.quant.slam.autoTrimDetectionPass) return 0;
 
     uint outStreamPos0=(uint)outStream->tellp();
 

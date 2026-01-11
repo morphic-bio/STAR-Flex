@@ -21,39 +21,58 @@ void ReadAlignChunk::processChunks() {//read-map-write chunks
     
     // Per-file processing: skip to the target file if needed
     // This is used when we've rewound and need to skip to a specific file for mapping
-    if (P.quant.slam.skipToFileIndex > 0 && P.readFilesIndex < P.quant.slam.skipToFileIndex) {
+    if (P.quant.slam.skipToFileIndex > 0) {
         if (P.runThreadN > 1) pthread_mutex_lock(&g_threadChunks.mutexInRead);
         
-        P.inOut->logMain << "SLAM per-file: skipping to file " << P.quant.slam.skipToFileIndex 
-                         << " (currently at file " << P.readFilesIndex << ")\n";
+        // Re-check condition after acquiring mutex (another thread may have already skipped)
+        if (P.quant.slam.skipToFileIndex > 0 && P.readFilesIndex < P.quant.slam.skipToFileIndex) {
+            P.inOut->logMain << "SLAM per-file: skipping to file " << P.quant.slam.skipToFileIndex 
+                             << " (currently at file " << P.readFilesIndex << ")\n";
         
         // Skip reads until we reach the target file
+        // For paired-end: advance ALL mate streams in sync
         while (P.readFilesIndex < P.quant.slam.skipToFileIndex && P.inOut->readIn[0].good()) {
             string line;
             std::getline(P.inOut->readIn[0], line);
             
-            // Check for FILE marker
-            if (line.substr(0, 4) == "FILE") {
+            // Check for FILE marker in mate 0
+            if (line.length() >= 4 && line.substr(0, 4) == "FILE") {
                 std::istringstream iss(line);
                 string marker;
                 int fileIdx;
                 iss >> marker >> fileIdx;
                 P.readFilesIndex = fileIdx;
                 
-                // Skip the file marker line for all mates
-                for (uint imate = 1; imate < P.readFilesNames.size(); imate++) {
-                    P.inOut->readIn[imate].ignore(numeric_limits<streamsize>::max(), '\n');
+                // Skip the FILE marker line for all other mates (paired-end support)
+                for (uint imate = 1; imate < P.readNends; imate++) {
+                    string mateLine;
+                    // Each mate stream should have its own FILE marker - skip it
+                    if (P.inOut->readIn[imate].good()) {
+                        std::getline(P.inOut->readIn[imate], mateLine);
+                        // Verify mate has matching FILE marker (optional sanity check)
+                        if (mateLine.length() >= 4 && mateLine.substr(0, 4) == "FILE") {
+                            // Good - mate stream is in sync
+                        }
+                    }
                 }
                 
                 if (P.readFilesIndex >= P.quant.slam.skipToFileIndex) {
                     P.inOut->logMain << "SLAM per-file: reached file " << P.readFilesIndex << "\n";
                     break;
                 }
+            } else {
+                // Not a FILE marker - skip corresponding lines in other mates
+                for (uint imate = 1; imate < P.readNends; imate++) {
+                    if (P.inOut->readIn[imate].good()) {
+                        P.inOut->readIn[imate].ignore(numeric_limits<streamsize>::max(), '\n');
+                    }
+                }
             }
         }
         
-        // Reset skipToFileIndex after skipping
-        P.quant.slam.skipToFileIndex = -1;
+            // Reset skipToFileIndex after skipping
+            P.quant.slam.skipToFileIndex = -1;
+        }  // end re-check condition
         
         if (P.runThreadN > 1) pthread_mutex_unlock(&g_threadChunks.mutexInRead);
     }
@@ -257,6 +276,36 @@ void ReadAlignChunk::processChunks() {//read-map-write chunks
 
                 if (newFile) {
                         P.inOut->readIn[0] >> P.readFilesIndex;
+                        
+                        // Check for per-file stop BEFORE processing the new file
+                        // This ensures we don't process any reads from the next file
+                        bool shouldStop = false;
+                        
+                        // Auto-trim detection: stop at file boundary for trimScope=first
+                        if (P.quant.slam.autoTrimDetectionPass && P.quant.slam.trimScope == "first") {
+                            if (P.readFilesIndex > detectionStartFileIndex) {
+                                P.inOut->logMain << "SLAM auto-trim detection: stopping at file boundary "
+                                                 << "(file " << detectionStartFileIndex << " -> " << P.readFilesIndex << ")\n";
+                                shouldStop = true;
+                            }
+                        }
+                        
+                        // Per-file processing: stop at file boundary during both detection and mapping
+                        if (P.quant.slam.perFileProcessing) {
+                            if (P.readFilesIndex > P.quant.slam.currentFileIndex) {
+                                P.inOut->logMain << "SLAM per-file processing: stopping at file boundary "
+                                                 << "(completed file " << P.quant.slam.currentFileIndex << ")\n";
+                                shouldStop = true;
+                            }
+                        }
+                        
+                        if (shouldStop) {
+                            noReadsLeft = true;
+                            newFile = false;
+                            break;
+                        }
+                        
+                        // Only log "Starting to map file" if we're actually going to process it
                         pthread_mutex_lock(&g_threadChunks.mutexLogMain);
                         P.inOut->logMain << "Starting to map file # " << P.readFilesIndex<<"\n";
                         for (uint imate=0; imate<P.readFilesNames.size(); imate++) {
@@ -266,26 +315,6 @@ void ReadAlignChunk::processChunks() {//read-map-write chunks
                         P.inOut->logMain<<flush;
                         pthread_mutex_unlock(&g_threadChunks.mutexLogMain);
                         newFile=false;
-                        
-                        // Auto-trim detection: stop at file boundary for trimScope=first
-                        if (P.quant.slam.autoTrimDetectionPass && P.quant.slam.trimScope == "first") {
-                            if (P.readFilesIndex > detectionStartFileIndex) {
-                                P.inOut->logMain << "SLAM auto-trim detection: stopping at file boundary "
-                                                 << "(file " << detectionStartFileIndex << " -> " << P.readFilesIndex << ")\n";
-                                noReadsLeft = true;
-                                break;
-                            }
-                        }
-                        
-                        // Per-file processing: stop at file boundary during both detection and mapping
-                        if (P.quant.slam.perFileProcessing) {
-                            if (P.readFilesIndex > P.quant.slam.currentFileIndex) {
-                                P.inOut->logMain << "SLAM per-file processing: stopping at file boundary "
-                                                 << "(completed file " << P.quant.slam.currentFileIndex << ")\n";
-                                noReadsLeft = true;
-                                break;
-                            }
-                        }
                 };
             };
             //TODO: check here that both mates are zero or non-zero

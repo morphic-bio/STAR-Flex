@@ -187,6 +187,9 @@ BAMoutput::~BAMoutput() {
 void BAMoutput::unsortedOneAlign (char *bamIn, uint bamSize, uint bamSize2, uint64_t iReadAll, uint8_t sampleByte,
                                   uint32_t cbIdxPlus1, uint32_t umi24, const std::string &cbSeq, bool hasY) {
     if (bamSize==0) return; //no output, could happen if one of the mates is not mapped
+    
+    // Skip output during auto-trim detection pass
+    if (P.quant.slam.autoTrimDetectionPass) return;
 
     if (binBytes1+bamSize2 > bamArraySize) {//write out this buffer
         flushPendingToLedgerAndDisk();
@@ -461,6 +464,9 @@ void BAMoutput::unsortedFlush () {//flush all alignments
 };
 
 void BAMoutput::coordOneAlign (char *bamIn, uint bamSize, uint iRead, bool hasY) {
+    // Skip output during auto-trim detection pass
+    if (P.quant.slam.autoTrimDetectionPass) return;
+    
     // Branch to samtools sorter if enabled
     if (P.outBAMsortMethod == "samtools" && g_samtoolsSorter != nullptr) {
         // Extract readId from iRead (bits[63:32])

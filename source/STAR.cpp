@@ -517,6 +517,9 @@ int main(int argInN, char *argIn[])
                                               libem_transcriptome.get());
         }
         
+        // Stats accumulator for tracking across files (detection reads excluded)
+        Stats accumulatedStats;
+        
         // Process each file: detection + mapping
         for (int fileIdx = 0; fileIdx < P.quant.slam.totalFileCount; fileIdx++) {
             P.quant.slam.currentFileIndex = fileIdx;
@@ -604,6 +607,16 @@ int main(int argInN, char *argIn[])
             delete RAdetect;
             P.quant.slam.autoTrimDetectionPass = false;
             
+            // Reset stats after each file's detection (detection reads should not show in final totals)
+            g_statsAll.resetN();
+            time(&g_statsAll.timeStartMap);
+            g_statsAll.timeLastReport = g_statsAll.timeStartMap;
+            
+            // Restore accumulated stats from previous files (saved at end of previous file's mapping)
+            if (fileIdx > 0) {
+                g_statsAll.addStats(accumulatedStats);
+            }
+            
             // --- PHASE 2: Rewind to start of this file and map ---
             P.inOut->logMain << timeMonthDayTime() << " ..... mapping phase for file " << fileIdx 
                              << " with trim5p=" << P.quant.slam.compatTrim5p 
@@ -615,6 +628,7 @@ int main(int argInN, char *argIn[])
             g_threadChunks.chunkInN = 0;
             g_threadChunks.chunkOutN = 0;
             P.readFilesIndex = 0;
+            g_bamRecordIndex.store(0);  // Reset BAM record index
             P.openReadsFiles();
             
             P.quant.slam.skipToFileIndex = fileIdx;  // Skip to target file for mapping
@@ -633,8 +647,8 @@ int main(int argInN, char *argIn[])
             
             P.inOut->logMain << timeMonthDayTime() << " ..... finished mapping file " << fileIdx << "\n";
             
-            // Reset for next file iteration
-            // Note: stats accumulate across files (which is desired)
+            // Save accumulated stats at end of this file's mapping (for next file to restore)
+            accumulatedStats = g_statsAll;
         }
         
         // DON'T delete RAchunk here - keep it for post-processing (SLAM quantification, etc.)
