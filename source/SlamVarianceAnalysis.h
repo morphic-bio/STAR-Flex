@@ -50,21 +50,32 @@ struct SlamPositionVarianceStats {
     }
 };
 
+// Segmented regression fit info for a single segment
+struct SegmentFit {
+    double slope = 0.0;
+    double intercept = 0.0;
+    double sse = 0.0;
+};
+
 // Variance analysis results
 struct SlamVarianceTrimResult {
     int trim5p = 0;
     int trim3p = 0;
     bool success = false;
-    std::string mode;                  // "auto", "auto_fallback", "manual"
+    std::string mode;                  // "auto_segmented", "auto_fallback", "manual"
     uint64_t readsAnalyzed = 0;
-    uint32_t kneeBin5p = 0;
-    uint32_t kneeBin3p = 0;
+    uint32_t kneeBin5p = 0;            // breakpoint b1 (for backward compat)
+    uint32_t kneeBin3p = 0;            // breakpoint b2 (for backward compat)
+    double totalSSE = 0.0;             // total SSE of segmented fit
+    SegmentFit seg1, seg2, seg3;       // fit info for each segment
+    std::vector<double> smoothedCurve; // smoothed stdev curve for QC output
 };
 
 // Variance analyzer for auto-trim
 class SlamVarianceAnalyzer {
 public:
-    SlamVarianceAnalyzer(uint32_t maxReads = 100000, uint32_t minReads = 1000);
+    SlamVarianceAnalyzer(uint32_t maxReads = 100000, uint32_t minReads = 1000,
+                         uint32_t smoothWindow = 5, uint32_t minSegLen = 3, uint32_t maxTrim = 15);
     
     // Record a read (call once per read before recording positions)
     bool recordRead();
@@ -72,7 +83,7 @@ public:
     // Record a position observation (only if readsAnalyzed_ < maxReads_)
     void recordPosition(uint32_t readPos, uint8_t qual, bool isT, bool isTc);
     
-    // Compute trim values from variance curves
+    // Compute trim values using segmented regression on smoothed stdev curve
     SlamVarianceTrimResult computeTrim(uint32_t readLength);
     
     // Get per-position statistics
@@ -94,11 +105,28 @@ private:
     uint64_t readsAnalyzed_;
     uint32_t maxReads_;
     uint32_t minReads_;
+    uint32_t smoothWindow_;   // Median smoothing window (default 5)
+    uint32_t minSegLen_;      // Minimum segment length (default 3)
+    uint32_t maxTrim_;        // Maximum trim at either end (default 15)
     
-    // Knee detection helper (similar to SNP threshold estimation)
-    static std::pair<uint32_t, uint32_t> detectKnee(
-        const std::vector<double>& varianceCurve,
-        uint32_t maxPos);
+    // Smooth a curve using median window
+    static std::vector<double> smoothMedian(const std::vector<double>& values, uint32_t window);
+    
+    // Linear interpolation for missing values (NaN)
+    static void interpolateMissing(std::vector<double>& values);
+    
+    // Fit a linear segment and return slope, intercept, SSE using prefix sums
+    static SegmentFit fitSegment(const std::vector<double>& prefixX,
+                                  const std::vector<double>& prefixXX,
+                                  const std::vector<double>& prefixY,
+                                  const std::vector<double>& prefixXY,
+                                  const std::vector<double>& prefixYY,
+                                  const std::vector<double>& y,
+                                  uint32_t start, uint32_t end);
+    
+    // Segmented regression with 2 breakpoints
+    static std::tuple<uint32_t, uint32_t, double, SegmentFit, SegmentFit, SegmentFit>
+    segmentedRegression(const std::vector<double>& y, uint32_t minSegLen, uint32_t maxTrim);
 };
 
 #endif // SLAM_VARIANCE_ANALYSIS_H

@@ -416,11 +416,14 @@ class Parameters {
                 int compatTrim5p = 0;             // 5' trim guard
                 int compatTrim3p = 0;             // 3' trim guard
                 
-                // Auto-trim variance analysis
+                // Auto-trim variance analysis (segmented regression on T→C stdev curve)
                 string autoTrimMode = "";         // ""=disabled, "variance"=variance-based
                 string trimScope = "first";        // "first"=shared from first file, "per-file"=per-file
                 int autoTrimMaxReads = 100000;    // Max reads to scan for variance (0=unlimited)
                 int autoTrimMinReads = 1000;      // Minimum reads required for auto-trim
+                int autoTrimSmoothWindow = 5;     // Median smoothing window for stdev curve
+                int autoTrimSegMinLen = 3;        // Minimum segment length for segmented regression
+                int autoTrimMaxTrim = 15;         // Maximum trim at either end
                 string slamQcJson = "";           // Path for QC JSON output (empty=auto-generate)
                 string slamQcHtml = "";            // Path for QC HTML output (empty=auto-generate)
                 int autoTrim5p = 0;               // Auto-computed 5' trim (0=not computed)

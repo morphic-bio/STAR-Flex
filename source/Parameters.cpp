@@ -415,6 +415,9 @@ Parameters::Parameters() {//initalize parameters info
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "trimScope", &quant.slam.trimScope));
     parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "autoTrimMaxReads", &quant.slam.autoTrimMaxReads));
     parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "autoTrimMinReads", &quant.slam.autoTrimMinReads));
+    parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "autoTrimSmoothWindow", &quant.slam.autoTrimSmoothWindow));
+    parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "autoTrimSegMinLen", &quant.slam.autoTrimSegMinLen));
+    parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "autoTrimMaxTrim", &quant.slam.autoTrimMaxTrim));
     parArray.push_back(new ParameterInfoScalar <uint64_t> (-1, -1, "autoTrimBufferReads", &quant.slam.autoTrimBufferReads));
     parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "autoTrimDetectionReads", &quant.slam.autoTrimDetectionReads));
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamQcJson", &quant.slam.slamQcJson));

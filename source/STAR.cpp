@@ -413,28 +413,36 @@ int main(int argInN, char *argIn[])
                 P.quant.slam.compatTrim5p = trimResult.trim5p;
                 P.quant.slam.compatTrim3p = trimResult.trim3p;
                 
-                P.inOut->logMain << "SLAM auto-trim (variance) computed: trim5p=" << trimResult.trim5p
+                P.inOut->logMain << "SLAM auto-trim (segmented regression) computed:\n"
+                                 << "    trim5p=" << trimResult.trim5p
                                  << " trim3p=" << trimResult.trim3p
-                                 << " reads_analyzed=" << trimResult.readsAnalyzed
+                                 << " mode=" << trimResult.mode << "\n"
+                                 << "    breakpoints: b1=" << trimResult.kneeBin5p 
+                                 << " b2=" << trimResult.kneeBin3p 
+                                 << " total_sse=" << trimResult.totalSSE << "\n"
+                                 << "    reads_analyzed=" << trimResult.readsAnalyzed
                                  << " detection_reads_processed=" << detectionReadsProcessed
-                                 << " min_reads=" << P.quant.slam.autoTrimMinReads
-                                 << " mode=" << trimResult.mode
+                                 << " min_reads=" << P.quant.slam.autoTrimMinReads << "\n"
+                                 << "    smooth_window=" << P.quant.slam.autoTrimSmoothWindow
+                                 << " min_seg_len=" << P.quant.slam.autoTrimSegMinLen
+                                 << " max_trim=" << P.quant.slam.autoTrimMaxTrim
                                  << " scope=" << P.quant.slam.trimScope << "\n";
                 
                 // Write QC outputs from detection pass
                 const SlamVarianceAnalyzer* analyzer = RAdetect->slamQuant->varianceAnalyzer();
                 if (analyzer != nullptr) {
                     std::string qcJsonPath = P.quant.slam.slamQcJson;
-                    if (qcJsonPath.empty()) {
+                    if (qcJsonPath.empty() || qcJsonPath == "-") {
                         qcJsonPath = P.outFileNamePrefix + "slam_qc.json";
                     }
-                    if (writeSlamQcJson(*analyzer, qcJsonPath, 
+                    bool writeResult = writeSlamQcJson(*analyzer, qcJsonPath, 
                                         P.quant.slam.autoTrimFileIndex, P.quant.slam.trimScope,
-                                        trimResult.trim5p, trimResult.trim3p, trimResult.readsAnalyzed)) {
+                                        trimResult.trim5p, trimResult.trim3p, trimResult.readsAnalyzed, &trimResult);
+                    if (writeResult) {
                         P.inOut->logMain << "SLAM QC JSON written to: " << qcJsonPath << "\n";
                         
                         std::string qcHtmlPath = P.quant.slam.slamQcHtml;
-                        if (qcHtmlPath.empty()) {
+                        if (qcHtmlPath.empty() || qcHtmlPath == "-") {
                             qcHtmlPath = P.outFileNamePrefix + "slam_qc.html";
                         }
                         if (writeSlamQcHtml(qcJsonPath, qcHtmlPath, P.quant.slam.autoTrimFileIndex)) {
@@ -577,15 +585,20 @@ int main(int argInN, char *argIn[])
                     P.quant.slam.compatTrim5p = trimResult.trim5p;
                     P.quant.slam.compatTrim3p = trimResult.trim3p;
                     
-                    P.inOut->logMain << "SLAM auto-trim (file " << fileIdx << "): trim5p=" << trimResult.trim5p
+                    P.inOut->logMain << "SLAM auto-trim (file " << fileIdx << ", segmented regression):\n"
+                                     << "    trim5p=" << trimResult.trim5p
                                      << " trim3p=" << trimResult.trim3p
-                                     << " reads_analyzed=" << trimResult.readsAnalyzed << "\n";
+                                     << " mode=" << trimResult.mode << "\n"
+                                     << "    breakpoints: b1=" << trimResult.kneeBin5p 
+                                     << " b2=" << trimResult.kneeBin3p 
+                                     << " total_sse=" << trimResult.totalSSE << "\n"
+                                     << "    reads_analyzed=" << trimResult.readsAnalyzed << "\n";
                     
                     // Write per-file QC outputs
                     const SlamVarianceAnalyzer* analyzer = RAdetect->slamQuant->varianceAnalyzer();
                     if (analyzer != nullptr) {
                         std::string qcJsonPath = P.quant.slam.slamQcJson;
-                        if (qcJsonPath.empty()) {
+                        if (qcJsonPath.empty() || qcJsonPath == "-") {
                             qcJsonPath = P.outFileNamePrefix + "slam_qc_file" + std::to_string(fileIdx) + ".json";
                         } else if (P.quant.slam.totalFileCount > 1) {
                             // Append file index to user-specified path
@@ -595,7 +608,7 @@ int main(int argInN, char *argIn[])
                             }
                         }
                         if (writeSlamQcJson(*analyzer, qcJsonPath, fileIdx, P.quant.slam.trimScope,
-                                            trimResult.trim5p, trimResult.trim3p, trimResult.readsAnalyzed)) {
+                                            trimResult.trim5p, trimResult.trim3p, trimResult.readsAnalyzed, &trimResult)) {
                             P.inOut->logMain << "SLAM QC JSON written to: " << qcJsonPath << "\n";
                         }
                     }

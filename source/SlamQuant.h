@@ -153,7 +153,8 @@ public:
     SlamVarianceTrimResult computeVarianceTrim(uint32_t readLength);
     bool varianceAnalysisEnabled() const { return varianceAnalyzer_ != nullptr; }
     const SlamVarianceAnalyzer* varianceAnalyzer() const { return varianceAnalyzer_.get(); }
-    void enableVarianceAnalysis(uint32_t maxReads, uint32_t minReads);
+    void enableVarianceAnalysis(uint32_t maxReads, uint32_t minReads,
+                                uint32_t smoothWindow = 5, uint32_t minSegLen = 3, uint32_t maxTrim = 15);
     void resetVarianceAnalysis();
     uint32_t getVarianceMaxReads() const;
     uint32_t getVarianceMinReads() const;

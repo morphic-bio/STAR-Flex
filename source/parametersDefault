@@ -1050,6 +1050,19 @@ autoTrimMaxReads                     100000
 autoTrimMinReads                     1000
     int: Minimum number of reads required for auto-trim computation
 
+autoTrimSmoothWindow                 5
+    int: Median smoothing window size for T→C stdev curve (default 5)
+    Used in segmented regression auto-trim to reduce noise before fitting.
+
+autoTrimSegMinLen                    3
+    int: Minimum segment length for segmented regression (default 3)
+    Each of the three segments (5' artifact, middle signal, 3' artifact) must have
+    at least this many positions.
+
+autoTrimMaxTrim                      15
+    int: Maximum trim to apply at either end (default 15)
+    Breakpoints beyond this limit will be clamped.
+
 autoTrimBufferReads                   1000000
     uint64_t: Deprecated - legacy parameter (ignored with rewind-based auto-trim)
 

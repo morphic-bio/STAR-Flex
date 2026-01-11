@@ -87,7 +87,12 @@ ReadAlignChunk::ReadAlignChunk(Parameters& Pin, Genome &genomeIn, Transcriptome 
         // With rewind approach, detection pass collects variance stats, then files are rewound
         // and main mapping pass uses computed trims from the start
         if (P.quant.slam.autoTrimMode == "variance" && P.quant.slam.autoTrimDetectionPass) {
-            slamQuant->enableVarianceAnalysis(P.quant.slam.autoTrimMaxReads, P.quant.slam.autoTrimMinReads);
+            slamQuant->enableVarianceAnalysis(
+                P.quant.slam.autoTrimMaxReads, 
+                P.quant.slam.autoTrimMinReads,
+                P.quant.slam.autoTrimSmoothWindow,
+                P.quant.slam.autoTrimSegMinLen,
+                P.quant.slam.autoTrimMaxTrim);
         }
         
         // Create SlamCompat if any compat mode is enabled or auto-trim is active

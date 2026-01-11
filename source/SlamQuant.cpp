@@ -47,10 +47,11 @@ SlamQuant::SlamQuant(uint32_t nGenes, std::vector<uint8_t> allowedGenes, bool sn
     : geneStats_(nGenes), snpDetectEnabled_(snpDetect), snpMismatchFrac_(snpMismatchFrac),
       allowedGenes_(std::move(allowedGenes)) {}
 
-void SlamQuant::enableVarianceAnalysis(uint32_t maxReads, uint32_t minReads) {
+void SlamQuant::enableVarianceAnalysis(uint32_t maxReads, uint32_t minReads,
+                                       uint32_t smoothWindow, uint32_t minSegLen, uint32_t maxTrim) {
     varianceMaxReads_ = maxReads;
     varianceMinReads_ = minReads;
-    varianceAnalyzer_.reset(new SlamVarianceAnalyzer(maxReads, minReads));
+    varianceAnalyzer_.reset(new SlamVarianceAnalyzer(maxReads, minReads, smoothWindow, minSegLen, maxTrim));
 }
 
 uint32_t SlamQuant::getVarianceMaxReads() const {
@@ -517,10 +518,10 @@ void SlamQuant::merge(const SlamQuant& other) {
     if (other.varianceAnalyzer_ && varianceAnalyzer_) {
         varianceAnalyzer_->merge(*other.varianceAnalyzer_);
     } else if (other.varianceAnalyzer_ && !varianceAnalyzer_) {
-        // Copy variance analyzer if we don't have one
+        // Copy variance analyzer if we don't have one (use defaults for segmented regression params)
         uint32_t maxReads = other.varianceAnalyzer_->readsAnalyzed() > 0 ? 
             static_cast<uint32_t>(other.varianceAnalyzer_->readsAnalyzed()) : 100000;
-        varianceAnalyzer_.reset(new SlamVarianceAnalyzer(maxReads, 1000));
+        varianceAnalyzer_.reset(new SlamVarianceAnalyzer(maxReads, 1000, 5, 3, 15));
         varianceAnalyzer_->merge(*other.varianceAnalyzer_);
     }
     
