@@ -44,9 +44,10 @@ void SlamVarianceAnalyzer::recordPosition(uint32_t readPos, uint8_t qual, bool i
         if (isTc) {
             stats.tcCount++;
         }
-        // Track per-read T→C rate (will be averaged later)
+        // Track per-T-base T→C indicator (0 or 1) for variance calculation
         double tcRate = isTc ? 1.0 : 0.0;
         stats.tcRateSum += tcRate;
+        stats.tcRateSumSq += tcRate * tcRate;  // For variance: sum of squares
         stats.tcRateCount++;
     }
 }
@@ -152,6 +153,7 @@ void SlamVarianceAnalyzer::merge(const SlamVarianceAnalyzer& other) {
         stats.qualCount += otherStats.qualCount;
         stats.qualSumSq += otherStats.qualSumSq;
         stats.tcRateSum += otherStats.tcRateSum;
+        stats.tcRateSumSq += otherStats.tcRateSumSq;
         stats.tcRateCount += otherStats.tcRateCount;
     }
 }
@@ -173,6 +175,9 @@ SlamVarianceTrimResult SlamVarianceAnalyzer::computeTrim(uint32_t readLength) {
     }
     
     // Build variance curve from position statistics
+    // We use the VARIANCE (or stdev) of T→C rate across reads at each position
+    // High variance indicates inconsistent conversion - likely artifacts
+    // Low variance indicates consistent signal - either true conversions or no conversions
     std::vector<double> varianceCurve(readLength, 0.0);
     uint32_t maxPos = 0;
     
@@ -183,17 +188,21 @@ SlamVarianceTrimResult SlamVarianceAnalyzer::computeTrim(uint32_t readLength) {
         }
         const auto& stats = kv.second;
         
-        // Use quality variance as primary signal
-        // Higher variance indicates problematic positions
-        double variance = stats.varianceQual();
+        // Primary signal: standard deviation of T→C rate at this position
+        // High stdev = inconsistent conversion = artifact
+        // Low stdev = consistent (either all convert or none convert) = signal
+        double tcStddev = stats.stddevTcRate();
         
-        // Also consider T→C rate variance (high rate = sequencing error)
-        double tcRate = stats.meanTcRate();
-        if (tcRate > 0.1) {  // Elevated T→C rate suggests error
-            variance += tcRate * 10.0;  // Weight T→C rate contribution
-        }
+        // Secondary signal: quality score variance (optional, lower weight)
+        // High quality variance can also indicate problematic positions
+        double qualStddev = stats.stddevQual();
         
-        varianceCurve[pos] = variance;
+        // Combined signal: primarily T→C stdev, with small quality contribution
+        // T→C stdev is on 0-0.5 scale (max variance for Bernoulli is 0.25, stdev = 0.5)
+        // Quality stdev is on 0-~10 scale typically
+        double combinedVariance = tcStddev + (qualStddev / 100.0);  // Normalize quality contribution
+        
+        varianceCurve[pos] = combinedVariance;
         if (pos > maxPos) {
             maxPos = pos;
         }

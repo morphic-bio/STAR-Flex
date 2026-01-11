@@ -15,8 +15,9 @@ struct SlamPositionVarianceStats {
     double qualSum = 0.0;              // Sum of quality scores
     uint64_t qualCount = 0;            // Count of quality scores
     double qualSumSq = 0.0;            // Sum of squares for variance calculation
-    double tcRateSum = 0.0;           // Sum of T→C rates (for per-read averaging)
-    uint64_t tcRateCount = 0;         // Count of reads with T bases
+    double tcRateSum = 0.0;           // Sum of T→C rates (0 or 1 per T base)
+    double tcRateSumSq = 0.0;         // Sum of squares of T→C rates for variance
+    uint64_t tcRateCount = 0;         // Count of T bases observed
     
     // Computed statistics
     double meanQual() const {
@@ -35,6 +36,17 @@ struct SlamPositionVarianceStats {
     
     double meanTcRate() const {
         return tcRateCount > 0 ? tcRateSum / tcRateCount : 0.0;
+    }
+    
+    // Variance of T→C rate across reads at this position
+    double varianceTcRate() const {
+        if (tcRateCount < 2) return 0.0;
+        double mean = meanTcRate();
+        return (tcRateSumSq / tcRateCount) - (mean * mean);
+    }
+    
+    double stddevTcRate() const {
+        return std::sqrt(varianceTcRate());
     }
 };
 
