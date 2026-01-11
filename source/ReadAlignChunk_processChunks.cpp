@@ -15,6 +15,49 @@ void ReadAlignChunk::processChunks() {//read-map-write chunks
     
     noReadsLeft=false; //true if there no more reads left in the file
     bool newFile=false; //new file marker in the input stream
+    
+    // Track file index for auto-trim detection (file boundary detection)
+    int detectionStartFileIndex = P.readFilesIndex;
+    
+    // Per-file processing: skip to the target file if needed
+    // This is used when we've rewound and need to skip to a specific file for mapping
+    if (P.quant.slam.skipToFileIndex > 0 && P.readFilesIndex < P.quant.slam.skipToFileIndex) {
+        if (P.runThreadN > 1) pthread_mutex_lock(&g_threadChunks.mutexInRead);
+        
+        P.inOut->logMain << "SLAM per-file: skipping to file " << P.quant.slam.skipToFileIndex 
+                         << " (currently at file " << P.readFilesIndex << ")\n";
+        
+        // Skip reads until we reach the target file
+        while (P.readFilesIndex < P.quant.slam.skipToFileIndex && P.inOut->readIn[0].good()) {
+            string line;
+            std::getline(P.inOut->readIn[0], line);
+            
+            // Check for FILE marker
+            if (line.substr(0, 4) == "FILE") {
+                std::istringstream iss(line);
+                string marker;
+                int fileIdx;
+                iss >> marker >> fileIdx;
+                P.readFilesIndex = fileIdx;
+                
+                // Skip the file marker line for all mates
+                for (uint imate = 1; imate < P.readFilesNames.size(); imate++) {
+                    P.inOut->readIn[imate].ignore(numeric_limits<streamsize>::max(), '\n');
+                }
+                
+                if (P.readFilesIndex >= P.quant.slam.skipToFileIndex) {
+                    P.inOut->logMain << "SLAM per-file: reached file " << P.readFilesIndex << "\n";
+                    break;
+                }
+            }
+        }
+        
+        // Reset skipToFileIndex after skipping
+        P.quant.slam.skipToFileIndex = -1;
+        
+        if (P.runThreadN > 1) pthread_mutex_unlock(&g_threadChunks.mutexInRead);
+    }
+    
     while (!noReadsLeft) {//continue until the input EOF
             //////////////read a chunk from input files and store in memory
         if (P.outFilterBySJoutStage<2) {//read chunks from input file
@@ -223,6 +266,26 @@ void ReadAlignChunk::processChunks() {//read-map-write chunks
                         P.inOut->logMain<<flush;
                         pthread_mutex_unlock(&g_threadChunks.mutexLogMain);
                         newFile=false;
+                        
+                        // Auto-trim detection: stop at file boundary for trimScope=first
+                        if (P.quant.slam.autoTrimDetectionPass && P.quant.slam.trimScope == "first") {
+                            if (P.readFilesIndex > detectionStartFileIndex) {
+                                P.inOut->logMain << "SLAM auto-trim detection: stopping at file boundary "
+                                                 << "(file " << detectionStartFileIndex << " -> " << P.readFilesIndex << ")\n";
+                                noReadsLeft = true;
+                                break;
+                            }
+                        }
+                        
+                        // Per-file processing: stop at file boundary during both detection and mapping
+                        if (P.quant.slam.perFileProcessing) {
+                            if (P.readFilesIndex > P.quant.slam.currentFileIndex) {
+                                P.inOut->logMain << "SLAM per-file processing: stopping at file boundary "
+                                                 << "(completed file " << P.quant.slam.currentFileIndex << ")\n";
+                                noReadsLeft = true;
+                                break;
+                            }
+                        }
                 };
             };
             //TODO: check here that both mates are zero or non-zero
@@ -272,7 +335,8 @@ void ReadAlignChunk::processChunks() {//read-map-write chunks
         }
     }
 
-    if (P.outFilterBySJoutStage!=1 && RA->iRead>0) {//not the first stage of the 2-stage mapping
+    // Skip output operations during auto-trim detection pass (detection-only mode)
+    if (P.outFilterBySJoutStage!=1 && RA->iRead>0 && !P.quant.slam.autoTrimDetectionPass) {//not the first stage of the 2-stage mapping, and not detection-only
         if (P.outBAMunsorted && chunkOutBAMunsorted!=NULL) chunkOutBAMunsorted->unsortedFlush();
         if (P.outBAMcoord) chunkOutBAMcoord->coordFlush();
         if (chunkOutBAMquant!=NULL) chunkOutBAMquant->unsortedFlush();

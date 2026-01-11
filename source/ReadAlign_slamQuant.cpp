@@ -1,6 +1,7 @@
 #include "ReadAlign.h"
 #include "SlamQuant.h"
 #include "SlamCompat.h"
+#include "SlamReadBuffer.h"
 #include <sstream>
 
 namespace {
@@ -69,6 +70,7 @@ inline std::string buildReadLoc(const Transcript& trOut, const Genome& genOut) {
     }
     return oss.str();
 }
+
 } // namespace
 
 bool ReadAlign::slamCollect(const Transcript& trOut, const std::set<uint32_t>& geneIds, double weight, bool isIntronic) {
@@ -103,9 +105,16 @@ bool ReadAlign::slamCollect(const Transcript& trOut, const std::set<uint32_t>& g
         return false;
     }
 
+    // Record read for variance analysis (only during detection pass)
+    bool varianceCollecting = false;
+    if (slamQuant && slamQuant->varianceAnalysisEnabled() && P.quant.slam.autoTrimDetectionPass) {
+        varianceCollecting = slamQuant->recordVarianceRead();
+    }
+    
     char* R = Read1[trOut.roStr == 0 ? 0 : 2];
     bool isMinus = (trOut.Str == 1);
     bool oppositeStrand = isOppositeStrand(*chunkTr, geneIds, trOut.Str);
+    
     bool debugGeneMatch = false;
     if (debugEnabled && slamQuant->debugGenesEnabled()) {
         for (uint32_t geneId : geneIds) {
@@ -285,6 +294,36 @@ bool ReadAlign::slamCollect(const Transcript& trOut, const std::set<uint32_t>& g
                 }
             }
             
+            // Get quality score for this position (needed for variance and buffering)
+            uint8_t qual = 30; // Default quality if not available
+            if (Qual0 && !secondMate && readPos < readLength[0] && Qual0[0] && readPos < strlen(Qual0[0])) {
+                qual = static_cast<uint8_t>(Qual0[0][readPos] - 33); // Convert ASCII to Phred
+            } else if (Qual0 && secondMate && readLength[1] > 0 && Qual0[1]) {
+                uint32_t mateLocalPos = readPos - static_cast<uint32_t>(readLength[0]);
+                if (mateLocalPos < strlen(Qual0[1])) {
+                    qual = static_cast<uint8_t>(Qual0[1][mateLocalPos] - 33);
+                }
+            }
+            
+            // Record variance stats for auto-trim (before trim filtering, only during detection pass)
+            // Only collect if varianceCollecting is true (read was recorded and under maxReads limit)
+            if (varianceCollecting) {
+                // Determine if this is a T base and if it's a T→C conversion
+                bool isT = false;
+                bool isTc = false;
+                if (!isIntronic) {
+                    if (!isMinus) {
+                        isT = (g1 == 3); // T
+                        isTc = (g1 == 3 && r1 == 1); // T→C
+                    } else {
+                        isT = (g1 == 0); // A (complement of T)
+                        isTc = (g1 == 0 && r1 == 2); // A→G (complement of T→C)
+                    }
+                }
+                
+                slamQuant->recordVariancePosition(readPos, qual, isT, isTc);
+            }
+            
             // Compat position filtering (overlap and trim)
             if (slamCompat) {
                 // Check overlap skip first (only when compatIgnoreOverlap is enabled)
@@ -316,6 +355,7 @@ bool ReadAlign::slamCollect(const Transcript& trOut, const std::set<uint32_t>& g
                     slamQuant->addTransitionBase(senseCategory, readPos, secondMate, overlap, false, g1, r1, weight);
                 }
             }
+            
             if (!isIntronic) {
                 if (!isMinus) {
                     if (g1 == 3) { // T

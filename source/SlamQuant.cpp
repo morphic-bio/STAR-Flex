@@ -1,4 +1,5 @@
 #include "SlamQuant.h"
+#include "SlamCompat.h"
 
 #include "Genome.h"
 #include "Transcriptome.h"
@@ -11,10 +12,16 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <memory>
 
 namespace {
 constexpr uint32_t kSnpMinCoverage = 10;
-constexpr double kSnpMinMismatchFrac = 0.5;
+constexpr double kSnpFallbackMismatchFrac = 0.22;  // Fallback threshold (GEDI parity)
+constexpr double kSnpMinClamp = 0.10;              // Minimum allowed threshold
+constexpr double kSnpMaxClamp = 0.60;              // Maximum allowed threshold
+constexpr uint64_t kSnpMinSitesForAuto = 1000;     // Minimum eligible sites for auto-estimation
+constexpr double kSnpKneeEpsilon = 0.02;           // Minimum knee strength
+constexpr size_t kSnpHistogramBins = 100;          // Number of bins for mismatch fraction histogram
 const char* debugDropReasonName(SlamDebugDropReason reason) {
     switch (reason) {
         case SlamDebugDropReason::None:
@@ -33,12 +40,55 @@ const char* debugDropReasonName(SlamDebugDropReason reason) {
 }
 }
 
-SlamQuant::SlamQuant(uint32_t nGenes, bool snpDetect)
-    : geneStats_(nGenes), snpDetectEnabled_(snpDetect) {}
+SlamQuant::SlamQuant(uint32_t nGenes, bool snpDetect, double snpMismatchFrac)
+    : geneStats_(nGenes), snpDetectEnabled_(snpDetect), snpMismatchFrac_(snpMismatchFrac) {}
 
-SlamQuant::SlamQuant(uint32_t nGenes, std::vector<uint8_t> allowedGenes, bool snpDetect)
-    : geneStats_(nGenes), snpDetectEnabled_(snpDetect),
+SlamQuant::SlamQuant(uint32_t nGenes, std::vector<uint8_t> allowedGenes, bool snpDetect, double snpMismatchFrac)
+    : geneStats_(nGenes), snpDetectEnabled_(snpDetect), snpMismatchFrac_(snpMismatchFrac),
       allowedGenes_(std::move(allowedGenes)) {}
+
+void SlamQuant::enableVarianceAnalysis(uint32_t maxReads, uint32_t minReads) {
+    varianceMaxReads_ = maxReads;
+    varianceMinReads_ = minReads;
+    varianceAnalyzer_.reset(new SlamVarianceAnalyzer(maxReads, minReads));
+}
+
+uint32_t SlamQuant::getVarianceMaxReads() const {
+    return varianceMaxReads_;
+}
+
+uint32_t SlamQuant::getVarianceMinReads() const {
+    return varianceMinReads_;
+}
+
+void SlamQuant::resetVarianceAnalysis() {
+    if (varianceAnalyzer_) {
+        varianceAnalyzer_->reset();
+    }
+}
+
+bool SlamQuant::recordVarianceRead() {
+    if (varianceAnalyzer_) {
+        return varianceAnalyzer_->recordRead();
+    }
+    return false;
+}
+
+void SlamQuant::recordVariancePosition(uint32_t readPos, uint8_t qual, bool isT, bool isTc) {
+    if (varianceAnalyzer_) {
+        varianceAnalyzer_->recordPosition(readPos, qual, isT, isTc);
+    }
+}
+
+SlamVarianceTrimResult SlamQuant::computeVarianceTrim(uint32_t readLength) {
+    if (!varianceAnalyzer_) {
+        SlamVarianceTrimResult result;
+        result.success = false;
+        result.mode = "disabled";
+        return result;
+    }
+    return varianceAnalyzer_->computeTrim(readLength);
+}
 
 void SlamQuant::initDebug(const Transcriptome& tr,
                           const std::unordered_set<std::string>& debugGenes,
@@ -225,6 +275,92 @@ void SlamQuant::bufferSnpRead(uint32_t geneId, uint16_t nT,
     snpReadWeights_.push_back(weight);
 }
 
+// Estimate SNP mismatch threshold using knee/elbow detection on cumulative distribution
+// Returns: pair<threshold, kneeBin>; threshold=0 indicates fallback
+static std::pair<double, uint32_t> estimateSnpMismatchFrac(
+    const std::unordered_map<uint64_t, uint32_t>& snpMask, uint64_t* eligibleSites) {
+    
+    // Build histogram of mismatch fractions for eligible sites
+    std::vector<uint64_t> histogram(kSnpHistogramBins, 0);
+    uint64_t totalEligible = 0;
+    
+    for (const auto& kv : snpMask) {
+        uint32_t cov = kv.second >> 16;
+        uint32_t mis = kv.second & 0xFFFF;
+        if (cov >= kSnpMinCoverage && cov > 0) {
+            double frac = static_cast<double>(mis) / static_cast<double>(cov);
+            // Clamp to [0, 1] and bin
+            if (frac < 0.0) frac = 0.0;
+            if (frac > 1.0) frac = 1.0;
+            size_t bin = static_cast<size_t>(frac * (kSnpHistogramBins - 1));
+            if (bin >= kSnpHistogramBins) bin = kSnpHistogramBins - 1;
+            histogram[bin]++;
+            totalEligible++;
+        }
+    }
+    
+    if (eligibleSites) *eligibleSites = totalEligible;
+    
+    // Check minimum sites requirement
+    if (totalEligible < kSnpMinSitesForAuto) {
+        return {0.0, 0};  // Fallback
+    }
+    
+    // Compute cumulative counts N(>= f) from high to low bins
+    std::vector<double> cumulative(kSnpHistogramBins, 0.0);
+    uint64_t runningSum = 0;
+    for (int i = static_cast<int>(kSnpHistogramBins) - 1; i >= 0; --i) {
+        runningSum += histogram[i];
+        cumulative[i] = static_cast<double>(runningSum);
+    }
+    
+    // Apply log1p transformation for stability
+    std::vector<double> logCumulative(kSnpHistogramBins);
+    for (size_t i = 0; i < kSnpHistogramBins; ++i) {
+        logCumulative[i] = std::log1p(cumulative[i]);
+    }
+    
+    // Normalize x (bin centers) and y (log counts) to [0, 1]
+    double xMin = 0.0;
+    double xMax = 1.0;
+    double yMin = logCumulative[kSnpHistogramBins - 1];  // Smallest (high frac end)
+    double yMax = logCumulative[0];                       // Largest (low frac end)
+    
+    if (yMax <= yMin) {
+        return {0.0, 0};  // Flat distribution, fallback
+    }
+    
+    // Kneedle algorithm: find max distance from diagonal y = 1 - x
+    // In normalized space, diagonal goes from (0,1) to (1,0)
+    // Distance formula: maximize (y_norm + x_norm - 1)
+    double maxDist = -1.0;
+    size_t kneeBin = 0;
+    
+    for (size_t i = 0; i < kSnpHistogramBins; ++i) {
+        double xNorm = (static_cast<double>(i) / (kSnpHistogramBins - 1) - xMin) / (xMax - xMin);
+        double yNorm = (logCumulative[i] - yMin) / (yMax - yMin);
+        double dist = yNorm + xNorm - 1.0;
+        if (dist > maxDist) {
+            maxDist = dist;
+            kneeBin = i;
+        }
+    }
+    
+    // Check knee strength
+    if (maxDist < kSnpKneeEpsilon) {
+        return {0.0, 0};  // Weak knee, fallback
+    }
+    
+    // Convert bin to mismatch fraction threshold
+    double threshold = static_cast<double>(kneeBin) / (kSnpHistogramBins - 1);
+    
+    // Clamp to valid range
+    if (threshold < kSnpMinClamp) threshold = kSnpMinClamp;
+    if (threshold > kSnpMaxClamp) threshold = kSnpMaxClamp;
+    
+    return {threshold, static_cast<uint32_t>(kneeBin)};
+}
+
 void SlamQuant::finalizeSnpMask(SlamSnpBufferStats* outStats) {
     if (outStats) {
         *outStats = SlamSnpBufferStats();
@@ -242,21 +378,57 @@ void SlamQuant::finalizeSnpMask(SlamSnpBufferStats* outStats) {
     if (snpReadBuffer_.empty()) {
         return;
     }
+    
+    // Determine mismatch fraction threshold
+    double mismatchFracUsed = 0.0;
+    double mismatchFracAuto = 0.0;
+    uint32_t kneeBin = 0;
+    uint64_t eligibleSites = 0;
+    std::string mode;
+    
+    if (snpMismatchFrac_ > 0.0) {
+        // Explicit threshold provided
+        mismatchFracUsed = snpMismatchFrac_;
+        mode = "explicit";
+    } else {
+        // Auto-estimate threshold
+        auto [autoThreshold, autoBin] = estimateSnpMismatchFrac(snpMask_, &eligibleSites);
+        mismatchFracAuto = autoThreshold;
+        kneeBin = autoBin;
+        
+        if (autoThreshold > 0.0) {
+            mismatchFracUsed = autoThreshold;
+            mode = "auto";
+        } else {
+            // Fallback to default
+            mismatchFracUsed = kSnpFallbackMismatchFrac;
+            mode = "auto_fallback";
+        }
+    }
+    
+    // Build blacklist using determined threshold
     std::unordered_set<uint64_t> blacklist;
     blacklist.reserve(snpMask_.size());
     for (const auto &kv : snpMask_) {
         uint32_t cov = kv.second >> 16;
         uint32_t mis = kv.second & 0xFFFF;
-        if (cov > kSnpMinCoverage && cov > 0) {
+        if (cov >= kSnpMinCoverage && cov > 0) {
             double rate = static_cast<double>(mis) / static_cast<double>(cov);
-            if (rate > kSnpMinMismatchFrac) {
+            if (rate > mismatchFracUsed) {
                 blacklist.insert(kv.first);
             }
         }
     }
+    
     if (outStats) {
         outStats->blacklistEntries = blacklist.size();
+        outStats->mismatchFracUsed = mismatchFracUsed;
+        outStats->mismatchFracAuto = mismatchFracAuto;
+        outStats->mismatchFracMode = mode;
+        outStats->kneeBin = kneeBin;
+        outStats->eligibleSites = eligibleSites;
     }
+    
     uint64_t totalMismatches = 0;
     uint64_t totalMismatchesKept = 0;
     size_t idx = 0;
@@ -341,6 +513,17 @@ void SlamQuant::merge(const SlamQuant& other) {
             dst.histogram[kv.first] += kv.second;
         }
     }
+    // Merge variance analyzer stats
+    if (other.varianceAnalyzer_ && varianceAnalyzer_) {
+        varianceAnalyzer_->merge(*other.varianceAnalyzer_);
+    } else if (other.varianceAnalyzer_ && !varianceAnalyzer_) {
+        // Copy variance analyzer if we don't have one
+        uint32_t maxReads = other.varianceAnalyzer_->readsAnalyzed() > 0 ? 
+            static_cast<uint32_t>(other.varianceAnalyzer_->readsAnalyzed()) : 100000;
+        varianceAnalyzer_.reset(new SlamVarianceAnalyzer(maxReads, 1000));
+        varianceAnalyzer_->merge(*other.varianceAnalyzer_);
+    }
+    
     // Merge diagnostics
     diag_.readsDroppedSnpMask += other.diag_.readsDroppedSnpMask;
     diag_.readsDroppedStrandness += other.diag_.readsDroppedStrandness;
@@ -836,4 +1019,158 @@ bool SlamSnpMask::loadBed(const std::string& path, const Genome& genome, std::st
         }
     }
     return true;
+}
+
+// Read buffer methods for auto-trim replay
+void SlamQuant::enableReadBuffer(uint64_t maxReads) {
+    readBuffer_.reset(new SlamReadBuffer(maxReads));
+}
+
+bool SlamQuant::bufferRead(SlamBufferedRead&& read) {
+    if (!readBuffer_) {
+        return false;
+    }
+    return readBuffer_->addRead(std::move(read));
+}
+
+void SlamQuant::clearReadBuffer() {
+    if (readBuffer_) {
+        readBuffer_->clear();
+    }
+}
+
+// Replay buffered reads with trim applied
+// This is the core replay logic - processes buffered reads through the same
+// counting paths but with trim filtering applied
+uint64_t SlamQuant::replayBufferedReads(SlamCompat* compat, const SlamSnpMask* snpMask, int strandness) {
+    if (!readBuffer_ || readBuffer_->size() == 0) {
+        return 0;
+    }
+    
+    uint64_t replayed = 0;
+    
+    for (const SlamBufferedRead& read : readBuffer_->reads()) {
+        // Skip if no genes assigned
+        if (read.geneIds.empty()) {
+            diag_.readsZeroGenes++;
+            continue;
+        }
+        
+        // Apply strandness filter (same logic as ReadAlign_slamQuant)
+        if (strandness == 1 && read.oppositeStrand) {
+            diag_.readsDroppedStrandness++;
+            continue;
+        }
+        if (strandness == 2 && !read.oppositeStrand) {
+            diag_.readsDroppedStrandness++;
+            continue;
+        }
+        
+        // Apply SNP mask filter (check if any buffered genomic positions overlap mask)
+        if (snpMask != nullptr) {
+            bool hasSnpOverlap = false;
+            for (const SlamBufferedPosition& pos : read.positions) {
+                if (snpMask->contains(pos.genomicPos)) {
+                    hasSnpOverlap = true;
+                    break;
+                }
+            }
+            if (hasSnpOverlap) {
+                diag_.readsDroppedSnpMask++;
+                continue;
+            }
+        }
+        
+        // Determine mismatch category
+        SlamMismatchCategory category = read.isIntronic ? SlamMismatchCategory::Intronic : SlamMismatchCategory::Exonic;
+        SlamMismatchCategory senseCategory = read.isIntronic ? SlamMismatchCategory::IntronicSense : SlamMismatchCategory::ExonicSense;
+        
+        // Count T bases and conversions with trim filtering
+        uint16_t nT = 0;
+        uint16_t k = 0;
+        std::vector<uint32_t> mismatchPositions;
+        bool snpDetect = snpDetectEnabled_ && !read.isIntronic;
+        
+        for (const SlamBufferedPosition& pos : read.positions) {
+            // Apply trim filtering via SlamCompat
+            if (compat) {
+                // Convert readPos to mate-local coordinates
+                uint32_t mateLocalPos;
+                uint32_t mateLen;
+                if (pos.secondMate) {
+                    mateLocalPos = pos.readPos - read.readLength0;
+                    mateLen = read.readLength1;
+                } else {
+                    mateLocalPos = pos.readPos;
+                    mateLen = read.readLength0;
+                }
+                
+                // Check overlap skip (if enabled)
+                if (compat->cfg().ignoreOverlap && pos.overlap) {
+                    diag_.compatPositionsSkippedOverlap++;
+                    continue;
+                }
+                
+                // Check trim guards
+                if (!compat->compatShouldCountPos(mateLocalPos, mateLen)) {
+                    diag_.compatPositionsSkippedTrim++;
+                    continue;
+                }
+            }
+            
+            // Record transition base (same logic as ReadAlign_slamQuant)
+            bool skipMismatch = pos.overlap && pos.secondMate;
+            if (!skipMismatch) {
+                addTransitionBase(category, pos.readPos, pos.secondMate, pos.overlap, 
+                                  read.oppositeStrand, pos.refBase, pos.readBase, read.weight);
+                if (!read.oppositeStrand) {
+                    addTransitionBase(senseCategory, pos.readPos, pos.secondMate, pos.overlap,
+                                      false, pos.refBase, pos.readBase, read.weight);
+                }
+            }
+            
+            // Count T bases and conversions (for EM histogram)
+            if (!read.isIntronic) {
+                bool isT = false;
+                bool isTc = false;
+                if (!read.isMinus) {
+                    isT = (pos.refBase == 3); // T
+                    isTc = (pos.refBase == 3 && pos.readBase == 1); // T→C
+                } else {
+                    isT = (pos.refBase == 0); // A (complement of T)
+                    isTc = (pos.refBase == 0 && pos.readBase == 2); // A→G (complement of T→C)
+                }
+                
+                if (isT) {
+                    ++nT;
+                    if (isTc) {
+                        ++k;
+                        if (snpDetect) {
+                            mismatchPositions.push_back(static_cast<uint32_t>(pos.genomicPos));
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Add to gene counts (same logic as ReadAlign_slamQuant)
+        if (!read.isIntronic) {
+            uint8_t k8 = static_cast<uint8_t>(k > 255 ? 255 : k);
+            
+            if (snpDetect && !mismatchPositions.empty()) {
+                for (uint32_t geneId : read.geneIds) {
+                    bufferSnpRead(geneId, nT, mismatchPositions, read.weight);
+                }
+            } else {
+                for (uint32_t geneId : read.geneIds) {
+                    addRead(geneId, nT, k8, read.weight);
+                }
+            }
+        }
+        
+        diag_.readsProcessed++;
+        ++replayed;
+    }
+    
+    return replayed;
 }

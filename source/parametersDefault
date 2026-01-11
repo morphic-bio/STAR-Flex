@@ -976,6 +976,15 @@ slamSnpBed                            -
 slamSnpDetect                         0
     int: 0/1 - enable internal SNP detection and masking (ignored if slamSnpBed is set)
 
+slamSnpDetectFrac                    -1.0
+    double: mismatch fraction threshold for SNP detection
+            <= 0    ... auto-estimate threshold using knee/elbow detection (default)
+            > 0     ... explicit threshold (e.g., 0.22 for backward compatibility)
+            Only used when slamSnpDetect=1 and slamSnpBed is not set.
+            Auto-estimation uses the mismatch-fraction distribution to find a knee point,
+            with fallback to 0.22 if insufficient data or weak knee signal.
+            Clamped to [0.10, 0.60] to avoid pathological thresholds.
+
 slamStrandness                        Unspecific
     string: SLAM-seq strandness (Unspecific, Sense, Antisense)
 
@@ -1023,6 +1032,32 @@ slamCompatTrim5p                     0
 
 slamCompatTrim3p                     0
     int: Number of bases to trim from 3' end of each mate
+
+autoTrim                             -
+    string: Auto-trim mode: "variance" for variance-based trimming, "-" to disable
+
+trimScope                            first
+    string: Trim scope for multi-file runs: "first" (shared trim from first file, default) or "per-file" (per-file trim)
+
+autoTrimMaxReads                     100000
+    int: Maximum number of reads to scan for variance analysis (0=unlimited)
+
+autoTrimMinReads                     1000
+    int: Minimum number of reads required for auto-trim computation
+
+autoTrimBufferReads                   1000000
+    uint64_t: Deprecated - legacy parameter (ignored with rewind-based auto-trim)
+
+autoTrimDetectionReads               100000
+    int: Maximum number of reads for auto-trim detection pass (default 100K)
+    With rewind-based auto-trim, this controls how many reads are processed in the 
+    single-threaded detection pass before rewinding and running the full mapping.
+
+slamQcJson                           -
+    string: Path for QC JSON output (empty=auto-generate next to output prefix)
+
+slamQcHtml                           -
+    string: Path for QC HTML report output (empty=auto-generate next to output prefix)
 
 quantTranscriptomeSAMoutput BanSingleEnd_BanIndels_ExtendSoftclip
     string: alignment filtering for TranscriptomeSAM output

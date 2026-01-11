@@ -39,6 +39,8 @@
 #include "fld_accumulator.h"
 #include "TranscriptQuantOutput.h"
 #include "SlamQuant.h"
+#include "SlamVarianceAnalysis.h"
+#include "SlamQcOutput.h"
 // Note: effective_length.h not included due to Transcriptome class name conflict
 // Use wrapper function instead
 #include "effective_length_wrapper.h"
@@ -361,13 +363,301 @@ int main(int argInN, char *argIn[])
     // this does not seem to work at the moment
     // P.inOut->logMain << "mlock value="<<mlockall(MCL_CURRENT|MCL_FUTURE) <<"\n"<<flush;
 
-    // prepare chunks and spawn mapping threads
-    ReadAlignChunk *RAchunk[P.runThreadN];
-    for (int ii = 0; ii < P.runThreadN; ii++)
-    {
-        RAchunk[ii] = new ReadAlignChunk(P, genomeMain, transcriptomeMain, ii, 
-                                          libem_transcriptome.get());  // Pass shared transcriptome
-    };
+    // === SLAM AUTO-TRIM: trimScope=first (single detection pass, then full mapping) ===
+    if (P.quant.slam.yes && P.quant.slam.autoTrimMode == "variance" && 
+        P.quant.slam.trimScope == "first" && !P.quant.slam.autoTrimComputed) {
+        
+        P.inOut->logMain << timeMonthDayTime() << " ..... starting SLAM auto-trim detection (single-threaded, trimScope=first)\n" << flush;
+        *P.inOut->logStdOut << timeMonthDayTime() << " ..... starting SLAM auto-trim detection\n" << flush;
+        
+        // Save original settings
+        uint64_t originalReadMapNumber = P.readMapNumber;
+        int originalRunThreadN = P.runThreadN;
+        
+        // Set detection mode: single thread, limited reads
+        P.quant.slam.autoTrimDetectionPass = true;
+        P.runThreadN = 1;  // Single-threaded for detection
+        P.readMapNumber = static_cast<uint64_t>(P.quant.slam.autoTrimDetectionReads);
+        if (P.readMapNumber > originalReadMapNumber && originalReadMapNumber > 0) {
+            P.readMapNumber = originalReadMapNumber;  // Don't exceed original limit
+        }
+        
+        // Create detection-only RAchunk (single thread)
+        ReadAlignChunk *RAdetect = new ReadAlignChunk(P, genomeMain, transcriptomeMain, 0, 
+                                                       libem_transcriptome.get());
+        
+        // Run detection pass - only collecting variance stats (no outputs)
+        RAdetect->processChunks();
+        
+        // Check how many reads were actually processed
+        uint64_t detectionReadsProcessed = P.iReadAll;
+        
+        // Compute trims from variance stats
+        if (RAdetect->slamQuant != nullptr && RAdetect->slamQuant->varianceAnalysisEnabled()) {
+            // Estimate read length from processed reads
+            uint32_t readLength = 100;
+            if (RAdetect->RA != nullptr && RAdetect->RA->readLength[0] > 0) {
+                readLength = static_cast<uint32_t>(RAdetect->RA->readLength[0] + RAdetect->RA->readLength[1]);
+            }
+            
+            // Compute trims
+            SlamVarianceTrimResult trimResult = RAdetect->slamQuant->computeVarianceTrim(readLength);
+            
+            if (trimResult.success && trimResult.readsAnalyzed >= static_cast<uint64_t>(P.quant.slam.autoTrimMinReads)) {
+                P.quant.slam.autoTrim5p = trimResult.trim5p;
+                P.quant.slam.autoTrim3p = trimResult.trim3p;
+                P.quant.slam.autoTrimComputed = true;
+                P.quant.slam.autoTrimFileIndex = 0;
+                
+                // Update manual trim settings so SlamCompat uses them
+                P.quant.slam.compatTrim5p = trimResult.trim5p;
+                P.quant.slam.compatTrim3p = trimResult.trim3p;
+                
+                P.inOut->logMain << "SLAM auto-trim (variance) computed: trim5p=" << trimResult.trim5p
+                                 << " trim3p=" << trimResult.trim3p
+                                 << " reads_analyzed=" << trimResult.readsAnalyzed
+                                 << " detection_reads_processed=" << detectionReadsProcessed
+                                 << " min_reads=" << P.quant.slam.autoTrimMinReads
+                                 << " mode=" << trimResult.mode
+                                 << " scope=" << P.quant.slam.trimScope << "\n";
+                
+                // Write QC outputs from detection pass
+                const SlamVarianceAnalyzer* analyzer = RAdetect->slamQuant->varianceAnalyzer();
+                if (analyzer != nullptr) {
+                    std::string qcJsonPath = P.quant.slam.slamQcJson;
+                    if (qcJsonPath.empty()) {
+                        qcJsonPath = P.outFileNamePrefix + "slam_qc.json";
+                    }
+                    if (writeSlamQcJson(*analyzer, qcJsonPath, 
+                                        P.quant.slam.autoTrimFileIndex, P.quant.slam.trimScope,
+                                        trimResult.trim5p, trimResult.trim3p, trimResult.readsAnalyzed)) {
+                        P.inOut->logMain << "SLAM QC JSON written to: " << qcJsonPath << "\n";
+                        
+                        std::string qcHtmlPath = P.quant.slam.slamQcHtml;
+                        if (qcHtmlPath.empty()) {
+                            qcHtmlPath = P.outFileNamePrefix + "slam_qc.html";
+                        }
+                        if (writeSlamQcHtml(qcJsonPath, qcHtmlPath, P.quant.slam.autoTrimFileIndex)) {
+                            P.inOut->logMain << "SLAM QC HTML written to: " << qcHtmlPath << "\n";
+                        }
+                    }
+                }
+            } else {
+                // Insufficient reads - may have hit file boundary with small file
+                P.inOut->logMain << "WARNING: SLAM auto-trim (variance): insufficient reads for trim computation"
+                                 << " (reads_analyzed=" << trimResult.readsAnalyzed
+                                 << " detection_reads_processed=" << detectionReadsProcessed
+                                 << " < min_reads=" << P.quant.slam.autoTrimMinReads << ")";
+                if (detectionReadsProcessed < static_cast<uint64_t>(P.quant.slam.autoTrimDetectionReads)) {
+                    P.inOut->logMain << " - file may have ended before detection threshold";
+                }
+                P.inOut->logMain << ". Auto-trim disabled, using manual trims (trim5p=" 
+                                 << P.quant.slam.compatTrim5p << " trim3p=" << P.quant.slam.compatTrim3p << ").\n";
+            }
+        }
+        
+        // Clean up detection RAchunk
+        delete RAdetect;
+        
+        // End detection mode
+        P.quant.slam.autoTrimDetectionPass = false;
+        
+        // Restore settings
+        P.runThreadN = originalRunThreadN;
+        P.readMapNumber = originalReadMapNumber;
+        
+        // REWIND: Close and reopen input files to start from beginning
+        P.inOut->logMain << "SLAM auto-trim: rewinding input files for main mapping pass\n";
+        P.closeReadsFiles();
+        P.iReadAll = 0;  // Reset read counter
+        g_threadChunks.chunkInN = 0;  // Reset chunk counter
+        g_threadChunks.chunkOutN = 0;  // Reset output chunk counter
+        P.readFilesIndex = 0;  // Reset file index
+        g_bamRecordIndex.store(0);  // Reset BAM record index
+        P.openReadsFiles();
+        
+        // Reset global stats after detection so final stats are clean
+        g_statsAll.resetN();
+        time(&g_statsAll.timeStartMap);
+        g_statsAll.timeLastReport = g_statsAll.timeStartMap;
+        
+        P.inOut->logMain << timeMonthDayTime() << " ..... finished SLAM auto-trim detection\n" << flush;
+        *P.inOut->logStdOut << timeMonthDayTime() << " ..... finished SLAM auto-trim detection, "
+                           << "trim5p=" << P.quant.slam.autoTrim5p << " trim3p=" << P.quant.slam.autoTrim3p << "\n" << flush;
+    }
+    
+    // Flag to track if per-file processing already ran mapping
+    bool perFileMappingDone = false;
+    
+    // Declare RAchunk array early so it can be used by both per-file and normal paths
+    ReadAlignChunk **RAchunk = new ReadAlignChunk*[P.runThreadN];
+    for (int ii = 0; ii < P.runThreadN; ii++) {
+        RAchunk[ii] = nullptr;
+    }
+    
+    // === SLAM AUTO-TRIM: trimScope=per-file (detection + mapping per file) ===
+    // This processes files one at a time: detect trims, then map, then next file
+    if (P.quant.slam.yes && P.quant.slam.autoTrimMode == "variance" && 
+        P.quant.slam.trimScope == "per-file") {
+        
+        P.inOut->logMain << timeMonthDayTime() << " ..... starting SLAM auto-trim with trimScope=per-file\n" << flush;
+        *P.inOut->logStdOut << timeMonthDayTime() << " ..... starting SLAM auto-trim (per-file mode)\n" << flush;
+        
+        // Get total file count
+        P.quant.slam.totalFileCount = static_cast<int>(P.readFilesNames[0].size());
+        P.quant.slam.perFileProcessing = true;
+        
+        // Save original settings
+        uint64_t originalReadMapNumber = P.readMapNumber;
+        int originalRunThreadN = P.runThreadN;
+        
+        // Create RAchunks for mapping (will be reused for each file)
+        for (int ii = 0; ii < P.runThreadN; ii++) {
+            RAchunk[ii] = new ReadAlignChunk(P, genomeMain, transcriptomeMain, ii, 
+                                              libem_transcriptome.get());
+        }
+        
+        // Process each file: detection + mapping
+        for (int fileIdx = 0; fileIdx < P.quant.slam.totalFileCount; fileIdx++) {
+            P.quant.slam.currentFileIndex = fileIdx;
+            
+            P.inOut->logMain << "\n=== SLAM per-file processing: file " << fileIdx 
+                             << " of " << P.quant.slam.totalFileCount << " ===\n";
+            
+            // --- PHASE 1: Detection for this file ---
+            P.inOut->logMain << timeMonthDayTime() << " ..... detection phase for file " << fileIdx << "\n";
+            
+            // Rewind and skip to the target file for detection
+            P.closeReadsFiles();
+            P.iReadAll = 0;
+            g_threadChunks.chunkInN = 0;
+            g_threadChunks.chunkOutN = 0;
+            P.readFilesIndex = 0;
+            P.openReadsFiles();
+            
+            P.quant.slam.skipToFileIndex = fileIdx;  // Skip to target file
+            P.quant.slam.autoTrimDetectionPass = true;
+            P.quant.slam.autoTrimComputed = false;  // Reset for this file
+            P.runThreadN = 1;  // Single-threaded for detection
+            P.readMapNumber = static_cast<uint64_t>(P.quant.slam.autoTrimDetectionReads);
+            
+            // Create detection-only RAchunk
+            ReadAlignChunk *RAdetect = new ReadAlignChunk(P, genomeMain, transcriptomeMain, 0, 
+                                                           libem_transcriptome.get());
+            
+            // Run detection pass for this file only
+            RAdetect->processChunks();
+            
+            uint64_t detectionReadsProcessed = P.iReadAll;
+            
+            // Compute trims from variance stats
+            if (RAdetect->slamQuant != nullptr && RAdetect->slamQuant->varianceAnalysisEnabled()) {
+                uint32_t readLength = 100;
+                if (RAdetect->RA != nullptr && RAdetect->RA->readLength[0] > 0) {
+                    readLength = static_cast<uint32_t>(RAdetect->RA->readLength[0] + RAdetect->RA->readLength[1]);
+                }
+                
+                SlamVarianceTrimResult trimResult = RAdetect->slamQuant->computeVarianceTrim(readLength);
+                
+                if (trimResult.success && trimResult.readsAnalyzed >= static_cast<uint64_t>(P.quant.slam.autoTrimMinReads)) {
+                    P.quant.slam.autoTrim5p = trimResult.trim5p;
+                    P.quant.slam.autoTrim3p = trimResult.trim3p;
+                    P.quant.slam.autoTrimComputed = true;
+                    P.quant.slam.autoTrimFileIndex = fileIdx;
+                    P.quant.slam.compatTrim5p = trimResult.trim5p;
+                    P.quant.slam.compatTrim3p = trimResult.trim3p;
+                    
+                    P.inOut->logMain << "SLAM auto-trim (file " << fileIdx << "): trim5p=" << trimResult.trim5p
+                                     << " trim3p=" << trimResult.trim3p
+                                     << " reads_analyzed=" << trimResult.readsAnalyzed << "\n";
+                    
+                    // Write per-file QC outputs
+                    const SlamVarianceAnalyzer* analyzer = RAdetect->slamQuant->varianceAnalyzer();
+                    if (analyzer != nullptr) {
+                        std::string qcJsonPath = P.quant.slam.slamQcJson;
+                        if (qcJsonPath.empty()) {
+                            qcJsonPath = P.outFileNamePrefix + "slam_qc_file" + std::to_string(fileIdx) + ".json";
+                        } else if (P.quant.slam.totalFileCount > 1) {
+                            // Append file index to user-specified path
+                            size_t dotPos = qcJsonPath.rfind('.');
+                            if (dotPos != std::string::npos) {
+                                qcJsonPath = qcJsonPath.substr(0, dotPos) + "_file" + std::to_string(fileIdx) + qcJsonPath.substr(dotPos);
+                            }
+                        }
+                        if (writeSlamQcJson(*analyzer, qcJsonPath, fileIdx, P.quant.slam.trimScope,
+                                            trimResult.trim5p, trimResult.trim3p, trimResult.readsAnalyzed)) {
+                            P.inOut->logMain << "SLAM QC JSON written to: " << qcJsonPath << "\n";
+                        }
+                    }
+                } else {
+                    P.inOut->logMain << "WARNING: SLAM auto-trim (file " << fileIdx << "): insufficient reads"
+                                     << " (reads_analyzed=" << trimResult.readsAnalyzed
+                                     << " < min_reads=" << P.quant.slam.autoTrimMinReads << ")"
+                                     << ". Using default trims.\n";
+                    P.quant.slam.autoTrim5p = 0;
+                    P.quant.slam.autoTrim3p = 0;
+                    P.quant.slam.compatTrim5p = 0;
+                    P.quant.slam.compatTrim3p = 0;
+                }
+            }
+            
+            delete RAdetect;
+            P.quant.slam.autoTrimDetectionPass = false;
+            
+            // --- PHASE 2: Rewind to start of this file and map ---
+            P.inOut->logMain << timeMonthDayTime() << " ..... mapping phase for file " << fileIdx 
+                             << " with trim5p=" << P.quant.slam.compatTrim5p 
+                             << " trim3p=" << P.quant.slam.compatTrim3p << "\n";
+            
+            // Rewind to start of files and skip to target file
+            P.closeReadsFiles();
+            P.iReadAll = 0;
+            g_threadChunks.chunkInN = 0;
+            g_threadChunks.chunkOutN = 0;
+            P.readFilesIndex = 0;
+            P.openReadsFiles();
+            
+            P.quant.slam.skipToFileIndex = fileIdx;  // Skip to target file for mapping
+            P.runThreadN = originalRunThreadN;
+            P.readMapNumber = originalReadMapNumber;
+            
+            // Reinitialize SlamCompat for all threads with new trims
+            for (int ii = 0; ii < P.runThreadN; ii++) {
+                if (RAchunk[ii] != nullptr) {
+                    RAchunk[ii]->reinitSlamCompat(P.quant.slam.compatTrim5p, P.quant.slam.compatTrim3p);
+                }
+            }
+            
+            // Run mapping for this file
+            mapThreadsSpawn(P, RAchunk);
+            
+            P.inOut->logMain << timeMonthDayTime() << " ..... finished mapping file " << fileIdx << "\n";
+            
+            // Reset for next file iteration
+            // Note: stats accumulate across files (which is desired)
+        }
+        
+        // DON'T delete RAchunk here - keep it for post-processing (SLAM quantification, etc.)
+        // The RAchunk array will be deleted at the end along with the normal path
+        
+        P.quant.slam.perFileProcessing = false;
+        P.runThreadN = originalRunThreadN;
+        P.readMapNumber = originalReadMapNumber;
+        
+        P.inOut->logMain << timeMonthDayTime() << " ..... finished SLAM per-file processing\n" << flush;
+        *P.inOut->logStdOut << timeMonthDayTime() << " ..... finished SLAM per-file processing\n" << flush;
+        
+        perFileMappingDone = true;
+    }
+
+    // prepare chunks and spawn mapping threads (skip if per-file already handled mapping)
+    if (!perFileMappingDone) {
+        for (int ii = 0; ii < P.runThreadN; ii++)
+        {
+            RAchunk[ii] = new ReadAlignChunk(P, genomeMain, transcriptomeMain, ii, 
+                                              libem_transcriptome.get());  // Pass shared transcriptome
+        };
+    }
 
     // === LIBRARY FORMAT DETECTION (single-threaded) ===
     if (P.quant.transcriptVB.yes && P.quant.transcriptVB.libType == "A") {
@@ -422,10 +712,10 @@ int main(int argInN, char *argIn[])
         Parameters::global_fld_obs_count.store(0, std::memory_order_relaxed);
     }
 
-    if (P.runRestart.type != 1)
+    if (P.runRestart.type != 1 && !perFileMappingDone)
         mapThreadsSpawn(P, RAchunk);
 
-    if (P.outFilterBySJoutStage == 1)
+    if (P.outFilterBySJoutStage == 1 && !perFileMappingDone)
     { // completed stage 1, go to stage 2
         P.inOut->logMain << "Completed stage 1 mapping of outFilterBySJout mapping\n"
                          << flush;
@@ -759,18 +1049,21 @@ int main(int argInN, char *argIn[])
                             << flush;
         P.inOut->logMain << timeMonthDayTime() << " ..... started SLAM quantification\n";
 
+        // Merge counts from all threads
+        // Note: With rewind-based auto-trim, trims are already applied during main mapping pass
         SlamQuant mergedSlam(transcriptomeMain->nGe, P.quant.slam.snpDetect);
         if (P.quant.slam.debugEnabled) {
             mergedSlam.initDebug(*transcriptomeMain, P.quant.slam.debugGenes, P.quant.slam.debugReads,
                                  static_cast<size_t>(P.quant.slam.debugMaxReads),
                                  P.quant.slam.debugOutPrefix);
         }
+        
         for (int ichunk = 0; ichunk < P.runThreadN; ++ichunk) {
-            if (RAchunk[ichunk] != nullptr && RAchunk[ichunk]->RA != nullptr &&
-                RAchunk[ichunk]->RA->slamQuant != nullptr) {
-                mergedSlam.merge(*RAchunk[ichunk]->RA->slamQuant);
+            if (RAchunk[ichunk] != nullptr && RAchunk[ichunk]->slamQuant != nullptr) {
+                mergedSlam.merge(*RAchunk[ichunk]->slamQuant);
             }
         }
+        
         SlamSnpBufferStats snpStats;
         mergedSlam.finalizeSnpMask(&snpStats);
         if (mergedSlam.snpDetectEnabled()) {
@@ -780,7 +1073,14 @@ int main(int argInN, char *argIn[])
                              << " buffer_bytes=" << snpStats.bufferBytes
                              << " snp_sites=" << snpStats.maskEntries
                              << " snp_blacklist=" << snpStats.blacklistEntries
-                             << "\n";
+                             << " mismatch_frac=" << snpStats.mismatchFracUsed
+                             << " mode=" << snpStats.mismatchFracMode;
+            if (snpStats.mismatchFracAuto > 0.0) {
+                P.inOut->logMain << " auto_frac=" << snpStats.mismatchFracAuto
+                                 << " knee_bin=" << snpStats.kneeBin
+                                 << " eligible_sites=" << snpStats.eligibleSites;
+            }
+            P.inOut->logMain << "\n";
         }
         mergedSlam.write(*transcriptomeMain, P.quant.slam.outFile,
                          P.quant.slam.errorRate, P.quant.slam.convRate);
@@ -804,7 +1104,6 @@ int main(int argInN, char *argIn[])
         std::string refFile = P.pGe.gDir + "/../expected/fixture_ref_human.tsv.gz";
         std::ifstream refCheck(refFile.c_str());
         if (!refCheck.good()) {
-            // Try alternative path
             refFile = "test/fixtures/slam/expected/fixture_ref_human.tsv.gz";
             refCheck.open(refFile.c_str());
         }
@@ -819,10 +1118,20 @@ int main(int argInN, char *argIn[])
         P.inOut->logMain << "SLAM diagnostics written to: "
                          << diagFile << "\n";
         
+        // Log auto-trim summary
+        if (P.quant.slam.autoTrimComputed) {
+            P.inOut->logMain << "SLAM auto-trim applied: trim5p=" << P.quant.slam.autoTrim5p
+                             << " trim3p=" << P.quant.slam.autoTrim3p
+                             << " scope=" << P.quant.slam.trimScope
+                             << " file_index=" << P.quant.slam.autoTrimFileIndex
+                             << " mode=rewind\n";
+        }
+        
         // Log compat mode summary if enabled
         if (P.quant.slam.compatIntronic || P.quant.slam.compatLenientOverlap ||
             P.quant.slam.compatOverlapWeight || P.quant.slam.compatIgnoreOverlap ||
-            P.quant.slam.compatTrim5p != 0 || P.quant.slam.compatTrim3p != 0) {
+            P.quant.slam.compatTrim5p != 0 || P.quant.slam.compatTrim3p != 0 ||
+            P.quant.slam.autoTrimComputed) {
             P.inOut->logMain << "SLAM compat(" << P.quant.slam.compatModeStr << "): "
                              << "alignsIntronic=" << mergedSlam.diagnostics().compatAlignsReclassifiedIntronic
                              << " alignsLenient=" << mergedSlam.diagnostics().compatAlignsLenientAccepted

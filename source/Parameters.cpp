@@ -394,6 +394,7 @@ Parameters::Parameters() {//initalize parameters info
     parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "slamQuantMode", &quant.slam.modeInt));
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamSnpBed", &quant.slam.snpBed));
     parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "slamSnpDetect", &quant.slam.snpDetectInt));
+    parArray.push_back(new ParameterInfoScalar <double>   (-1, -1, "slamSnpDetectFrac", &quant.slam.snpDetectFrac));
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamStrandness", &quant.slam.strandnessStr));
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamWeightMode", &quant.slam.weightModeStr));
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamDebugGeneList", &quant.slam.debugGeneList));
@@ -410,6 +411,14 @@ Parameters::Parameters() {//initalize parameters info
     parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "slamCompatIgnoreOverlap", &quant.slam.compatIgnoreOverlapInt));
     parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "slamCompatTrim5p", &quant.slam.compatTrim5p));
     parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "slamCompatTrim3p", &quant.slam.compatTrim3p));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "autoTrim", &quant.slam.autoTrimMode));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "trimScope", &quant.slam.trimScope));
+    parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "autoTrimMaxReads", &quant.slam.autoTrimMaxReads));
+    parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "autoTrimMinReads", &quant.slam.autoTrimMinReads));
+    parArray.push_back(new ParameterInfoScalar <uint64_t> (-1, -1, "autoTrimBufferReads", &quant.slam.autoTrimBufferReads));
+    parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "autoTrimDetectionReads", &quant.slam.autoTrimDetectionReads));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamQcJson", &quant.slam.slamQcJson));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamQcHtml", &quant.slam.slamQcHtml));
 
     //2-pass
     parArray.push_back(new ParameterInfoScalar <uint>   (-1, -1, "twopass1readsN", &twoPass.pass1readsN));

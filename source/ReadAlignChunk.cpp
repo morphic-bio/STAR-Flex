@@ -76,24 +76,39 @@ ReadAlignChunk::ReadAlignChunk(Parameters& Pin, Genome &genomeIn, Transcriptome 
     slamQuant = nullptr;
     slamCompat = nullptr;
     if (P.quant.slam.yes && chunkTr != nullptr) {
-        slamQuant = new SlamQuant(chunkTr->nGe, buildSlamAllowedGenes(*chunkTr), P.quant.slam.snpDetect);
+        slamQuant = new SlamQuant(chunkTr->nGe, buildSlamAllowedGenes(*chunkTr), P.quant.slam.snpDetect, P.quant.slam.snpDetectFrac);
         if (P.quant.slam.debugEnabled) {
             slamQuant->initDebug(*chunkTr, P.quant.slam.debugGenes, P.quant.slam.debugReads,
                                  static_cast<size_t>(P.quant.slam.debugMaxReads),
                                  P.quant.slam.debugOutPrefix);
         }
         
-        // Create SlamCompat if any compat mode is enabled
-        if (P.quant.slam.compatIntronic || P.quant.slam.compatLenientOverlap ||
+        // Enable variance analysis only during detection pass (single-threaded)
+        // With rewind approach, detection pass collects variance stats, then files are rewound
+        // and main mapping pass uses computed trims from the start
+        if (P.quant.slam.autoTrimMode == "variance" && P.quant.slam.autoTrimDetectionPass) {
+            slamQuant->enableVarianceAnalysis(P.quant.slam.autoTrimMaxReads, P.quant.slam.autoTrimMinReads);
+        }
+        
+        // Create SlamCompat if any compat mode is enabled or auto-trim is active
+        bool needsCompat = P.quant.slam.compatIntronic || P.quant.slam.compatLenientOverlap ||
             P.quant.slam.compatOverlapWeight || P.quant.slam.compatIgnoreOverlap ||
-            P.quant.slam.compatTrim5p != 0 || P.quant.slam.compatTrim3p != 0) {
+            P.quant.slam.compatTrim5p != 0 || P.quant.slam.compatTrim3p != 0 ||
+            (P.quant.slam.autoTrimMode == "variance" && P.quant.slam.autoTrimComputed);
+        if (needsCompat) {
             SlamCompatConfig cfg;
             cfg.intronic = P.quant.slam.compatIntronic;
             cfg.lenientOverlap = P.quant.slam.compatLenientOverlap;
             cfg.overlapWeight = P.quant.slam.compatOverlapWeight;
             cfg.ignoreOverlap = P.quant.slam.compatIgnoreOverlap;
-            cfg.trim5p = P.quant.slam.compatTrim5p;
-            cfg.trim3p = P.quant.slam.compatTrim3p;
+            // Use auto-trim values if computed, otherwise use manual trims
+            if (P.quant.slam.autoTrimComputed) {
+                cfg.trim5p = P.quant.slam.autoTrim5p;
+                cfg.trim3p = P.quant.slam.autoTrim3p;
+            } else {
+                cfg.trim5p = P.quant.slam.compatTrim5p;
+                cfg.trim3p = P.quant.slam.compatTrim3p;
+            }
             slamCompat = new SlamCompat(*chunkTr, cfg);
         }
     }
@@ -239,6 +254,24 @@ ReadAlignChunk::~ReadAlignChunk() {
     // but we should still clean up the per-chunk instance
     delete slamQuant;
 };
+
+void ReadAlignChunk::reinitSlamCompat(int trim5p, int trim3p) {
+    if (slamCompat != nullptr) {
+        // Update existing SlamCompat with new trim values
+        slamCompat->updateTrims(trim5p, trim3p);
+    } else if (P.quant.slam.yes && chunkTr != nullptr) {
+        // Create SlamCompat if it doesn't exist yet (trims were computed but no other compat features)
+        SlamCompatConfig cfg;
+        cfg.intronic = P.quant.slam.compatIntronic;
+        cfg.lenientOverlap = P.quant.slam.compatLenientOverlap;
+        cfg.overlapWeight = P.quant.slam.compatOverlapWeight;
+        cfg.ignoreOverlap = P.quant.slam.compatIgnoreOverlap;
+        cfg.trim5p = trim5p;
+        cfg.trim3p = trim3p;
+        slamCompat = new SlamCompat(*chunkTr, cfg);
+        RA->slamCompat = slamCompat;
+    }
+}
 
 ///////////////
 void ReadAlignChunk::chunkFstreamOpen(string filePrefix, int iChunk, fstream &fstreamOut) {//open fstreams for chunks

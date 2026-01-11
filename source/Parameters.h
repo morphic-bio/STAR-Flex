@@ -388,6 +388,7 @@ class Parameters {
                 string snpBed;              // Optional SNP BED for prefilter
                 int snpDetectInt=0;         // CLI flag (0/1) for internal SNP detection
                 bool snpDetect=false;       // Enable internal SNP detection + masking
+                double snpDetectFrac=-1.0;  // Mismatch fraction threshold: <=0=auto, >0=explicit
                 string strandnessStr="Unspecific"; // Unspecific | Sense | Antisense
                 uint8_t strandness=0;       // 0=Unspecific, 1=Sense, 2=Antisense
                 string weightModeStr="Alignments"; // Alignments | Uniform
@@ -414,6 +415,28 @@ class Parameters {
                 bool compatIgnoreOverlap = false; // Skip PE overlap positions
                 int compatTrim5p = 0;             // 5' trim guard
                 int compatTrim3p = 0;             // 3' trim guard
+                
+                // Auto-trim variance analysis
+                string autoTrimMode = "";         // ""=disabled, "variance"=variance-based
+                string trimScope = "first";        // "first"=shared from first file, "per-file"=per-file
+                int autoTrimMaxReads = 100000;    // Max reads to scan for variance (0=unlimited)
+                int autoTrimMinReads = 1000;      // Minimum reads required for auto-trim
+                string slamQcJson = "";           // Path for QC JSON output (empty=auto-generate)
+                string slamQcHtml = "";            // Path for QC HTML output (empty=auto-generate)
+                int autoTrim5p = 0;               // Auto-computed 5' trim (0=not computed)
+                int autoTrim3p = 0;                // Auto-computed 3' trim (0=not computed)
+                bool autoTrimComputed = false;    // Whether auto-trim has been computed
+                uint32_t autoTrimFileIndex = 0;    // File index where auto-trim was computed
+                
+                // Auto-trim detection mode (single-thread first pass with rewind)
+                uint64_t autoTrimBufferReads = 1000000;  // Max reads for detection pass (default 1M) - legacy name for compat
+                int autoTrimDetectionReads = 100000;     // Max reads for detection pass (used as readMapNumber limit)
+                bool autoTrimReplayDone = false;         // Whether second pass has completed
+                bool autoTrimDetectionPass = false;      // True during single-threaded detection pass
+                bool perFileProcessing = false;          // True when processing files one at a time (for trimScope=per-file)
+                int currentFileIndex = 0;                // Current file being processed in per-file mode
+                int totalFileCount = 0;                  // Total number of input files
+                int skipToFileIndex = -1;                // Skip reads until reaching this file index (-1=disabled)
             } slam;
 
             struct {

@@ -2,6 +2,8 @@
 #define SLAM_QUANT_H
 
 #include "SlamSolver.h"
+#include "SlamVarianceAnalysis.h"
+#include "SlamReadBuffer.h"
 
 #include <cstdint>
 #include <string>
@@ -9,9 +11,11 @@
 #include <unordered_set>
 #include <array>
 #include <vector>
+#include <memory>
 
 class Genome;
 class Transcriptome;
+class SlamCompat;
 
 class SlamSnpMask {
 public:
@@ -63,6 +67,12 @@ struct SlamSnpBufferStats {
     uint64_t blacklistEntries = 0;
     double avgMismatches = 0.0;
     double avgMismatchesKept = 0.0;
+    // SNP threshold estimation stats
+    double mismatchFracUsed = 0.0;      // Threshold actually used
+    double mismatchFracAuto = 0.0;      // Auto-estimated threshold (0 if not computed)
+    std::string mismatchFracMode;       // "auto" or "explicit"
+    uint32_t kneeBin = 0;               // Bin index of detected knee (0 if fallback)
+    uint64_t eligibleSites = 0;         // Sites with coverage >= threshold
 };
 
 struct SlamTransitionStats {
@@ -125,8 +135,8 @@ const char* slamMismatchCategoryName(SlamMismatchCategory cat);
 
 class SlamQuant {
 public:
-    explicit SlamQuant(uint32_t nGenes, bool snpDetect = false);
-    SlamQuant(uint32_t nGenes, std::vector<uint8_t> allowedGenes, bool snpDetect = false);
+    explicit SlamQuant(uint32_t nGenes, bool snpDetect = false, double snpMismatchFrac = -1.0);
+    SlamQuant(uint32_t nGenes, std::vector<uint8_t> allowedGenes, bool snpDetect = false, double snpMismatchFrac = -1.0);
 
     void addRead(uint32_t geneId, uint16_t nT, uint8_t k, double weight);
     void addTransitionBase(SlamMismatchCategory category, uint32_t readPos, bool secondMate,
@@ -136,6 +146,32 @@ public:
     void bufferSnpRead(uint32_t geneId, uint16_t nT,
                        const std::vector<uint32_t>& mismatchPositions, double weight);
     void finalizeSnpMask(SlamSnpBufferStats* outStats = nullptr);
+    
+    // Variance analysis for auto-trim
+    bool recordVarianceRead(); // Returns false if max reads reached
+    void recordVariancePosition(uint32_t readPos, uint8_t qual, bool isT, bool isTc);
+    SlamVarianceTrimResult computeVarianceTrim(uint32_t readLength);
+    bool varianceAnalysisEnabled() const { return varianceAnalyzer_ != nullptr; }
+    const SlamVarianceAnalyzer* varianceAnalyzer() const { return varianceAnalyzer_.get(); }
+    void enableVarianceAnalysis(uint32_t maxReads, uint32_t minReads);
+    void resetVarianceAnalysis();
+    uint32_t getVarianceMaxReads() const;
+    uint32_t getVarianceMinReads() const;
+    
+    // Read buffering for auto-trim replay
+    void enableReadBuffer(uint64_t maxReads);
+    bool readBufferEnabled() const { return readBuffer_ != nullptr; }
+    bool readBufferFull() const { return readBuffer_ && readBuffer_->isFull(); }
+    uint64_t readBufferSize() const { return readBuffer_ ? readBuffer_->size() : 0; }
+    uint64_t readBufferCapacity() const { return readBuffer_ ? readBuffer_->capacity() : 0; }
+    bool bufferRead(SlamBufferedRead&& read);
+    const SlamReadBuffer* readBuffer() const { return readBuffer_.get(); }
+    void clearReadBuffer();
+    uint64_t readBufferMemoryBytes() const { return readBuffer_ ? readBuffer_->memoryBytes() : 0; }
+    
+    // Replay buffered reads with trim applied
+    // Returns number of reads replayed
+    uint64_t replayBufferedReads(SlamCompat* compat, const SlamSnpMask* snpMask, int strandness);
     void merge(const SlamQuant& other);
     void write(const Transcriptome& tr, const std::string& outFile,
                double errorRate, double convRate) const;
@@ -173,6 +209,7 @@ private:
     std::array<std::vector<SlamPositionStats>, kSlamMismatchCategoryCount> positionTransitions_;
     bool snpDetectEnabled_ = false;
     bool snpFinalized_ = false;
+    double snpMismatchFrac_ = -1.0;  // <=0 means auto-estimate
     std::unordered_map<uint64_t, uint32_t> snpMask_;
     std::vector<uint32_t> snpReadBuffer_;
     std::vector<double> snpReadWeights_;
@@ -184,6 +221,14 @@ private:
     std::vector<SlamDebugGeneStats> debugGeneStats_;
     std::unordered_set<std::string> debugReadSet_;
     std::vector<SlamDebugReadRecord> debugReadRecords_;
+    
+    // Variance analysis
+    std::unique_ptr<SlamVarianceAnalyzer> varianceAnalyzer_;
+    uint32_t varianceMaxReads_ = 0;
+    uint32_t varianceMinReads_ = 0;
+    
+    // Read buffer for auto-trim replay
+    std::unique_ptr<SlamReadBuffer> readBuffer_;
 };
 
 #endif
