@@ -1044,6 +1044,14 @@ trimScope                            first
     generated when using comma-separated --readFilesIn (e.g., file1.fq,file2.fq,file3.fq)
     or when using --readFilesCommand with multiple files.
 
+trimSource                           -
+    string: Path to a specific file for computing shared auto-trim values.
+    When set, auto-trim is computed from this file instead of the first input file.
+    The computed trims are then applied to all input files.
+    Use this when the first file is not representative (e.g., low depth or outlier).
+    Ignored when --trimScope per-file is set (per-file always computes trims independently).
+    Set to "-" to disable (use first input file).
+
 autoTrimMaxReads                     100000
     int: Maximum number of reads to scan for variance analysis (0=unlimited)
 

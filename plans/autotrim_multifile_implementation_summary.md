@@ -87,12 +87,32 @@ Detection pass does NOT produce outputs:
 |-----------|---------|-------------|
 | `--autoTrim` | `-` | Auto-trim mode: `variance` or `-` (disabled) |
 | `--trimScope` | `first` | `first` or `per-file` |
+| `--trimSource` | `-` | Path to file for computing shared trims (overrides first file) |
 | `--autoTrimDetectionReads` | `100000` | Max reads for detection pass |
 | `--autoTrimMinReads` | `1000` | Min reads required for trim computation |
 | `--autoTrimMaxReads` | `100000` | Max reads for variance analysis |
 | `--autoTrimSmoothWindow` | `5` | Median smoothing window for stdev curve |
 | `--autoTrimSegMinLen` | `3` | Minimum segment length for regression |
 | `--autoTrimMaxTrim` | `15` | Maximum trim at either end |
+
+### Trim Source Override (`--trimSource`)
+
+The `--trimSource` parameter allows specifying a different file for computing shared auto-trim values:
+
+- When set, auto-trim is computed from the specified file instead of the first input file
+- The computed trims are then applied to all input files in the run
+- Useful when the first file is not representative (e.g., low depth or outlier sample)
+- Ignored when `--trimScope per-file` is set (per-file mode always computes trims independently)
+- The file must exist and be readable; STAR exits with an error otherwise
+
+**Example:**
+```bash
+# Use file2.fq.gz for trim computation, apply trims to all files
+STAR --readFilesIn file1.fq.gz,file2.fq.gz,file3.fq.gz \
+     --autoTrim variance \
+     --trimSource file2.fq.gz \
+     ...
+```
 
 ## Test Results (SE50 SLAM-seq data)
 

@@ -413,6 +413,7 @@ Parameters::Parameters() {//initalize parameters info
     parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "slamCompatTrim3p", &quant.slam.compatTrim3p));
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "autoTrim", &quant.slam.autoTrimMode));
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "trimScope", &quant.slam.trimScope));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "trimSource", &quant.slam.trimSource));
     parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "autoTrimMaxReads", &quant.slam.autoTrimMaxReads));
     parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "autoTrimMinReads", &quant.slam.autoTrimMinReads));
     parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "autoTrimSmoothWindow", &quant.slam.autoTrimSmoothWindow));

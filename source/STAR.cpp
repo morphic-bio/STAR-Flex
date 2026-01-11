@@ -270,6 +270,29 @@ int main(int argInN, char *argIn[])
                              << " positions): " << P.quant.slam.snpBed << "\n";
         }
         
+        // Validate --trimSource if provided
+        if (P.quant.slam.yes && !P.quant.slam.trimSource.empty() && P.quant.slam.trimSource != "-") {
+            // Check if trimSource file exists and is readable
+            struct stat trimSourceStat;
+            if (stat(P.quant.slam.trimSource.c_str(), &trimSourceStat) != 0) {
+                ostringstream errOut;
+                errOut << "EXITING because of fatal INPUT error: --trimSource file does not exist or is not accessible: "
+                       << P.quant.slam.trimSource << "\n"
+                       << "SOLUTION: check the file path and permissions.\n";
+                exitWithError(errOut.str(), std::cerr, P.inOut->logMain, EXIT_CODE_PARAMETER, P);
+            }
+            
+            // Check if trimScope is per-file (trimSource is ignored in that case)
+            if (P.quant.slam.trimScope == "per-file") {
+                P.inOut->logMain << "WARNING: --trimSource is ignored when --trimScope per-file is set. "
+                                 << "Per-file mode computes trims independently for each file.\n";
+                P.quant.slam.trimSource = "";  // Clear to avoid confusion
+            } else {
+                P.inOut->logMain << "SLAM auto-trim: using --trimSource file for trim computation: " 
+                                 << P.quant.slam.trimSource << "\n";
+            }
+        }
+        
         // Load transcript sequences for error model if enabled
         if (P.quant.transcriptVB.yes && P.quant.transcriptVB.errorModelMode != "off") {
             // Determine FASTA path: P.pGe.transcriptomeFasta else transcriptome.fa
@@ -367,12 +390,50 @@ int main(int argInN, char *argIn[])
     if (P.quant.slam.yes && P.quant.slam.autoTrimMode == "variance" && 
         P.quant.slam.trimScope == "first" && !P.quant.slam.autoTrimComputed) {
         
-        P.inOut->logMain << timeMonthDayTime() << " ..... starting SLAM auto-trim detection (single-threaded, trimScope=first)\n" << flush;
-        *P.inOut->logStdOut << timeMonthDayTime() << " ..... starting SLAM auto-trim detection\n" << flush;
+        // Determine trim source: use --trimSource if provided, otherwise first input file
+        bool usingTrimSource = !P.quant.slam.trimSource.empty() && P.quant.slam.trimSource != "-";
+        std::string trimSourcePath = usingTrimSource ? P.quant.slam.trimSource : 
+            (P.readFilesNames[0].size() > 0 ? P.readFilesNames[0][0] : "");
+        
+        if (usingTrimSource) {
+            P.inOut->logMain << timeMonthDayTime() << " ..... starting SLAM auto-trim detection (single-threaded, --trimSource)\n" << flush;
+            P.inOut->logMain << "    trim_source_file=" << trimSourcePath << "\n";
+            *P.inOut->logStdOut << timeMonthDayTime() << " ..... starting SLAM auto-trim detection (from --trimSource)\n" << flush;
+        } else {
+            P.inOut->logMain << timeMonthDayTime() << " ..... starting SLAM auto-trim detection (single-threaded, trimScope=first)\n" << flush;
+            P.inOut->logMain << "    trim_source_file=" << trimSourcePath << " (first input file)\n";
+            *P.inOut->logStdOut << timeMonthDayTime() << " ..... starting SLAM auto-trim detection\n" << flush;
+        }
         
         // Save original settings
         uint64_t originalReadMapNumber = P.readMapNumber;
         int originalRunThreadN = P.runThreadN;
+        std::vector<std::vector<std::string>> originalReadFilesNames;
+        
+        // If using --trimSource, temporarily replace input files
+        if (usingTrimSource) {
+            originalReadFilesNames = P.readFilesNames;
+            
+            // Close current input files
+            P.closeReadsFiles();
+            
+            // Set up single-file input for detection
+            P.readFilesNames[0].clear();
+            P.readFilesNames[0].push_back(P.quant.slam.trimSource);
+            if (P.readNends > 1) {
+                // For paired-end, we only use R1 for detection (trimSource should be R1)
+                P.readFilesNames[1].clear();
+                P.readFilesNames[1].push_back(P.quant.slam.trimSource);  // Same file for both mates
+            }
+            
+            // Reset counters and reopen with trimSource
+            P.iReadAll = 0;
+            g_threadChunks.chunkInN = 0;
+            g_threadChunks.chunkOutN = 0;
+            P.readFilesIndex = 0;
+            g_bamRecordIndex.store(0);
+            P.openReadsFiles();
+        }
         
         // Set detection mode: single thread, limited reads
         P.quant.slam.autoTrimDetectionPass = true;
@@ -426,7 +487,9 @@ int main(int argInN, char *argIn[])
                                  << "    smooth_window=" << P.quant.slam.autoTrimSmoothWindow
                                  << " min_seg_len=" << P.quant.slam.autoTrimSegMinLen
                                  << " max_trim=" << P.quant.slam.autoTrimMaxTrim
-                                 << " scope=" << P.quant.slam.trimScope << "\n";
+                                 << " scope=" << P.quant.slam.trimScope << "\n"
+                                 << "    trim_source=" << trimSourcePath 
+                                 << (usingTrimSource ? " (--trimSource)" : " (first input)") << "\n";
                 
                 // Write QC outputs from detection pass
                 const SlamVarianceAnalyzer* analyzer = RAdetect->slamQuant->varianceAnalyzer();
@@ -437,7 +500,8 @@ int main(int argInN, char *argIn[])
                     }
                     bool writeResult = writeSlamQcJson(*analyzer, qcJsonPath, 
                                         P.quant.slam.autoTrimFileIndex, P.quant.slam.trimScope,
-                                        trimResult.trim5p, trimResult.trim3p, trimResult.readsAnalyzed, &trimResult);
+                                        trimResult.trim5p, trimResult.trim3p, trimResult.readsAnalyzed, &trimResult,
+                                        trimSourcePath);
                     if (writeResult) {
                         P.inOut->logMain << "SLAM QC JSON written to: " << qcJsonPath << "\n";
                         
@@ -475,8 +539,16 @@ int main(int argInN, char *argIn[])
         P.readMapNumber = originalReadMapNumber;
         
         // REWIND: Close and reopen input files to start from beginning
-        P.inOut->logMain << "SLAM auto-trim: rewinding input files for main mapping pass\n";
         P.closeReadsFiles();
+        
+        // If we used --trimSource, restore original input files
+        if (usingTrimSource) {
+            P.readFilesNames = originalReadFilesNames;
+            P.inOut->logMain << "SLAM auto-trim: restoring original input files for main mapping pass\n";
+        } else {
+            P.inOut->logMain << "SLAM auto-trim: rewinding input files for main mapping pass\n";
+        }
+        
         P.iReadAll = 0;  // Reset read counter
         g_threadChunks.chunkInN = 0;  // Reset chunk counter
         g_threadChunks.chunkOutN = 0;  // Reset output chunk counter
@@ -607,8 +679,12 @@ int main(int argInN, char *argIn[])
                                 qcJsonPath = qcJsonPath.substr(0, dotPos) + "_file" + std::to_string(fileIdx) + qcJsonPath.substr(dotPos);
                             }
                         }
+                        // For per-file mode, each file is its own trim source
+                        std::string perFileTrimSource = P.readFilesNames[0].size() > static_cast<size_t>(fileIdx) ? 
+                            P.readFilesNames[0][fileIdx] : "";
                         if (writeSlamQcJson(*analyzer, qcJsonPath, fileIdx, P.quant.slam.trimScope,
-                                            trimResult.trim5p, trimResult.trim3p, trimResult.readsAnalyzed, &trimResult)) {
+                                            trimResult.trim5p, trimResult.trim3p, trimResult.readsAnalyzed, &trimResult,
+                                            perFileTrimSource)) {
                             P.inOut->logMain << "SLAM QC JSON written to: " << qcJsonPath << "\n";
                         }
                     }

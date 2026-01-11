@@ -419,6 +419,7 @@ class Parameters {
                 // Auto-trim variance analysis (segmented regression on T→C stdev curve)
                 string autoTrimMode = "";         // ""=disabled, "variance"=variance-based
                 string trimScope = "first";        // "first"=shared from first file, "per-file"=per-file
+                string trimSource = "";           // Path to file for computing shared trims (overrides first file)
                 int autoTrimMaxReads = 100000;    // Max reads to scan for variance (0=unlimited)
                 int autoTrimMinReads = 1000;      // Minimum reads required for auto-trim
                 int autoTrimSmoothWindow = 5;     // Median smoothing window for stdev curve

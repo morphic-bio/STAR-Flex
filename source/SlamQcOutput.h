@@ -14,7 +14,8 @@ bool writeSlamQcJson(const SlamVarianceAnalyzer& analyzer,
                      int trim5p,
                      int trim3p,
                      uint64_t readsAnalyzed,
-                     const SlamVarianceTrimResult* trimResult = nullptr);
+                     const SlamVarianceTrimResult* trimResult = nullptr,
+                     const std::string& trimSource = "");
 
 // Write QC HTML report using Plotly CDN
 bool writeSlamQcHtml(const std::string& jsonPath,

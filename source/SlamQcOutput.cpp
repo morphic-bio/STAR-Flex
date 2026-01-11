@@ -11,7 +11,8 @@ bool writeSlamQcJson(const SlamVarianceAnalyzer& analyzer,
                      int trim5p,
                      int trim3p,
                      uint64_t readsAnalyzed,
-                     const SlamVarianceTrimResult* trimResult) {
+                     const SlamVarianceTrimResult* trimResult,
+                     const std::string& trimSource) {
     std::ofstream out(outputPath.c_str());
     if (!out.good()) {
         return false;
@@ -28,10 +29,13 @@ bool writeSlamQcJson(const SlamVarianceAnalyzer& analyzer,
     }
     
     out << "{\n";
-    out << "  \"version\": \"1.1\",\n";
+    out << "  \"version\": \"1.2\",\n";
     out << "  \"algorithm\": \"segmented_regression\",\n";
     out << "  \"file_index\": " << fileIndex << ",\n";
     out << "  \"trim_scope\": \"" << trimScope << "\",\n";
+    if (!trimSource.empty()) {
+        out << "  \"trim_source\": \"" << trimSource << "\",\n";
+    }
     out << "  \"trim5p\": " << trim5p << ",\n";
     out << "  \"trim3p\": " << trim3p << ",\n";
     out << "  \"reads_analyzed\": " << readsAnalyzed << ",\n";
