@@ -520,6 +520,13 @@ int main(int argInN, char *argIn[])
         // Stats accumulator for tracking across files (detection reads excluded)
         Stats accumulatedStats;
         
+        // Preserve the overall mapping start time for accurate speed/time reporting
+        time_t overallTimeStartMap;
+        time(&overallTimeStartMap);
+        
+        // Track cumulative read index offset for global read IDs across files
+        uint64 cumulativeReadOffset = 0;
+        
         // Process each file: detection + mapping
         for (int fileIdx = 0; fileIdx < P.quant.slam.totalFileCount; fileIdx++) {
             P.quant.slam.currentFileIndex = fileIdx;
@@ -608,9 +615,10 @@ int main(int argInN, char *argIn[])
             P.quant.slam.autoTrimDetectionPass = false;
             
             // Reset stats after each file's detection (detection reads should not show in final totals)
+            // But preserve the overall timeStartMap for accurate speed/time reporting in Log.final.out
             g_statsAll.resetN();
-            time(&g_statsAll.timeStartMap);
-            g_statsAll.timeLastReport = g_statsAll.timeStartMap;
+            g_statsAll.timeStartMap = overallTimeStartMap;  // Use overall start time, not per-file
+            time(&g_statsAll.timeLastReport);
             
             // Restore accumulated stats from previous files (saved at end of previous file's mapping)
             if (fileIdx > 0) {
@@ -624,11 +632,12 @@ int main(int argInN, char *argIn[])
             
             // Rewind to start of files and skip to target file
             P.closeReadsFiles();
-            P.iReadAll = 0;
+            // Restore read indices from end of previous file (maintains global monotonic IDs)
+            P.iReadAll = cumulativeReadOffset;
+            // Note: g_bamRecordIndex is not reset - it continues monotonically
             g_threadChunks.chunkInN = 0;
             g_threadChunks.chunkOutN = 0;
             P.readFilesIndex = 0;
-            g_bamRecordIndex.store(0);  // Reset BAM record index
             P.openReadsFiles();
             
             P.quant.slam.skipToFileIndex = fileIdx;  // Skip to target file for mapping
@@ -649,6 +658,9 @@ int main(int argInN, char *argIn[])
             
             // Save accumulated stats at end of this file's mapping (for next file to restore)
             accumulatedStats = g_statsAll;
+            
+            // Save read indices for next file (to maintain global monotonic IDs)
+            cumulativeReadOffset = P.iReadAll;
         }
         
         // DON'T delete RAchunk here - keep it for post-processing (SLAM quantification, etc.)
