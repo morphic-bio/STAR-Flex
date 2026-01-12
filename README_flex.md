@@ -87,6 +87,9 @@ This fork adds several features beyond upstream STAR:
   - **SNP handling** (choose one):
     - `--slamSnpDetect 1` (internal SNP detection; default choice when no sample-specific VCF is available)
     - `--slamSnpBed /path/to/snps.bed` (use only when a sample-specific VCF/BED is known; if set, it disables internal detection)
+  - **SNP threshold** (optional): `--slamSnpDetectFrac <value>` controls the mismatch fraction threshold for SNP detection:
+    - `<= 0` (default): auto-estimate using knee/elbow detection on the mismatch-fraction distribution. Falls back to 0.22 if insufficient data or weak knee signal. Clamped to [0.10, 0.60].
+    - `> 0`: explicit threshold for reproducibility (e.g., `--slamSnpDetectFrac 0.22`).
   - **Strandness filter** (optional): `--slamStrandness Unspecific|Sense|Antisense` (default: `Unspecific`).
   - **Alignment mode** (recommended): `--alignEndsType EndToEnd` to avoid soft-clipping artifacts.
   - **Adapter clipping**: leave off for fixed-length, adapter-free reads (e.g., SE50). Only set

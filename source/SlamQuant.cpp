@@ -257,6 +257,10 @@ void SlamQuant::recordSnpObservation(uint64_t pos, bool isMismatch) {
     entry = (cov << 16) | mis;
 }
 
+std::unordered_map<uint64_t, uint32_t> SlamQuant::getSnpMaskData() const {
+    return snpMask_;  // Return copy
+}
+
 void SlamQuant::bufferSnpRead(uint32_t geneId, uint16_t nT,
                               const std::vector<uint32_t>& mismatchPositions, double weight) {
     if (!snpDetectEnabled_ || mismatchPositions.empty() || weight <= 0.0) {
@@ -856,6 +860,55 @@ void SlamQuant::writeMismatchDetails(const std::string& outFile) const {
         }
     }
     out.close();
+}
+
+std::unordered_map<uint32_t, std::tuple<double, double, double, double>> SlamQuant::getPositionTransitionData() const {
+    std::unordered_map<uint32_t, std::tuple<double, double, double, double>> result;
+    
+    // Extract ExonicSense category (index 1)
+    size_t catIdx = static_cast<size_t>(SlamMismatchCategory::ExonicSense);
+    const auto& positions = positionTransitions_[catIdx];
+    
+    // Genomic bases: A=0, C=1, G=2, T=3
+    // Transcript T->C corresponds to:
+    //   plus-strand: T->C
+    //   minus-strand: A->G (complement of T->C)
+    const int A_BASE = 0;
+    const int C_BASE = 1;
+    const int G_BASE = 2;
+    const int T_BASE = 3;
+    
+    for (size_t pos = 0; pos < positions.size(); ++pos) {
+        const SlamPositionStats& stats = positions[pos];
+        
+        double t_cov = 0.0;
+        double a_cov = 0.0;
+        double tc_mm = 0.0;
+        double ta_mm = 0.0;
+        
+        // Sum across overlap and opposite dimensions
+        for (int ov = 0; ov < 2; ++ov) {
+            for (int opp = 0; opp < 2; ++opp) {
+                t_cov += stats.coverage[ov][opp][T_BASE];
+                a_cov += stats.coverage[ov][opp][A_BASE];
+                
+                // Transcript T→C: genomic T->C plus genomic A->G
+                tc_mm += stats.mismatches[ov][opp][T_BASE][C_BASE];
+                tc_mm += stats.mismatches[ov][opp][A_BASE][G_BASE];
+                
+                // Transcript T→A control: genomic T->A plus genomic A->T
+                ta_mm += stats.mismatches[ov][opp][T_BASE][A_BASE];
+                ta_mm += stats.mismatches[ov][opp][A_BASE][T_BASE];
+            }
+        }
+        
+        double total_cov = t_cov + a_cov;
+        if (total_cov > 0.0) {
+            result[static_cast<uint32_t>(pos)] = std::make_tuple(total_cov, tc_mm, total_cov, ta_mm);
+        }
+    }
+    
+    return result;
 }
 
 void SlamQuant::writeTopMismatches(const Transcriptome& tr, const std::string& refFile,

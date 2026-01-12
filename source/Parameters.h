@@ -427,6 +427,7 @@ class Parameters {
                 int autoTrimMaxTrim = 15;         // Maximum trim at either end
                 string slamQcJson = "";           // Path for QC JSON output (empty=auto-generate)
                 string slamQcHtml = "";            // Path for QC HTML output (empty=auto-generate)
+                string slamQcReport = "";          // Prefix for comprehensive QC report (JSON + HTML, empty=disabled)
                 int autoTrim5p = 0;               // Auto-computed 5' trim (0=not computed)
                 int autoTrim3p = 0;                // Auto-computed 3' trim (0=not computed)
                 bool autoTrimComputed = false;    // Whether auto-trim has been computed
@@ -442,6 +443,32 @@ class Parameters {
                 int totalFileCount = 0;                  // Total number of input files
                 int skipToFileIndex = -1;                // Skip reads until reaching this file index (-1=disabled)
             } slam;
+
+            struct {
+                // Mask source flags (precedence: maskIn > buildFastqs)
+                string maskIn;                // --slamSnpMaskIn (existing mask, highest priority)
+                string buildFastqsFofn;      // --slamSnpMaskBuildFastqs (FOFN for pre-pass)
+                int buildOnlyInt = 0;         // --slamSnpMaskOnly (int for parsing)
+                bool buildOnly = false;       // derived from buildOnlyInt
+                
+                // Output paths
+                string bedOut;                // --slamSnpMaskBedOut
+                string summaryOut;           // --slamSnpMaskSummaryOut
+                string bamOut;               // --slamSnpMaskBamOut (optional, default empty)
+                
+                // EM model parameters
+                uint32_t minCov = 20;         // --slamSnpMaskMinCov
+                uint32_t minAlt = 3;          // --slamSnpMaskMinAlt
+                double posterior = 0.99;      // --slamSnpMaskPosterior
+                uint32_t maxIter = 50;        // --slamSnpMaskMaxIter
+                double convergeRelLL = 1e-7;  // --slamSnpMaskConvergeRelLL
+                
+                // Artifact filters
+                uint32_t junctionFlank = 6;   // --slamSnpMaskJunctionFlank
+                uint32_t indelFlank = 3;      // --slamSnpMaskIndelFlank
+                uint32_t minMapQ = 20;        // --slamSnpMaskMinMapQ
+                uint32_t minBaseQ = 20;       // --slamSnpMaskMinBaseQ
+            } slamSnpMask;
 
             struct {
                 bool yes=false;

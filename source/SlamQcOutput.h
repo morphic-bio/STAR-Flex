@@ -2,6 +2,7 @@
 #define SLAM_QC_OUTPUT_H
 
 #include "SlamVarianceAnalysis.h"
+#include "SlamQuant.h"
 #include <string>
 #include <cstdint>
 #include <vector>
@@ -17,7 +18,19 @@ bool writeSlamQcJson(const SlamVarianceAnalyzer& analyzer,
                      const SlamVarianceTrimResult* trimResult = nullptr,
                      const std::string& trimSource = "");
 
-// Write QC HTML report using Plotly CDN
+// Write comprehensive QC JSON with T→C/T→A rates, PHRED, trim, segmented fits
+// Extracts data from SlamQuant positionTransitions_ and varianceAnalyzer
+bool writeSlamQcComprehensiveJson(const SlamQuant& slamQuant,
+                                 const std::string& outputPath,
+                                 int trim5p,
+                                 int trim3p,
+                                 const SlamVarianceTrimResult* trimResult = nullptr);
+
+// Write QC HTML report using Plotly CDN (4-panel comprehensive report)
+bool writeSlamQcComprehensiveHtml(const std::string& jsonPath,
+                                   const std::string& htmlPath);
+
+// Write QC HTML report using Plotly CDN (legacy, variance-focused)
 bool writeSlamQcHtml(const std::string& jsonPath,
                      const std::string& htmlPath,
                      uint32_t fileIndex);

@@ -147,6 +147,10 @@ public:
                        const std::vector<uint32_t>& mismatchPositions, double weight);
     void finalizeSnpMask(SlamSnpBufferStats* outStats = nullptr);
     
+    // Get raw SNP mask data (for mask build pre-pass)
+    // Returns copy of internal snpMask_ map before finalization
+    std::unordered_map<uint64_t, uint32_t> getSnpMaskData() const;
+    
     // Variance analysis for auto-trim
     bool recordVarianceRead(); // Returns false if max reads reached
     void recordVariancePosition(uint32_t readPos, uint8_t qual, bool isT, bool isTc);
@@ -182,6 +186,10 @@ public:
     void writeMismatchDetails(const std::string& outFile) const;
     void writeTopMismatches(const Transcriptome& tr, const std::string& refFile,
                            const std::string& mismatchFile, size_t topN) const;
+    
+    // Get position transition data for QC (ExonicSense category only)
+    // Returns map: position -> {tc_cov, tc_mm, ta_cov, ta_mm}
+    std::unordered_map<uint32_t, std::tuple<double, double, double, double>> getPositionTransitionData() const;
     void initDebug(const Transcriptome& tr,
                    const std::unordered_set<std::string>& debugGenes,
                    const std::unordered_set<std::string>& debugReads,

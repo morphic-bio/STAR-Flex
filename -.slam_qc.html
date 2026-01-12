@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>SLAM QC Report</title>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <style>
+    body { font-family: 'Segoe UI', Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+    .container { max-width: 1400px; margin: 0 auto; }
+    h1 { color: #333; }
+    .summary { background: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .summary-item { display: inline-block; margin-right: 30px; }
+    .summary-label { color: #666; font-size: 12px; }
+    .summary-value { font-size: 24px; font-weight: bold; color: #2196F3; }
+    .plot-container { background: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>SLAM QC Report</h1>
+    <div class="summary" id="summary"></div>
+    <div class="plot-container" id="plot1"></div>
+    <div class="plot-container" id="plot2"></div>
+    <div class="plot-container" id="plot3"></div>
+    <div class="plot-container" id="plot4"></div>
+  </div>
+  <script>
+    fetch('-.slam_qc.json')
+      .then(response => response.json())
+      .then(data => {
+        const positions = data.positions.map(p => p.position);
+        const starTcRate = data.positions.map(p => p.star_tc_rate || 0);
+        const starTaRate = data.positions.map(p => p.star_ta_rate || 0);
+        const starTcStdev = data.positions.map(p => {
+          if (p.stddev_tc_rate !== null && p.stddev_tc_rate !== undefined) return p.stddev_tc_rate;
+          if (p.star_tc_stdev !== null && p.star_tc_stdev !== undefined) return p.star_tc_stdev;
+          return 0;
+        });
+        const meanQual = data.positions.map(p => p.mean_qual);
+        const tCount = data.positions.map(p => p.t_count || 0);
+        
+        // Trim bars
+        const shapes = [];
+        if (data.trim5p > 0) {
+          shapes.push({ type: 'line', x0: data.trim5p + 1, x1: data.trim5p + 1, y0: 0, y1: 1, yref: 'paper', line: { color: 'purple', width: 2, dash: 'dash' } });
+        }
+        if (data.trim3p > 0 && positions.length > 0) {
+          const trim3pPos = positions[positions.length - 1] - data.trim3p;
+          shapes.push({ type: 'line', x0: trim3pPos, x1: trim3pPos, y0: 0, y1: 1, yref: 'paper', line: { color: 'purple', width: 2, dash: 'dot' } });
+        }
+        
+        // Summary
+        document.getElementById('summary').innerHTML = `
+          <div class="summary-item"><div class="summary-label">Trim 5'</div><div class="summary-value">${data.trim5p}</div></div>
+          <div class="summary-item"><div class="summary-label">Trim 3'</div><div class="summary-value">${data.trim3p}</div></div>
+        `;
+        
+        // Plot 1: T transition rates (T→C and T→A)
+        Plotly.newPlot('plot1', [
+          { x: positions, y: starTcRate, type: 'scatter', mode: 'lines', name: 'STAR T→C', line: { width: 2, color: '#2196F3' } },
+          { x: positions, y: starTaRate, type: 'scatter', mode: 'lines', name: 'STAR T→A', line: { width: 1, color: '#2196F3', dash: 'dash' } }
+        ], {
+          title: 'Raw Mismatch Rates by Position',
+          xaxis: { title: 'Read Position (1-based)' },
+          yaxis: { title: 'Mismatch Rate (%)', type: 'log' },
+          shapes: shapes,
+          hovermode: 'closest',
+          legend: { x: 0.7, y: 0.9 }
+        });
+        
+        // Plot 2: T→C stdev + smoothed + segmented fit
+        const traces2 = [
+          { x: positions, y: starTcStdev, type: 'scatter', mode: 'lines+markers', name: 'STAR T→C Stdev', marker: { size: 4, color: '#2196F3' }, line: { width: 1 } }
+        ];
+        
+        if (data.segmented_regression) {
+          const seg = data.segmented_regression;
+          if (seg.smoothed_stdev_curve && seg.smoothed_stdev_curve.length > 0) {
+            const smoothed = seg.smoothed_stdev_curve;
+            const smoothedPos = Array.from({length: smoothed.length}, (_, i) => i + 1);
+            traces2.push({ x: smoothedPos, y: smoothed, type: 'scatter', mode: 'lines', name: 'Smoothed', line: { width: 2, color: '#333', dash: 'dash' } });
+            
+            // Segmented regression lines
+            const b1 = seg.breakpoint_b1;
+            const b2 = seg.breakpoint_b2;
+            if (b1 > 0) {
+              const x1 = Array.from({length: b1}, (_, i) => i + 1);
+              const y1 = x1.map(x => seg.segment1.slope * (x - 1) + seg.segment1.intercept);
+              traces2.push({ x: x1, y: y1, type: 'scatter', mode: 'lines', name: 'Seg1', line: { width: 2, color: '#f44336' } });
+            }
+            const x2 = Array.from({length: b2 - b1 + 1}, (_, i) => b1 + i + 1);
+            const y2 = x2.map(x => seg.segment2.slope * (x - 1) + seg.segment2.intercept);
+            traces2.push({ x: x2, y: y2, type: 'scatter', mode: 'lines', name: 'Seg2', line: { width: 2, color: '#4CAF50' } });
+            if (b2 < smoothed.length - 1) {
+              const x3 = Array.from({length: smoothed.length - b2 - 1}, (_, i) => b2 + i + 2);
+              const y3 = x3.map(x => seg.segment3.slope * (x - 1) + seg.segment3.intercept);
+              traces2.push({ x: x3, y: y3, type: 'scatter', mode: 'lines', name: 'Seg3', line: { width: 2, color: '#ff9800' } });
+            }
+          }
+        }
+        
+        Plotly.newPlot('plot2', traces2, {
+          title: 'T→C Variation by Position (per-base stdev)',
+          xaxis: { title: 'Read Position (1-based)' },
+          yaxis: { title: 'T→C Stdev (%)' },
+          shapes: shapes,
+          hovermode: 'closest',
+          legend: { x: 0.7, y: 0.9 }
+        });
+        
+        // Plot 3: PHRED + T assignment rate
+        Plotly.newPlot('plot3', [
+          { x: positions, y: meanQual, type: 'scatter', mode: 'lines+markers', name: 'Avg PHRED (T positions)', yaxis: 'y', marker: { size: 4, color: '#2196F3' }, line: { width: 2 } },
+          { x: positions, y: tCount, type: 'scatter', mode: 'lines+markers', name: 'T Count', yaxis: 'y2', marker: { size: 4, color: '#4CAF50' }, line: { width: 2 } }
+        ], {
+          title: 'PHRED Quality and T Assignment Rate by Position',
+          xaxis: { title: 'Read Position (1-based)' },
+          yaxis: { title: 'Average PHRED Quality', side: 'left', range: [0, 45] },
+          yaxis2: { title: 'T Count', side: 'right', overlaying: 'y' },
+          shapes: shapes,
+          hovermode: 'closest',
+          legend: { x: 0.7, y: 0.9 }
+        });
+        
+        // Plot 4: Trim overlay (duplicate of plot 1 with trim emphasis)
+        Plotly.newPlot('plot4', [
+          { x: positions, y: starTcRate, type: 'scatter', mode: 'lines', name: 'STAR T→C', line: { width: 2, color: '#2196F3' } },
+          { x: positions, y: starTaRate, type: 'scatter', mode: 'lines', name: 'STAR T→A', line: { width: 1, color: '#2196F3', dash: 'dash' } }
+        ], {
+          title: 'Trim Overlay on T Transition Rates',
+          xaxis: { title: 'Read Position (1-based)' },
+          yaxis: { title: 'Mismatch Rate (%)', type: 'log' },
+          shapes: shapes,
+          hovermode: 'closest',
+          annotations: [
+            { x: data.trim5p + 1, y: 1, yref: 'paper', text: 'trim5p=' + data.trim5p, showarrow: true, arrowhead: 2, ax: 0, ay: -20 },
+            { x: positions[positions.length - 1] - data.trim3p, y: 1, yref: 'paper', text: 'trim3p=' + data.trim3p, showarrow: true, arrowhead: 2, ax: 0, ay: -20 }
+          ],
+          legend: { x: 0.7, y: 0.9 }
+        });
+      });
+  </script>
+</body>
+</html>

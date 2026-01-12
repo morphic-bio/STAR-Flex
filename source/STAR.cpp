@@ -41,6 +41,7 @@
 #include "SlamQuant.h"
 #include "SlamVarianceAnalysis.h"
 #include "SlamQcOutput.h"
+#include "SnpMaskBuild.h"
 // Note: effective_length.h not included due to Transcriptome class name conflict
 // Use wrapper function instead
 #include "effective_length_wrapper.h"
@@ -254,6 +255,154 @@ int main(int argInN, char *argIn[])
     { // load transcriptome
         transcriptomeMain = new Transcriptome(P);
 
+        // SNP mask build pre-pass (if requested)
+        bool hasMaskIn = !P.quant.slamSnpMask.maskIn.empty() && P.quant.slamSnpMask.maskIn != "-" && P.quant.slamSnpMask.maskIn != "None";
+        bool hasBuildFastqs = !P.quant.slamSnpMask.buildFastqsFofn.empty() && P.quant.slamSnpMask.buildFastqsFofn != "-" && P.quant.slamSnpMask.buildFastqsFofn != "None";
+        
+        if (hasBuildFastqs && !hasMaskIn) {
+            // Build mask from FASTQs
+            P.inOut->logMain << timeMonthDayTime() << " ..... starting SNP mask build pre-pass\n" << flush;
+            *P.inOut->logStdOut << timeMonthDayTime() << " ..... starting SNP mask build\n" << flush;
+            
+            SnpMaskBuild maskBuilder(P, *genomeMain.genomeOut.g);
+            
+            // Parse FOFN
+            std::vector<std::pair<std::string, std::string>> fastqPairs;
+            std::string err;
+            if (!maskBuilder.parseFofn(P.quant.slamSnpMask.buildFastqsFofn, fastqPairs, &err)) {
+                ostringstream errOut;
+                errOut << "EXITING because of fatal INPUT error: failed to parse FOFN "
+                       << P.quant.slamSnpMask.buildFastqsFofn << "\n";
+                if (!err.empty()) {
+                    errOut << "Details: " << err << "\n";
+                }
+                exitWithError(errOut.str(), std::cerr, P.inOut->logMain, EXIT_CODE_PARAMETER, P);
+            }
+            
+            P.inOut->logMain << "Parsed " << fastqPairs.size() << " FASTQ pair(s) from FOFN\n";
+            
+            // Set up FASTQ files for mask build alignment
+            // Save original readFilesNames
+            std::vector<std::vector<std::string> > originalReadFilesNames = P.readFilesNames;
+            P.readFilesNames.clear();
+            P.readFilesNames.resize(1);  // One mate set
+            
+            // Convert fastqPairs to readFilesNames format
+            for (const auto& pair : fastqPairs) {
+                if (!pair.second.empty()) {
+                    // Paired-end
+                    P.readFilesNames[0].push_back(pair.first);
+                    if (P.readFilesNames.size() < 2) {
+                        P.readFilesNames.resize(2);
+                    }
+                    P.readFilesNames[1].push_back(pair.second);
+                } else {
+                    // Single-end
+                    P.readFilesNames[0].push_back(pair.first);
+                }
+            }
+            
+            // Update readNends based on whether we have PE or SE
+            P.readNends = (fastqPairs[0].second.empty()) ? 1 : 2;
+            P.readNmates = P.readNends;
+            
+            // Re-initialize read files
+            P.closeReadsFiles();
+            P.readFilesInit();
+            P.openReadsFiles();
+            
+            // Create temporary SlamQuant for mask build
+            uint32_t nGenes = (transcriptomeMain != nullptr) ? transcriptomeMain->nGe : 1;
+            std::unique_ptr<SlamQuant> tempSlamQuant(new SlamQuant(nGenes, true, -1.0));
+            
+            // Create ReadAlignChunk with temp SlamQuant
+            // We need to temporarily set quant.slam.yes and point to temp SlamQuant
+            bool originalSlamYes = P.quant.slam.yes;
+            P.quant.slam.yes = true;  // Enable SLAM mode for mask build
+            
+            ReadAlignChunk* RAchunkMask = new ReadAlignChunk(P, genomeMain, transcriptomeMain, 0,
+                                                              libem_transcriptome.get());
+            
+            // Replace SlamQuant with our temp one
+            if (RAchunkMask->slamQuant) {
+                delete RAchunkMask->slamQuant;
+            }
+            RAchunkMask->slamQuant = tempSlamQuant.release();
+            // CRITICAL: Update RA->slamQuant to point to the new object to avoid dangling pointer
+            if (RAchunkMask->RA != nullptr) {
+                RAchunkMask->RA->slamQuant = RAchunkMask->slamQuant;
+            }
+            
+            // Run alignment to collect observations
+            P.inOut->logMain << timeMonthDayTime() << " ..... aligning reads for mask build\n" << flush;
+            RAchunkMask->processChunks();
+            
+            // Extract data from SlamQuant and run EM/filtering
+            maskBuilder.extractFromSlamQuant(RAchunkMask->slamQuant);
+            
+            // Restore original settings
+            P.quant.slam.yes = originalSlamYes;
+            P.readFilesNames = originalReadFilesNames;
+            // readNends is 1 for SE, 2 for PE (number of mate arrays, not file count)
+            P.readNends = (originalReadFilesNames.size() > 1) ? 2 : 1;
+            P.readNmates = P.readNends;
+            
+            // Close and re-open with original files
+            P.closeReadsFiles();
+            P.readFilesInit();
+            if (P.runMode == "alignReads") {
+                P.openReadsFiles();
+            }
+            
+            // Clean up
+            delete RAchunkMask;
+            
+            // Now run mask build processing (EM fit, filtering, etc.)
+            SnpMaskBuildStats buildStats;
+            if (!maskBuilder.buildMask(fastqPairs, transcriptomeMain, &buildStats, &err)) {
+                ostringstream errOut;
+                errOut << "EXITING because of fatal error during mask build\n";
+                if (!err.empty()) {
+                    errOut << "Details: " << err << "\n";
+                }
+                exitWithError(errOut.str(), std::cerr, P.inOut->logMain, EXIT_CODE_PARAMETER, P);
+            }
+            
+            // Write outputs
+            if (!maskBuilder.writeBed(P.quant.slamSnpMask.bedOut, *genomeMain.genomeOut.g, &err)) {
+                ostringstream errOut;
+                errOut << "EXITING because of fatal error writing BED output\n";
+                if (!err.empty()) {
+                    errOut << "Details: " << err << "\n";
+                }
+                exitWithError(errOut.str(), std::cerr, P.inOut->logMain, EXIT_CODE_PARAMETER, P);
+            }
+            
+            if (!P.quant.slamSnpMask.summaryOut.empty()) {
+                if (!maskBuilder.writeSummary(P.quant.slamSnpMask.summaryOut, buildStats, &err)) {
+                    P.inOut->logMain << "WARNING: failed to write summary: " << err << "\n";
+                }
+            }
+            
+            P.inOut->logMain << timeMonthDayTime() << " ..... finished SNP mask build\n" << flush;
+            *P.inOut->logStdOut << timeMonthDayTime() << " ..... finished SNP mask build\n" << flush;
+            
+            // If --slamSnpMaskOnly, exit here
+            if (P.quant.slamSnpMask.buildOnly) {
+                P.inOut->logMain << "Exiting after mask build (--slamSnpMaskOnly)\n" << flush;
+                sysRemoveDir(P.outFileTmp);
+                exit(0);
+            }
+            
+            // Otherwise, load the newly built mask for use in main SLAM run
+            P.quant.slam.snpBed = P.quant.slamSnpMask.bedOut;
+        }
+        
+        // Load SNP mask (either from --slamSnpMaskIn or from newly built mask)
+        if (hasMaskIn) {
+            P.quant.slam.snpBed = P.quant.slamSnpMask.maskIn;
+        }
+        
         if (P.quant.slam.yes && !P.quant.slam.snpBed.empty()) {
             P.quant.slam.snpMask = new SlamSnpMask();
             std::string err;
@@ -1265,6 +1414,40 @@ int main(int argInN, char *argIn[])
                              << P.quant.slam.debugOutPrefix << ".gene.tsv and "
                              << P.quant.slam.debugOutPrefix << ".reads.tsv\n";
         }
+        
+        // Generate comprehensive QC report if requested
+        if (!P.quant.slam.slamQcReport.empty()) {
+            std::string qcJsonPath = P.quant.slam.slamQcReport + ".slam_qc.json";
+            std::string qcHtmlPath = P.quant.slam.slamQcReport + ".slam_qc.html";
+            
+            // Get trim result if available (recompute from merged SlamQuant if variance analysis enabled)
+            SlamVarianceTrimResult* trimResultPtr = nullptr;
+            SlamVarianceTrimResult trimResult;
+            if (mergedSlam.varianceAnalysisEnabled() && P.quant.slam.autoTrimComputed) {
+                // Use default read length (100) - trim result is optional for QC report
+                uint32_t readLength = 100;
+                trimResult = mergedSlam.computeVarianceTrim(readLength);
+                if (trimResult.success) {
+                    trimResultPtr = &trimResult;
+                }
+            }
+            
+            int trim5p = P.quant.slam.autoTrimComputed ? P.quant.slam.autoTrim5p : 0;
+            int trim3p = P.quant.slam.autoTrimComputed ? P.quant.slam.autoTrim3p : 0;
+            
+            if (writeSlamQcComprehensiveJson(mergedSlam, qcJsonPath, trim5p, trim3p, trimResultPtr)) {
+                P.inOut->logMain << "SLAM comprehensive QC JSON written to: " << qcJsonPath << "\n";
+                
+                if (writeSlamQcComprehensiveHtml(qcJsonPath, qcHtmlPath)) {
+                    P.inOut->logMain << "SLAM comprehensive QC HTML written to: " << qcHtmlPath << "\n";
+                } else {
+                    P.inOut->logMain << "WARNING: Failed to write SLAM comprehensive QC HTML\n";
+                }
+            } else {
+                P.inOut->logMain << "WARNING: Failed to write SLAM comprehensive QC JSON\n";
+            }
+        }
+        
         *P.inOut->logStdOut << timeMonthDayTime() << " ..... finished SLAM quantification\n"
                             << flush;
         P.inOut->logMain << timeMonthDayTime() << " ..... finished SLAM quantification\n";

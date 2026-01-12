@@ -423,6 +423,24 @@ Parameters::Parameters() {//initalize parameters info
     parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "autoTrimDetectionReads", &quant.slam.autoTrimDetectionReads));
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamQcJson", &quant.slam.slamQcJson));
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamQcHtml", &quant.slam.slamQcHtml));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamQcReport", &quant.slam.slamQcReport));
+    
+    // SLAM SNP mask build parameters
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamSnpMaskIn", &quant.slamSnpMask.maskIn));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamSnpMaskBuildFastqs", &quant.slamSnpMask.buildFastqsFofn));
+    parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "slamSnpMaskOnly", &quant.slamSnpMask.buildOnlyInt));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamSnpMaskBedOut", &quant.slamSnpMask.bedOut));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamSnpMaskSummaryOut", &quant.slamSnpMask.summaryOut));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamSnpMaskBamOut", &quant.slamSnpMask.bamOut));
+    parArray.push_back(new ParameterInfoScalar <uint32>   (-1, -1, "slamSnpMaskMinCov", &quant.slamSnpMask.minCov));
+    parArray.push_back(new ParameterInfoScalar <uint32>   (-1, -1, "slamSnpMaskMinAlt", &quant.slamSnpMask.minAlt));
+    parArray.push_back(new ParameterInfoScalar <double>   (-1, -1, "slamSnpMaskPosterior", &quant.slamSnpMask.posterior));
+    parArray.push_back(new ParameterInfoScalar <uint32>   (-1, -1, "slamSnpMaskMaxIter", &quant.slamSnpMask.maxIter));
+    parArray.push_back(new ParameterInfoScalar <double>   (-1, -1, "slamSnpMaskConvergeRelLL", &quant.slamSnpMask.convergeRelLL));
+    parArray.push_back(new ParameterInfoScalar <uint32>   (-1, -1, "slamSnpMaskJunctionFlank", &quant.slamSnpMask.junctionFlank));
+    parArray.push_back(new ParameterInfoScalar <uint32>   (-1, -1, "slamSnpMaskIndelFlank", &quant.slamSnpMask.indelFlank));
+    parArray.push_back(new ParameterInfoScalar <uint32>   (-1, -1, "slamSnpMaskMinMapQ", &quant.slamSnpMask.minMapQ));
+    parArray.push_back(new ParameterInfoScalar <uint32>   (-1, -1, "slamSnpMaskMinBaseQ", &quant.slamSnpMask.minBaseQ));
 
     //2-pass
     parArray.push_back(new ParameterInfoScalar <uint>   (-1, -1, "twopass1readsN", &twoPass.pass1readsN));
@@ -1482,6 +1500,45 @@ void Parameters::inputParameters (int argInN, char* argIn[]) {//input parameters
                    << "Got: " << quant.slam.compatModeStr << "\n";
             exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
         }
+        
+        // Validate SNP mask build parameters
+        bool hasMaskIn = !quant.slamSnpMask.maskIn.empty() && quant.slamSnpMask.maskIn != "-" && quant.slamSnpMask.maskIn != "None";
+        bool hasBuildFastqs = !quant.slamSnpMask.buildFastqsFofn.empty() && quant.slamSnpMask.buildFastqsFofn != "-" && quant.slamSnpMask.buildFastqsFofn != "None";
+        
+        if (hasMaskIn && hasBuildFastqs) {
+            inOut->logMain << "WARNING: --slamSnpMaskIn takes precedence over --slamSnpMaskBuildFastqs. "
+                           << "Will load existing mask and skip build.\n";
+        }
+        
+        if (hasBuildFastqs) {
+            if (quant.slamSnpMask.bedOut.empty()) {
+                ostringstream errOut;
+                errOut << "EXITING because of FATAL PARAMETER ERROR: "
+                       << "--slamSnpMaskBuildFastqs requires --slamSnpMaskBedOut\n";
+                exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
+            }
+            if (quant.slamSnpMask.minCov == 0) {
+                ostringstream errOut;
+                errOut << "EXITING because of FATAL PARAMETER ERROR: "
+                       << "--slamSnpMaskMinCov must be > 0\n";
+                exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
+            }
+            if (quant.slamSnpMask.posterior < 0.0 || quant.slamSnpMask.posterior > 1.0) {
+                ostringstream errOut;
+                errOut << "EXITING because of FATAL PARAMETER ERROR: "
+                       << "--slamSnpMaskPosterior must be in [0,1]\n";
+                exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
+            }
+            if (quant.slamSnpMask.maxIter == 0) {
+                ostringstream errOut;
+                errOut << "EXITING because of FATAL PARAMETER ERROR: "
+                       << "--slamSnpMaskMaxIter must be > 0\n";
+                exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
+            }
+        }
+        
+        // Convert buildOnlyInt to bool
+        quant.slamSnpMask.buildOnly = (quant.slamSnpMask.buildOnlyInt != 0);
         
         // Apply granular overrides (if explicitly set via int flags, they override mode defaults)
         // Sentinel is -1 (not set), so any value >= 0 is an explicit override (including 0 to disable)

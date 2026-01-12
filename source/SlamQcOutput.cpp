@@ -1,8 +1,11 @@
 #include "SlamQcOutput.h"
+#include "SlamQuant.h"
 #include <fstream>
 #include <sstream>
 #include <iomanip>
 #include <cmath>
+#include <tuple>
+#include <algorithm>
 
 bool writeSlamQcJson(const SlamVarianceAnalyzer& analyzer,
                      const std::string& outputPath,
@@ -256,6 +259,318 @@ bool writeSlamQcHtml(const std::string& jsonPath,
     out << "          yaxis2: { title: 'Quality Stdev', side: 'right', overlaying: 'y' },\n";
     out << "          shapes: shapes,\n";
     out << "          hovermode: 'closest'\n";
+    out << "        });\n";
+    out << "      });\n";
+    out << "  </script>\n";
+    out << "</body>\n";
+    out << "</html>\n";
+    
+    return out.good();
+}
+
+bool writeSlamQcComprehensiveJson(const SlamQuant& slamQuant,
+                                   const std::string& outputPath,
+                                   int trim5p,
+                                   int trim3p,
+                                   const SlamVarianceTrimResult* trimResult) {
+    std::ofstream out(outputPath.c_str());
+    if (!out.good()) {
+        return false;
+    }
+    
+    // Get position transition data (T→C and T→A)
+    auto transitionData = slamQuant.getPositionTransitionData();
+    
+    // Get variance analyzer stats (PHRED quality, T counts)
+    const SlamVarianceAnalyzer* analyzer = slamQuant.varianceAnalyzer();
+    std::unordered_map<uint32_t, SlamPositionVarianceStats> varianceStats;
+    if (analyzer != nullptr) {
+        varianceStats = analyzer->getStats();
+    }
+    
+    // Find max position
+    uint32_t maxPos = 0;
+    for (const auto& kv : transitionData) {
+        if (kv.first > maxPos) maxPos = kv.first;
+    }
+    for (const auto& kv : varianceStats) {
+        if (kv.first > maxPos) maxPos = kv.first;
+    }
+    
+    out << "{\n";
+    out << "  \"version\": \"2.0\",\n";
+    out << "  \"type\": \"comprehensive_qc\",\n";
+    out << "  \"trim5p\": " << trim5p << ",\n";
+    out << "  \"trim3p\": " << trim3p << ",\n";
+    
+    // Segmented regression info
+    if (trimResult != nullptr) {
+        out << "  \"segmented_regression\": {\n";
+        out << "    \"breakpoint_b1\": " << trimResult->kneeBin5p << ",\n";
+        out << "    \"breakpoint_b2\": " << trimResult->kneeBin3p << ",\n";
+        out << "    \"total_sse\": " << std::fixed << std::setprecision(6) << trimResult->totalSSE << ",\n";
+        out << "    \"mode\": \"" << trimResult->mode << "\",\n";
+        out << "    \"segment1\": {\n";
+        out << "      \"slope\": " << std::fixed << std::setprecision(6) << trimResult->seg1.slope << ",\n";
+        out << "      \"intercept\": " << std::fixed << std::setprecision(6) << trimResult->seg1.intercept << "\n";
+        out << "    },\n";
+        out << "    \"segment2\": {\n";
+        out << "      \"slope\": " << std::fixed << std::setprecision(6) << trimResult->seg2.slope << ",\n";
+        out << "      \"intercept\": " << std::fixed << std::setprecision(6) << trimResult->seg2.intercept << "\n";
+        out << "    },\n";
+        out << "    \"segment3\": {\n";
+        out << "      \"slope\": " << std::fixed << std::setprecision(6) << trimResult->seg3.slope << ",\n";
+        out << "      \"intercept\": " << std::fixed << std::setprecision(6) << trimResult->seg3.intercept << "\n";
+        out << "    },\n";
+        if (!trimResult->smoothedCurve.empty()) {
+            out << "    \"smoothed_stdev_curve\": [";
+            for (size_t i = 0; i < trimResult->smoothedCurve.size(); ++i) {
+                if (i > 0) out << ", ";
+                if (std::isnan(trimResult->smoothedCurve[i])) {
+                    out << "null";
+                } else {
+                    out << std::fixed << std::setprecision(6) << trimResult->smoothedCurve[i];
+                }
+            }
+            out << "]\n";
+        } else {
+            out << "    \"smoothed_stdev_curve\": []\n";
+        }
+        out << "  },\n";
+    } else {
+        out << "  \"segmented_regression\": null,\n";
+    }
+    
+    out << "  \"positions\": [\n";
+    
+    bool first = true;
+    for (uint32_t pos = 0; pos <= maxPos; ++pos) {
+        // Skip positions with no data
+        bool hasTransition = transitionData.count(pos) > 0;
+        bool hasVariance = varianceStats.count(pos) > 0;
+        if (!hasTransition && !hasVariance) {
+            continue;
+        }
+        
+        if (!first) {
+            out << ",\n";
+        }
+        first = false;
+        
+        out << "    {\n";
+        out << "      \"position\": " << (pos + 1) << ",\n";  // 1-based for plotting
+        
+        // T→C and T→A rates
+        if (hasTransition) {
+            const auto& trans = transitionData.at(pos);
+            double tc_cov = std::get<0>(trans);
+            double tc_mm = std::get<1>(trans);
+            double ta_cov = std::get<2>(trans);
+            double ta_mm = std::get<3>(trans);
+            
+            double tc_rate = (tc_cov > 0.0) ? (tc_mm / tc_cov) * 100.0 : 0.0;
+            double ta_rate = (ta_cov > 0.0) ? (ta_mm / ta_cov) * 100.0 : 0.0;
+            double tc_stdev = (tc_cov > 0.0) ? std::sqrt((tc_mm / tc_cov) * (1.0 - tc_mm / tc_cov)) * 100.0 : 0.0;
+            
+            out << "      \"star_tc_cov\": " << std::fixed << std::setprecision(2) << tc_cov << ",\n";
+            out << "      \"star_tc_mm\": " << std::fixed << std::setprecision(2) << tc_mm << ",\n";
+            out << "      \"star_tc_rate\": " << std::fixed << std::setprecision(6) << tc_rate << ",\n";
+            out << "      \"star_tc_stdev\": " << std::fixed << std::setprecision(6) << tc_stdev << ",\n";
+            out << "      \"star_ta_cov\": " << std::fixed << std::setprecision(2) << ta_cov << ",\n";
+            out << "      \"star_ta_mm\": " << std::fixed << std::setprecision(2) << ta_mm << ",\n";
+            out << "      \"star_ta_rate\": " << std::fixed << std::setprecision(6) << ta_rate << ",\n";
+        } else {
+            out << "      \"star_tc_cov\": 0,\n";
+            out << "      \"star_tc_mm\": 0,\n";
+            out << "      \"star_tc_rate\": 0,\n";
+            out << "      \"star_tc_stdev\": 0,\n";
+            out << "      \"star_ta_cov\": 0,\n";
+            out << "      \"star_ta_mm\": 0,\n";
+            out << "      \"star_ta_rate\": 0,\n";
+        }
+        
+        // PHRED quality and T counts from variance analyzer
+        if (hasVariance) {
+            const auto& vstats = varianceStats.at(pos);
+            double meanQual = vstats.meanQual();
+            double stddevQual = vstats.stddevQual();
+            double meanTcRate = vstats.meanTcRate();
+            double stddevTcRate = vstats.stddevTcRate();
+            
+            out << "      \"mean_qual\": " << std::fixed << std::setprecision(2) << meanQual << ",\n";
+            out << "      \"stddev_qual\": " << std::fixed << std::setprecision(2) << stddevQual << ",\n";
+            out << "      \"t_count\": " << vstats.tCount << ",\n";
+            out << "      \"mean_tc_rate\": " << std::fixed << std::setprecision(6) << meanTcRate << ",\n";
+            out << "      \"stddev_tc_rate\": " << std::fixed << std::setprecision(6) << stddevTcRate << "\n";
+        } else {
+            out << "      \"mean_qual\": null,\n";
+            out << "      \"stddev_qual\": null,\n";
+            out << "      \"t_count\": 0,\n";
+            out << "      \"mean_tc_rate\": null,\n";
+            out << "      \"stddev_tc_rate\": null\n";
+        }
+        
+        out << "    }";
+    }
+    
+    out << "\n  ]\n";
+    out << "}\n";
+    
+    return out.good();
+}
+
+bool writeSlamQcComprehensiveHtml(const std::string& jsonPath,
+                                   const std::string& htmlPath) {
+    std::ofstream out(htmlPath.c_str());
+    if (!out.good()) {
+        return false;
+    }
+    
+    std::string jsonFileName = jsonPath;
+    size_t lastSlash = jsonPath.find_last_of("/\\");
+    if (lastSlash != std::string::npos) {
+        jsonFileName = jsonPath.substr(lastSlash + 1);
+    }
+    
+    // Write comprehensive HTML with 4 plots matching analyze_phred_by_position.py
+    out << "<!DOCTYPE html>\n";
+    out << "<html>\n";
+    out << "<head>\n";
+    out << "  <title>SLAM QC Report</title>\n";
+    out << "  <script src=\"https://cdn.plot.ly/plotly-latest.min.js\"></script>\n";
+    out << "  <style>\n";
+    out << "    body { font-family: 'Segoe UI', Arial, sans-serif; margin: 20px; background: #f5f5f5; }\n";
+    out << "    .container { max-width: 1400px; margin: 0 auto; }\n";
+    out << "    h1 { color: #333; }\n";
+    out << "    .summary { background: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }\n";
+    out << "    .summary-item { display: inline-block; margin-right: 30px; }\n";
+    out << "    .summary-label { color: #666; font-size: 12px; }\n";
+    out << "    .summary-value { font-size: 24px; font-weight: bold; color: #2196F3; }\n";
+    out << "    .plot-container { background: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }\n";
+    out << "  </style>\n";
+    out << "</head>\n";
+    out << "<body>\n";
+    out << "  <div class=\"container\">\n";
+    out << "    <h1>SLAM QC Report</h1>\n";
+    out << "    <div class=\"summary\" id=\"summary\"></div>\n";
+    out << "    <div class=\"plot-container\" id=\"plot1\"></div>\n";
+    out << "    <div class=\"plot-container\" id=\"plot2\"></div>\n";
+    out << "    <div class=\"plot-container\" id=\"plot3\"></div>\n";
+    out << "    <div class=\"plot-container\" id=\"plot4\"></div>\n";
+    out << "  </div>\n";
+    out << "  <script>\n";
+    out << "    fetch('" << jsonFileName << "')\n";
+    out << "      .then(response => response.json())\n";
+    out << "      .then(data => {\n";
+    out << "        const positions = data.positions.map(p => p.position);\n";
+    out << "        const starTcRate = data.positions.map(p => p.star_tc_rate || 0);\n";
+    out << "        const starTaRate = data.positions.map(p => p.star_ta_rate || 0);\n";
+    out << "        const starTcStdev = data.positions.map(p => {\n";
+    out << "          if (p.stddev_tc_rate !== null && p.stddev_tc_rate !== undefined) return p.stddev_tc_rate;\n";
+    out << "          if (p.star_tc_stdev !== null && p.star_tc_stdev !== undefined) return p.star_tc_stdev;\n";
+    out << "          return 0;\n";
+    out << "        });\n";
+    out << "        const meanQual = data.positions.map(p => p.mean_qual);\n";
+    out << "        const tCount = data.positions.map(p => p.t_count || 0);\n";
+    out << "        \n";
+    out << "        // Trim bars\n";
+    out << "        const shapes = [];\n";
+    out << "        if (data.trim5p > 0) {\n";
+    out << "          shapes.push({ type: 'line', x0: data.trim5p + 1, x1: data.trim5p + 1, y0: 0, y1: 1, yref: 'paper', line: { color: 'purple', width: 2, dash: 'dash' } });\n";
+    out << "        }\n";
+    out << "        if (data.trim3p > 0 && positions.length > 0) {\n";
+    out << "          const trim3pPos = positions[positions.length - 1] - data.trim3p;\n";
+    out << "          shapes.push({ type: 'line', x0: trim3pPos, x1: trim3pPos, y0: 0, y1: 1, yref: 'paper', line: { color: 'purple', width: 2, dash: 'dot' } });\n";
+    out << "        }\n";
+    out << "        \n";
+    out << "        // Summary\n";
+    out << "        document.getElementById('summary').innerHTML = `\n";
+    out << "          <div class=\"summary-item\"><div class=\"summary-label\">Trim 5'</div><div class=\"summary-value\">${data.trim5p}</div></div>\n";
+    out << "          <div class=\"summary-item\"><div class=\"summary-label\">Trim 3'</div><div class=\"summary-value\">${data.trim3p}</div></div>\n";
+    out << "        `;\n";
+    out << "        \n";
+    out << "        // Plot 1: T transition rates (T→C and T→A)\n";
+    out << "        Plotly.newPlot('plot1', [\n";
+    out << "          { x: positions, y: starTcRate, type: 'scatter', mode: 'lines', name: 'STAR T→C', line: { width: 2, color: '#2196F3' } },\n";
+    out << "          { x: positions, y: starTaRate, type: 'scatter', mode: 'lines', name: 'STAR T→A', line: { width: 1, color: '#2196F3', dash: 'dash' } }\n";
+    out << "        ], {\n";
+    out << "          title: 'Raw Mismatch Rates by Position',\n";
+    out << "          xaxis: { title: 'Read Position (1-based)' },\n";
+    out << "          yaxis: { title: 'Mismatch Rate (%)', type: 'log' },\n";
+    out << "          shapes: shapes,\n";
+    out << "          hovermode: 'closest',\n";
+    out << "          legend: { x: 0.7, y: 0.9 }\n";
+    out << "        });\n";
+    out << "        \n";
+    out << "        // Plot 2: T→C stdev + smoothed + segmented fit\n";
+    out << "        const traces2 = [\n";
+    out << "          { x: positions, y: starTcStdev, type: 'scatter', mode: 'lines+markers', name: 'STAR T→C Stdev', marker: { size: 4, color: '#2196F3' }, line: { width: 1 } }\n";
+    out << "        ];\n";
+    out << "        \n";
+    out << "        if (data.segmented_regression) {\n";
+    out << "          const seg = data.segmented_regression;\n";
+    out << "          if (seg.smoothed_stdev_curve && seg.smoothed_stdev_curve.length > 0) {\n";
+    out << "            const smoothed = seg.smoothed_stdev_curve;\n";
+    out << "            const smoothedPos = Array.from({length: smoothed.length}, (_, i) => i + 1);\n";
+    out << "            traces2.push({ x: smoothedPos, y: smoothed, type: 'scatter', mode: 'lines', name: 'Smoothed', line: { width: 2, color: '#333', dash: 'dash' } });\n";
+    out << "            \n";
+    out << "            // Segmented regression lines\n";
+    out << "            const b1 = seg.breakpoint_b1;\n";
+    out << "            const b2 = seg.breakpoint_b2;\n";
+    out << "            if (b1 > 0) {\n";
+    out << "              const x1 = Array.from({length: b1}, (_, i) => i + 1);\n";
+    out << "              const y1 = x1.map(x => seg.segment1.slope * (x - 1) + seg.segment1.intercept);\n";
+    out << "              traces2.push({ x: x1, y: y1, type: 'scatter', mode: 'lines', name: 'Seg1', line: { width: 2, color: '#f44336' } });\n";
+    out << "            }\n";
+    out << "            const x2 = Array.from({length: b2 - b1 + 1}, (_, i) => b1 + i + 1);\n";
+    out << "            const y2 = x2.map(x => seg.segment2.slope * (x - 1) + seg.segment2.intercept);\n";
+    out << "            traces2.push({ x: x2, y: y2, type: 'scatter', mode: 'lines', name: 'Seg2', line: { width: 2, color: '#4CAF50' } });\n";
+    out << "            if (b2 < smoothed.length - 1) {\n";
+    out << "              const x3 = Array.from({length: smoothed.length - b2 - 1}, (_, i) => b2 + i + 2);\n";
+    out << "              const y3 = x3.map(x => seg.segment3.slope * (x - 1) + seg.segment3.intercept);\n";
+    out << "              traces2.push({ x: x3, y: y3, type: 'scatter', mode: 'lines', name: 'Seg3', line: { width: 2, color: '#ff9800' } });\n";
+    out << "            }\n";
+    out << "          }\n";
+    out << "        }\n";
+    out << "        \n";
+    out << "        Plotly.newPlot('plot2', traces2, {\n";
+    out << "          title: 'T→C Variation by Position (per-base stdev)',\n";
+    out << "          xaxis: { title: 'Read Position (1-based)' },\n";
+    out << "          yaxis: { title: 'T→C Stdev (%)' },\n";
+    out << "          shapes: shapes,\n";
+    out << "          hovermode: 'closest',\n";
+    out << "          legend: { x: 0.7, y: 0.9 }\n";
+    out << "        });\n";
+    out << "        \n";
+    out << "        // Plot 3: PHRED + T assignment rate\n";
+    out << "        Plotly.newPlot('plot3', [\n";
+    out << "          { x: positions, y: meanQual, type: 'scatter', mode: 'lines+markers', name: 'Avg PHRED (T positions)', yaxis: 'y', marker: { size: 4, color: '#2196F3' }, line: { width: 2 } },\n";
+    out << "          { x: positions, y: tCount, type: 'scatter', mode: 'lines+markers', name: 'T Count', yaxis: 'y2', marker: { size: 4, color: '#4CAF50' }, line: { width: 2 } }\n";
+    out << "        ], {\n";
+    out << "          title: 'PHRED Quality and T Assignment Rate by Position',\n";
+    out << "          xaxis: { title: 'Read Position (1-based)' },\n";
+    out << "          yaxis: { title: 'Average PHRED Quality', side: 'left', range: [0, 45] },\n";
+    out << "          yaxis2: { title: 'T Count', side: 'right', overlaying: 'y' },\n";
+    out << "          shapes: shapes,\n";
+    out << "          hovermode: 'closest',\n";
+    out << "          legend: { x: 0.7, y: 0.9 }\n";
+    out << "        });\n";
+    out << "        \n";
+    out << "        // Plot 4: Trim overlay (duplicate of plot 1 with trim emphasis)\n";
+    out << "        Plotly.newPlot('plot4', [\n";
+    out << "          { x: positions, y: starTcRate, type: 'scatter', mode: 'lines', name: 'STAR T→C', line: { width: 2, color: '#2196F3' } },\n";
+    out << "          { x: positions, y: starTaRate, type: 'scatter', mode: 'lines', name: 'STAR T→A', line: { width: 1, color: '#2196F3', dash: 'dash' } }\n";
+    out << "        ], {\n";
+    out << "          title: 'Trim Overlay on T Transition Rates',\n";
+    out << "          xaxis: { title: 'Read Position (1-based)' },\n";
+    out << "          yaxis: { title: 'Mismatch Rate (%)', type: 'log' },\n";
+    out << "          shapes: shapes,\n";
+    out << "          hovermode: 'closest',\n";
+    out << "          annotations: [\n";
+    out << "            { x: data.trim5p + 1, y: 1, yref: 'paper', text: 'trim5p=' + data.trim5p, showarrow: true, arrowhead: 2, ax: 0, ay: -20 },\n";
+    out << "            { x: positions[positions.length - 1] - data.trim3p, y: 1, yref: 'paper', text: 'trim3p=' + data.trim3p, showarrow: true, arrowhead: 2, ax: 0, ay: -20 }\n";
+    out << "          ],\n";
+    out << "          legend: { x: 0.7, y: 0.9 }\n";
     out << "        });\n";
     out << "      });\n";
     out << "  </script>\n";

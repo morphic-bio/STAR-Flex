@@ -1085,6 +1085,72 @@ slamQcJson                           -
 slamQcHtml                           -
     string: Path for QC HTML report output (empty=auto-generate next to output prefix)
 
+slamQcReport                         -
+    string: Prefix for comprehensive QC report (JSON + HTML with 4 plots).
+            If set, generates:
+            - <prefix>.slam_qc.json (comprehensive QC data)
+            - <prefix>.slam_qc.html (interactive Plotly report)
+            The report includes:
+            1. T transition rates (T→C and T→A by position)
+            2. Trim overlay (vertical bars showing trim5p/trim3p)
+            3. T→C stdev + smoothed curve + segmented regression fits
+            4. PHRED quality + T assignment rate by position
+            Empty (default) = disabled.
+
+slamSnpMaskIn                        -
+    string: Path to existing SNP mask BED file (bgzip-compressed, tabix-indexed)
+            If set, this mask will be loaded and used for the main SLAM run.
+            Takes precedence over --slamSnpMaskBuildFastqs.
+
+slamSnpMaskBuildFastqs               -
+    string: Path to FOFN (file-of-filenames) listing WT0/time-zero FASTQs for mask build.
+            Format: one line per sample, tab-separated R1<TAB>R2 for PE, or single path for SE.
+            Blank lines and # comments are ignored. Supports .gz FASTQs.
+            If set, STAR-Flex will run a pre-pass alignment to build the mask before the main SLAM run.
+            Requires --slamSnpMaskBedOut. Ignored if --slamSnpMaskIn is set.
+
+slamSnpMaskOnly                      0
+    int: 0/1 - if 1, exit after mask build (skip main SLAM run)
+
+slamSnpMaskBedOut                    -
+    string: Output path for SNP mask BED file (bgzip-compressed, tabix-indexed)
+            Required when --slamSnpMaskBuildFastqs is set.
+
+slamSnpMaskSummaryOut                -
+    string: Output path for mask build summary TSV (optional)
+
+slamSnpMaskBamOut                    -
+    string: Optional output path for BAM file from mask build alignment (for QC)
+            Default: empty (no BAM output, faster execution)
+
+slamSnpMaskMinCov                    20
+    uint32: Minimum coverage required for a site to be considered for masking
+
+slamSnpMaskMinAlt                    3
+    uint32: Minimum number of T->C mismatches required for candidate site
+
+slamSnpMaskPosterior                 0.99
+    double: Posterior probability threshold for masking (in [0,1])
+            Sites with P(SNP) >= this value will be masked.
+
+slamSnpMaskMaxIter                   50
+    uint32: Maximum number of EM iterations
+
+slamSnpMaskConvergeRelLL             1e-7
+    double: Relative log-likelihood change threshold for EM convergence
+
+slamSnpMaskJunctionFlank             6
+    uint32: Exclude positions within ±N bp of splice junctions
+
+slamSnpMaskIndelFlank                3
+    uint32: Exclude positions within ±N bp of indels/softclips
+
+slamSnpMaskMinMapQ                   20
+    uint32: Minimum MAPQ for bases counted in mask build
+
+slamSnpMaskMinBaseQ                  20
+    uint32: Minimum base quality (Phred) for bases counted in mask build
+
 quantTranscriptomeSAMoutput BanSingleEnd_BanIndels_ExtendSoftclip
     string: alignment filtering for TranscriptomeSAM output
                             BanSingleEnd_BanIndels_ExtendSoftclip ... prohibit indels and single-end alignments, extend softclips - compatible with RSEM
