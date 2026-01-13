@@ -94,6 +94,11 @@ public:
     // Get number of reads analyzed
     uint64_t readsAnalyzed() const { return readsAnalyzed_; }
     
+    // Compute global T→C error rate (p_err) from position statistics
+    // If trim5p/trim3p are provided (>0), restrict to positions within trimmed window
+    // Returns: (t_total, tc_total, p_est)
+    std::tuple<uint64_t, uint64_t, double> computeGlobalTcErrorRate(int trim5p = 0, int trim3p = 0, uint32_t readLength = 0) const;
+    
     // Reset for new file
     void reset();
     

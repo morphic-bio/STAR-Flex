@@ -75,6 +75,34 @@ void SlamVarianceAnalyzer::merge(const SlamVarianceAnalyzer& other) {
     }
 }
 
+std::tuple<uint64_t, uint64_t, double> SlamVarianceAnalyzer::computeGlobalTcErrorRate(int trim5p, int trim3p, uint32_t readLength) const {
+    uint64_t t_total = 0;
+    uint64_t tc_total = 0;
+    
+    for (const auto& kv : positionStats_) {
+        uint32_t pos = kv.first;
+        const auto& stats = kv.second;
+        
+        // Apply trim window if provided
+        if (trim5p > 0 && static_cast<int>(pos) < trim5p) {
+            continue;  // Before trim5p window
+        }
+        if (trim3p > 0 && readLength > 0 && static_cast<int>(pos) >= static_cast<int>(readLength) - trim3p) {
+            continue;  // After trim3p window
+        }
+        
+        t_total += stats.tCount;
+        tc_total += stats.tcCount;
+    }
+    
+    double p_est = 0.0;
+    if (t_total > 0) {
+        p_est = static_cast<double>(tc_total) / static_cast<double>(t_total);
+    }
+    
+    return std::make_tuple(t_total, tc_total, p_est);
+}
+
 std::vector<double> SlamVarianceAnalyzer::smoothMedian(const std::vector<double>& values, uint32_t window) {
     if (window <= 1 || values.empty()) {
         return values;

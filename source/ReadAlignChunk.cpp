@@ -83,10 +83,11 @@ ReadAlignChunk::ReadAlignChunk(Parameters& Pin, Genome &genomeIn, Transcriptome 
                                  P.quant.slam.debugOutPrefix);
         }
         
-        // Enable variance analysis only during detection pass (single-threaded)
+        // Enable variance analysis during detection pass (single-threaded)
         // With rewind approach, detection pass collects variance stats, then files are rewound
         // and main mapping pass uses computed trims from the start
-        if (P.quant.slam.autoTrimMode == "variance" && P.quant.slam.autoTrimDetectionPass) {
+        // Always enabled during detection pass when SLAM is active
+        if (P.quant.slam.autoTrimDetectionPass) {
             slamQuant->enableVarianceAnalysis(
                 P.quant.slam.autoTrimMaxReads, 
                 P.quant.slam.autoTrimMinReads,

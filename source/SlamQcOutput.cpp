@@ -15,7 +15,10 @@ bool writeSlamQcJson(const SlamVarianceAnalyzer& analyzer,
                      int trim3p,
                      uint64_t readsAnalyzed,
                      const SlamVarianceTrimResult* trimResult,
-                     const std::string& trimSource) {
+                     const std::string& trimSource,
+                     double snpErrEst,
+                     double snpErrUsed,
+                     const std::string& snpErrFallbackReason) {
     std::ofstream out(outputPath.c_str());
     if (!out.good()) {
         return false;
@@ -42,6 +45,15 @@ bool writeSlamQcJson(const SlamVarianceAnalyzer& analyzer,
     out << "  \"trim5p\": " << trim5p << ",\n";
     out << "  \"trim3p\": " << trim3p << ",\n";
     out << "  \"reads_analyzed\": " << readsAnalyzed << ",\n";
+    
+    // Include SNP error rate estimation
+    if (snpErrEst > 0.0 || snpErrUsed > 0.0) {
+        out << "  \"snp_err_est\": " << std::fixed << std::setprecision(6) << snpErrEst << ",\n";
+        out << "  \"snp_err_used\": " << std::fixed << std::setprecision(6) << snpErrUsed << ",\n";
+        if (!snpErrFallbackReason.empty()) {
+            out << "  \"snp_err_fallback_reason\": \"" << snpErrFallbackReason << "\",\n";
+        }
+    }
     
     // Include segmented regression info if available
     if (trimResult != nullptr) {

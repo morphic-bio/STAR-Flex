@@ -421,6 +421,7 @@ Parameters::Parameters() {//initalize parameters info
     parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "autoTrimMaxTrim", &quant.slam.autoTrimMaxTrim));
     parArray.push_back(new ParameterInfoScalar <uint64_t> (-1, -1, "autoTrimBufferReads", &quant.slam.autoTrimBufferReads));
     parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "autoTrimDetectionReads", &quant.slam.autoTrimDetectionReads));
+    parArray.push_back(new ParameterInfoScalar <double>  (-1, -1, "snpErrMinThreshold", &quant.slam.snpErrMinThreshold));
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamQcJson", &quant.slam.slamQcJson));
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamQcHtml", &quant.slam.slamQcHtml));
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamQcReport", &quant.slam.slamQcReport));

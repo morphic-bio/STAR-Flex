@@ -237,9 +237,32 @@ except Exception as e:
 PYTHON_EOF
 )
 
+# Parse error rate from QC JSON
+SNP_ERR=$(python3 - "$QC_PREFIX.slam_qc.json" << 'PYTHON_EOF'
+import json
+import sys
+try:
+    with open(sys.argv[1]) as f:
+        data = json.load(f)
+    # Use snp_err_used if available, otherwise fallback to default
+    err_used = data.get("snp_err_used", 0.001)
+    err_est = data.get("snp_err_est", 0.0)
+    fallback = data.get("snp_err_fallback_reason", "")
+    print(f"{err_used:.6f}")
+    if fallback:
+        print(f"WARNING: Error rate fallback applied: {fallback}", file=sys.stderr)
+        print(f"  Estimated: {err_est:.6f}, Used: {err_used:.6f}", file=sys.stderr)
+except Exception as e:
+    print(f"Error reading error rate: {e}", file=sys.stderr)
+    print("0.001")  # Default fallback
+PYTHON_EOF
+)
+
 echo "✓ Trim values detected:"
 echo "  - trim5p: $TRIM5"
 echo "  - trim3p: $TRIM3"
+echo "✓ Error rate detected:"
+echo "  - snp_err_used: $SNP_ERR"
 echo
 
 # Step 4: Run STAR-SLAM on 0h using detected trims
@@ -289,6 +312,7 @@ if [[ "$RUN_GEDI" == "1" ]]; then
             -trim5p "$TRIM5" \
             -trim3p "$TRIM3" \
             -strandness Sense \
+            -err "$SNP_ERR" \
             -D \
             > "$REPORT_DIR/gedi_0h.log" 2>&1
     fi
@@ -305,6 +329,7 @@ if [[ "$RUN_GEDI" == "1" ]]; then
             -trim5p "$TRIM5" \
             -trim3p "$TRIM3" \
             -strandness Sense \
+            -err "$SNP_ERR" \
             -D \
             > "$REPORT_DIR/gedi_6h.log" 2>&1
     fi
@@ -363,6 +388,7 @@ echo "========================================================================"
 echo "Working directory: $WORK_DIR"
 echo "SNP mask: $MASK_BED"
 echo "Trim values (from 6h): trim5p=$TRIM5, trim3p=$TRIM3"
+echo "Error rate (from 6h): snp_err_used=$SNP_ERR"
 echo ""
 echo "Output files:"
 echo "  - STAR 0h: $STAR_DIR/0h_SlamQuant.out"

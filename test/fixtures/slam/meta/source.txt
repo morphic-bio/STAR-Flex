@@ -24,6 +24,28 @@ Fixture notes:
   Reference output: test/fixtures/slam/expected/fixture_ref_human.tsv.gz
   SNP BED (data-derived): test/fixtures/slam/ref/snps.bed
 
+IMPORTANT: The original fixture was generated from the PREFILTERED (noSNP) BAM,
+  NOT the full BAM. Using the full BAM gives ~0.99 correlation due to extra
+  reads at SNP positions. To exactly reproduce the fixture:
+  - Use fixture_human_Aligned.sortedByCoord.noSNP.bam (NOT the full BAM)
+  - Use -err 0.001 -strandness AutoDetect with GEDI
+
+STAR alignment parameters:
+  --outSAMattributes NH HI AS nM MD
+  --clip3pAdapterSeq AGATCGGAAGAG
+  --clip3pAdapterMMp 0.1
+
+GRAND-SLAM parameters:
+  -strandness Sense
+  -snpConv 0.3
+  -snppval 0.001
+  -full (for quantification)
+  -err 0.001 (CRITICAL: explicit error rate for reproducibility)
+
+Regeneration script:
+  bash tests/regenerate_slam_fixture.sh
+  See also: test/fixtures/slam/meta/REGENERATION_NOTES.md
+
 Mouse fixture (legacy):
   Zenodo record: 7612564 (Herzog et al., 2017), QuantSeq 3' mRNA-Seq, SE50.
   Accession: SRR5678872 (mESC.0h.chase.A)

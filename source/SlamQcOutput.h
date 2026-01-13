@@ -16,7 +16,10 @@ bool writeSlamQcJson(const SlamVarianceAnalyzer& analyzer,
                      int trim3p,
                      uint64_t readsAnalyzed,
                      const SlamVarianceTrimResult* trimResult = nullptr,
-                     const std::string& trimSource = "");
+                     const std::string& trimSource = "",
+                     double snpErrEst = 0.0,
+                     double snpErrUsed = 0.0,
+                     const std::string& snpErrFallbackReason = "");
 
 // Write comprehensive QC JSON with T→C/T→A rates, PHRED, trim, segmented fits
 // Extracts data from SlamQuant positionTransitions_ and varianceAnalyzer

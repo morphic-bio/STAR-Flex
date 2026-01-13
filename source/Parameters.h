@@ -417,7 +417,7 @@ class Parameters {
                 int compatTrim3p = 0;             // 3' trim guard
                 
                 // Auto-trim variance analysis (segmented regression on T→C stdev curve)
-                string autoTrimMode = "";         // ""=disabled, "variance"=variance-based
+                string autoTrimMode = "";         // ""=disabled, "variance"=variance-based trimming
                 string trimScope = "first";        // "first"=shared from first file, "per-file"=per-file
                 string trimSource = "";           // Path to file for computing shared trims (overrides first file)
                 int autoTrimMaxReads = 100000;    // Max reads to scan for variance (0=unlimited)
@@ -432,6 +432,12 @@ class Parameters {
                 int autoTrim3p = 0;                // Auto-computed 3' trim (0=not computed)
                 bool autoTrimComputed = false;    // Whether auto-trim has been computed
                 uint32_t autoTrimFileIndex = 0;    // File index where auto-trim was computed
+                
+                // Global SNP error rate estimation (from auto-trim detection pass)
+                double snpErrEst = 0.0;           // Estimated T→C error rate (p_err)
+                double snpErrUsed = 0.001;        // Error rate used for GEDI (with fallback)
+                string snpErrFallbackReason = ""; // Reason for fallback (empty if no fallback)
+                double snpErrMinThreshold = 0.001; // Minimum threshold for p_err (fallback if below)
                 
                 // Auto-trim detection mode (single-thread first pass with rewind)
                 uint64_t autoTrimBufferReads = 1000000;  // Max reads for detection pass (default 1M) - legacy name for compat

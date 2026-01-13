@@ -1034,7 +1034,9 @@ slamCompatTrim3p                     0
     int: Number of bases to trim from 3' end of each mate
 
 autoTrim                             -
-    string: Auto-trim mode: "variance" for variance-based trimming, "-" to disable
+    string: Auto-trim mode: "variance" for variance-based trimming, "-" to disable.
+    Note: Variance stats are always collected during detection pass when SLAM is enabled,
+    regardless of this setting. This flag only controls whether trims are computed and applied.
 
 trimScope                            first
     string: Trim scope for multi-file runs:
@@ -1078,6 +1080,11 @@ autoTrimDetectionReads               100000
     int: Maximum number of reads for auto-trim detection pass (default 100K)
     With rewind-based auto-trim, this controls how many reads are processed in the 
     single-threaded detection pass before rewinding and running the full mapping.
+
+snpErrMinThreshold                   0.001
+    double: Minimum threshold for SNP error rate estimation (default 0.001)
+    If the estimated T→C error rate (p_err) is below this threshold, fall back to this value.
+    Used for GEDI -err parameter to ensure a minimum error rate.
 
 slamQcJson                           -
     string: Path for QC JSON output (empty=auto-generate next to output prefix)

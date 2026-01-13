@@ -53,6 +53,8 @@ if [[ "${RUN_STAR_SLAM:-0}" -eq 1 ]]; then
         exit 1
     fi
     echo "=== Running STAR-Slam on fixture ==="
+    # Use adapter clipping (same as original fixture generation)
+    # NOT EndToEnd alignment - that was incorrect
     "$STAR_BIN" \
         --runThreadN 4 \
         --genomeDir "$STAR_INDEX" \
@@ -60,7 +62,8 @@ if [[ "${RUN_STAR_SLAM:-0}" -eq 1 ]]; then
         --readFilesCommand zcat \
         --outFileNamePrefix "$OUT_PREFIX" \
         --outSAMtype None \
-        --alignEndsType EndToEnd \
+        --clip3pAdapterSeq AGATCGGAAGAG \
+        --clip3pAdapterMMp 0.1 \
         ${STAR_SLAM_ARGS} \
         > "${OUT_PREFIX}slam.log" 2>&1
 fi
