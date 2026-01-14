@@ -11,7 +11,8 @@ OBJS := \
 	$(SRC_DIR)/SlamVarianceAnalysis.cpp \
 	$(SRC_DIR)/SlamReadBuffer.cpp \
 	$(SRC_DIR)/SlamDump.cpp \
-	$(SRC_DIR)/SlamQcOutput.cpp
+	$(SRC_DIR)/SlamQcOutput.cpp \
+	$(SRC_DIR)/libem/slam_snp_em.cpp
 
 HTSLIB := $(SRC_DIR)/htslib/libhts.a
 

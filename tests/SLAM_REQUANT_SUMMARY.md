@@ -28,6 +28,16 @@ CLI:
   --slamQcReport <prefix>
 ```
 
+Also supports BAM input (no GX/GE tags):
+```
+./tools/slam_requant/slam_requant \
+  --bam <reads.bam> \
+  --gtf <genes.gtf> \
+  --fasta <genome.fa> \
+  --out <prefix> \
+  --slamSnpMaskIn <mask.bed.gz>
+```
+
 Outputs:
 - `<prefix>SlamQuant.out`
 - `<prefix>SlamQuant.out.diagnostics`
@@ -35,6 +45,10 @@ Outputs:
 - `<prefix>SlamQuant.out.mismatches.tsv`
 - `<prefix>SlamQuant.out.mismatchdetails.tsv`
 - QC JSON/HTML if `--slamQcReport` is set
+
+Notes:
+- `--bam` requires `--gtf` and `--fasta` (reference sequence required).
+- Optional `--snpMaskFromBam` builds a simple mask if no BED is provided.
 
 ### Parity Test
 `tests/run_slam_requant_parity.sh`:

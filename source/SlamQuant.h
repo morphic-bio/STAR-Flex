@@ -24,6 +24,7 @@ public:
                            const std::vector<std::string>& chrNames,
                            const std::vector<uint64_t>& chrStart,
                            std::string* err);
+    void loadFromPositions(const std::unordered_set<uint64_t>& positions);
     bool contains(uint64_t pos) const { return positions_.count(pos) > 0; }
     size_t size() const { return positions_.size(); }
 

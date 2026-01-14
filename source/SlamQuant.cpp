@@ -1264,6 +1264,10 @@ bool SlamSnpMask::loadBedWithChrMap(const std::string& path,
     return loadBedInternal(path, chrNames, chrStart, positions_, err);
 }
 
+void SlamSnpMask::loadFromPositions(const std::unordered_set<uint64_t>& positions) {
+    positions_ = positions;
+}
+
 // Read buffer methods for auto-trim replay
 void SlamQuant::enableReadBuffer(uint64_t maxReads) {
     readBuffer_.reset(new SlamReadBuffer(maxReads));

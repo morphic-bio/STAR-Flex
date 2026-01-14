@@ -15,10 +15,25 @@ make
   --slamSnpMaskIn mask.bed.gz
 ```
 
+## Usage (BAM + GTF + FASTA)
+```
+./slam_requant \
+  --bam input.bam \
+  --gtf genes.gtf \
+  --fasta genome.fa \
+  --out out_prefix \
+  --slamSnpMaskIn mask.bed.gz
+```
+
 ## Key options
 - `--dump <path>`: STAR dump created with `--slamDumpBinary`.
+- `--bam <path>`: BAM input (alternative to `--dump`).
+- `--gtf <path>`: GTF annotation (required with `--bam`).
+- `--fasta <path>`: Reference FASTA (required with `--bam`).
 - `--out <prefix>`: output prefix for `SlamQuant.out` and diagnostics.
 - `--slamSnpMaskIn <bed.gz>`: apply SNP mask during replay (optional).
+- `--snpMaskFromBam`: build a simple SNP mask from the BAM if no bed is provided.
+- `--snpMaskOut <path>`: optional output BED for the auto-built mask.
 - `--trim5p/--trim3p`: manual trims (optional).
 - `--autoTrim variance`: compute trims from dump using variance method.
 - `--trimScope first|per-file`: auto-trim scope (default: first).
