@@ -429,6 +429,7 @@ Parameters::Parameters() {//initalize parameters info
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamQcReport", &quant.slam.slamQcReport));
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamDumpBinary", &quant.slam.dumpBinary));
     parArray.push_back(new ParameterInfoScalar <uint64_t> (-1, -1, "slamDumpMaxReads", &quant.slam.dumpMaxReads));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamDumpWeights", &quant.slam.dumpWeights));
     
     // SLAM SNP mask build parameters
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamSnpMaskIn", &quant.slamSnpMask.maskIn));

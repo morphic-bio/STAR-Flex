@@ -4,6 +4,27 @@
 
 namespace {
 constexpr char kMagic[8] = {'S','L','A','M','D','U','M','P'};
+constexpr char kWeightMagic[8] = {'S','L','A','M','W','G','T','1'};
+constexpr uint32_t kWeightModeMask = 0x3;
+constexpr uint32_t kWeightFlagKeyed = 1u << 0;
+constexpr uint32_t kWeightFlagOrdered = 1u << 1;
+
+struct Fnv64 {
+    uint64_t h;
+    uint64_t prime;
+    explicit Fnv64(uint64_t seed, uint64_t primeIn) : h(seed), prime(primeIn) {}
+    void addBytes(const void* data, size_t len) {
+        const uint8_t* p = static_cast<const uint8_t*>(data);
+        for (size_t i = 0; i < len; ++i) {
+            h ^= static_cast<uint64_t>(p[i]);
+            h *= prime;
+        }
+    }
+    template <typename T>
+    void addValue(const T& v) {
+        addBytes(&v, sizeof(T));
+    }
+};
 
 void writeString(std::ofstream& out, const std::string& s) {
     uint32_t len = static_cast<uint32_t>(s.size());
@@ -28,6 +49,60 @@ bool readString(std::ifstream& in, std::string* s, std::string* err) {
 }
 } // namespace
 
+SlamWeightKey computeSlamWeightKey(const SlamBufferedRead& read) {
+    Fnv64 h1(1469598103934665603ull, 1099511628211ull);
+    Fnv64 h2(1099511628211ull, 1469598103934665603ull);
+    uint32_t nameLen = static_cast<uint32_t>(read.readName.size());
+    h1.addValue(nameLen);
+    h2.addValue(nameLen);
+    if (nameLen > 0) {
+        h1.addBytes(read.readName.data(), nameLen);
+        h2.addBytes(read.readName.data(), nameLen);
+    }
+    h1.addValue(read.readLength0);
+    h2.addValue(read.readLength0);
+    h1.addValue(read.readLength1);
+    h2.addValue(read.readLength1);
+    h1.addValue(read.isMinus);
+    h2.addValue(read.isMinus);
+    h1.addValue(read.oppositeStrand);
+    h2.addValue(read.oppositeStrand);
+    h1.addValue(read.isIntronic);
+    h2.addValue(read.isIntronic);
+    h1.addValue(read.fileIndex);
+    h2.addValue(read.fileIndex);
+    uint32_t geneCount = static_cast<uint32_t>(read.geneIds.size());
+    h1.addValue(geneCount);
+    h2.addValue(geneCount);
+    for (uint32_t gid : read.geneIds) {
+        h1.addValue(gid);
+        h2.addValue(gid);
+    }
+    uint32_t posCount = static_cast<uint32_t>(read.positions.size());
+    h1.addValue(posCount);
+    h2.addValue(posCount);
+    for (const auto& p : read.positions) {
+        h1.addValue(p.readPos);
+        h2.addValue(p.readPos);
+        h1.addValue(p.genomicPos);
+        h2.addValue(p.genomicPos);
+        h1.addValue(p.refBase);
+        h2.addValue(p.refBase);
+        h1.addValue(p.readBase);
+        h2.addValue(p.readBase);
+        h1.addValue(p.qual);
+        h2.addValue(p.qual);
+        h1.addValue(p.secondMate);
+        h2.addValue(p.secondMate);
+        h1.addValue(p.overlap);
+        h2.addValue(p.overlap);
+    }
+    SlamWeightKey key;
+    key.h1 = h1.h;
+    key.h2 = h2.h;
+    return key;
+}
+
 bool writeSlamDump(const std::string& path,
                    const SlamDumpMetadata& meta,
                    const std::vector<const SlamReadBuffer*>& buffers,
@@ -42,7 +117,7 @@ bool writeSlamDump(const std::string& path,
     // Header
     out.write(kMagic, sizeof(kMagic));
     uint32_t version = meta.version;
-    uint32_t flags = 0; // reserved
+    uint32_t flags = meta.weightMode & kWeightModeMask;
     uint32_t nGenes = static_cast<uint32_t>(meta.geneIds.size());
     uint32_t nChrom = static_cast<uint32_t>(meta.chrNames.size());
     uint64_t nReads = 0;
@@ -151,6 +226,7 @@ bool readSlamDump(const std::string& path,
         return false;
     }
     meta->version = version;
+    meta->weightMode = flags & kWeightModeMask;
     meta->nReads = nReads;
 
     meta->geneIds.clear();
@@ -231,6 +307,95 @@ bool readSlamDump(const std::string& path,
             r.positions[p] = bp;
         }
         reads->push_back(std::move(r));
+    }
+    return true;
+}
+
+bool writeSlamWeights(const std::string& path,
+                      const SlamDumpMetadata& dumpMeta,
+                      const std::vector<const SlamReadBuffer*>& buffers,
+                      uint64_t maxReads,
+                      std::string* err) {
+    std::ofstream out(path.c_str(), std::ios::binary);
+    if (!out.good()) {
+        if (err) *err = "Failed to open weight file for writing: " + path;
+        return false;
+    }
+    uint32_t version = 1;
+    uint32_t flags = kWeightFlagKeyed | kWeightFlagOrdered | ((dumpMeta.weightMode & kWeightModeMask) << 2);
+    uint64_t nReads = 0;
+    out.write(kWeightMagic, sizeof(kWeightMagic));
+    out.write(reinterpret_cast<const char*>(&version), sizeof(version));
+    out.write(reinterpret_cast<const char*>(&flags), sizeof(flags));
+    std::streampos nReadsPos = out.tellp();
+    out.write(reinterpret_cast<const char*>(&nReads), sizeof(nReads));
+    uint32_t weightMode = dumpMeta.weightMode;
+    out.write(reinterpret_cast<const char*>(&weightMode), sizeof(weightMode));
+
+    uint64_t written = 0;
+    for (const auto* buffer : buffers) {
+        if (buffer == nullptr) continue;
+        for (const SlamBufferedRead& r : buffer->reads()) {
+            if (maxReads > 0 && written >= maxReads) break;
+            SlamWeightKey key = computeSlamWeightKey(r);
+            out.write(reinterpret_cast<const char*>(&key.h1), sizeof(key.h1));
+            out.write(reinterpret_cast<const char*>(&key.h2), sizeof(key.h2));
+            out.write(reinterpret_cast<const char*>(&r.weight), sizeof(r.weight));
+            ++written;
+        }
+        if (maxReads > 0 && written >= maxReads) break;
+    }
+    out.seekp(nReadsPos);
+    out.write(reinterpret_cast<const char*>(&written), sizeof(written));
+    out.close();
+    return true;
+}
+
+bool readSlamWeights(const std::string& path,
+                     SlamWeightMetadata* meta,
+                     std::vector<SlamWeightRecord>* records,
+                     std::string* err) {
+    if (meta == nullptr || records == nullptr) {
+        if (err) *err = "Null output pointers for readSlamWeights";
+        return false;
+    }
+    std::ifstream in(path.c_str(), std::ios::binary);
+    if (!in.good()) {
+        if (err) *err = "Failed to open weight file for reading: " + path;
+        return false;
+    }
+    char magic[8] = {0};
+    if (!in.read(magic, sizeof(magic)) || std::memcmp(magic, kWeightMagic, sizeof(kWeightMagic)) != 0) {
+        if (err) *err = "Invalid weight magic";
+        return false;
+    }
+    uint32_t version = 0;
+    uint32_t flags = 0;
+    uint64_t nReads = 0;
+    uint32_t weightMode = 0;
+    if (!in.read(reinterpret_cast<char*>(&version), sizeof(version)) ||
+        !in.read(reinterpret_cast<char*>(&flags), sizeof(flags)) ||
+        !in.read(reinterpret_cast<char*>(&nReads), sizeof(nReads)) ||
+        !in.read(reinterpret_cast<char*>(&weightMode), sizeof(weightMode))) {
+        if (err) *err = "Failed to read weight header";
+        return false;
+    }
+    meta->version = version;
+    meta->flags = flags;
+    meta->nReads = nReads;
+    meta->weightMode = weightMode;
+
+    records->clear();
+    records->reserve(static_cast<size_t>(nReads));
+    for (uint64_t i = 0; i < nReads; ++i) {
+        SlamWeightRecord rec;
+        if (!in.read(reinterpret_cast<char*>(&rec.key.h1), sizeof(rec.key.h1)) ||
+            !in.read(reinterpret_cast<char*>(&rec.key.h2), sizeof(rec.key.h2)) ||
+            !in.read(reinterpret_cast<char*>(&rec.weight), sizeof(rec.weight))) {
+            if (err) *err = "Failed to read weight record";
+            return false;
+        }
+        records->push_back(rec);
     }
     return true;
 }

@@ -1120,6 +1120,10 @@ slamDumpBinary                        -
 slamDumpMaxReads                   1000000
     uint64: Maximum number of reads to dump (to limit memory usage).
 
+slamDumpWeights                      -
+    string: Write a keyed weight sidecar file for external re-quantification.
+            Records per-read weights in dump order with hash keys for matching.
+
 slamSnpMaskIn                        -
     string: Path to existing SNP mask BED file (bgzip-compressed, tabix-indexed)
             If set, this mask will be loaded and used for the main SLAM run.

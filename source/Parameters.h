@@ -453,6 +453,7 @@ class Parameters {
                 // Optional dump for external re-quant
                 string dumpBinary;                       // --slamDumpBinary (path to dump)
                 uint64_t dumpMaxReads = 1000000;         // --slamDumpMaxReads (max reads to dump)
+                string dumpWeights;                      // --slamDumpWeights (path to weight sidecar)
             } slam;
 
             struct {

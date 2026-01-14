@@ -23,6 +23,9 @@ make
 - `--autoTrim variance`: compute trims from dump using variance method.
 - `--trimScope first|per-file`: auto-trim scope (default: first).
 - `--strandness none|sense|antisense`: drop opposite strand reads (default: none).
+- `--slamWeightMode dump|alignments|uniform`: use stored weights or recompute (default: dump).
+- `--slamWeightFile <path>`: keyed weight sidecar file (overrides `--slamWeightMode`).
+- `--slamWeightMatch auto|order|key`: matching strategy for weight file (default: auto).
 - `--slamQcReport <prefix>`: write QC JSON + HTML (optional).
 
 ## Outputs

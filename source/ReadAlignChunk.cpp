@@ -88,8 +88,11 @@ ReadAlignChunk::ReadAlignChunk(Parameters& Pin, Genome &genomeIn, Transcriptome 
 
         slamQuant = new SlamQuant(chunkTr->nGe, buildSlamAllowedGenes(*chunkTr), P.quant.slam.snpDetect, P.quant.slam.snpDetectFrac, snpObsAnyMismatch);
         // Enable dump buffer for external re-quant (skip auto-trim detection pass).
-        if (!P.quant.slam.dumpBinary.empty() && P.quant.slam.dumpBinary != "-" &&
-            P.quant.slam.dumpBinary != "None" && !P.quant.slam.autoTrimDetectionPass) {
+        bool wantDump = !P.quant.slam.dumpBinary.empty() && P.quant.slam.dumpBinary != "-" &&
+                        P.quant.slam.dumpBinary != "None";
+        bool wantWeights = !P.quant.slam.dumpWeights.empty() && P.quant.slam.dumpWeights != "-" &&
+                           P.quant.slam.dumpWeights != "None";
+        if ((wantDump || wantWeights) && !P.quant.slam.autoTrimDetectionPass) {
             slamQuant->enableDumpBuffer(P.quant.slam.dumpMaxReads);
         }
         if (P.quant.slam.debugEnabled) {

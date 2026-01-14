@@ -25,6 +25,9 @@ CLI:
   --autoTrim variance \
   --trimScope first|per-file \
   --strandness none|sense|antisense \
+  --slamWeightMode dump|alignments|uniform \
+  --slamWeightFile <weights.bin> \
+  --slamWeightMatch auto|order|key \
   --slamQcReport <prefix>
 ```
 
@@ -42,3 +45,9 @@ Outputs:
 - runs `slam_requant` on the dump
 - compares STAR vs requant with `tests/slam/compare_star_outputs.py`
 
+### Weight Sidecar Test
+`tests/test_slam_requant_weights.sh`:
+- runs STAR with `--slamDumpBinary` + `--slamDumpWeights`
+- reverses the weight sidecar order to force key matching
+- runs `slam_requant --slamWeightFile --slamWeightMatch key`
+- compares STAR vs requant output

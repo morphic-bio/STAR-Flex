@@ -1517,6 +1517,7 @@ int main(int argInN, char *argIn[])
             SlamDumpMetadata meta;
             meta.errorRate = P.quant.slam.errorRate;
             meta.convRate = P.quant.slam.convRate;
+            meta.weightMode = P.quant.slam.weightMode;
             meta.geneIds = transcriptomeMain->geID;
             meta.geneNames = transcriptomeMain->geName;
             if (genomeMain.genomeOut.g != nullptr) {
@@ -1539,6 +1540,27 @@ int main(int argInN, char *argIn[])
                 P.inOut->logMain << "SLAM dump written to: " << P.quant.slam.dumpBinary << "\n";
             } else {
                 P.inOut->logMain << "WARNING: failed to write SLAM dump: " << dumpErr << "\n";
+            }
+        }
+        // Optional: write weight sidecar for external re-quant (uses same buffers/order).
+        if (!P.quant.slam.dumpWeights.empty() && P.quant.slam.dumpWeights != "-" &&
+            P.quant.slam.dumpWeights != "None") {
+            SlamDumpMetadata meta;
+            meta.errorRate = P.quant.slam.errorRate;
+            meta.convRate = P.quant.slam.convRate;
+            meta.weightMode = P.quant.slam.weightMode;
+            std::vector<const SlamReadBuffer*> buffers;
+            buffers.reserve(P.runThreadN);
+            for (int ichunk = 0; ichunk < P.runThreadN; ++ichunk) {
+                if (RAchunk[ichunk] != nullptr && RAchunk[ichunk]->slamQuant != nullptr) {
+                    buffers.push_back(RAchunk[ichunk]->slamQuant->dumpBuffer());
+                }
+            }
+            std::string wErr;
+            if (writeSlamWeights(P.quant.slam.dumpWeights, meta, buffers, P.quant.slam.dumpMaxReads, &wErr)) {
+                P.inOut->logMain << "SLAM weights written to: " << P.quant.slam.dumpWeights << "\n";
+            } else {
+                P.inOut->logMain << "WARNING: failed to write SLAM weights: " << wErr << "\n";
             }
         }
 
