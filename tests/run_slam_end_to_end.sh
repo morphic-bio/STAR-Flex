@@ -57,6 +57,11 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 STAR_BIN="${PROJECT_ROOT}/source/STAR"
 GEDI_BIN="${PROJECT_BIN:-/mnt/pikachu/STAR-Flex/gedi}"
 
+# Optional overrides (useful for A/B testing)
+# Extra STAR args used ONLY during SNP mask build (step 1), e.g.:
+#   STAR_MASK_BUILD_EXTRA_ARGS="--slamSnpMaskCompat gedi --slamSnpMaskKMode any --slamSnpMaskMinAlt 6"
+STAR_MASK_BUILD_EXTRA_ARGS="${STAR_MASK_BUILD_EXTRA_ARGS:-}"
+
 # Production STAR index (110-44)
 STAR_INDEX="${STAR_INDEX:-/storage/autoindex_110_44/bulk_index}"
 
@@ -165,6 +170,7 @@ else
         --slamSnpMaskBedOut "$MASK_BED" \
         --slamSnpMaskSummaryOut "$MASK_SUMMARY" \
         --slamSnpMaskOnly 1 \
+        $STAR_MASK_BUILD_EXTRA_ARGS \
         > "$REPORT_DIR/build_mask.log" 2>&1
 fi
 

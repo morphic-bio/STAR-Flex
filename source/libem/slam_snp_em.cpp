@@ -51,6 +51,57 @@ double logsumexp(double a, double b, double c) {
     return logsumexp(logsumexp(a, b), c);
 }
 
+// Log-space binomial tail CDF: log(P[X >= k | n, p])
+// Optimized: compute the smaller tail to minimize iterations
+// Complexity: O(min(k, n-k+1)) instead of O(n-k+1)
+double log_binom_tail_cdf(uint32_t n, uint32_t k, double p) {
+    if (n == 0) {
+        return (k == 0) ? 0.0 : -std::numeric_limits<double>::infinity();
+    }
+    if (k > n) {
+        return -std::numeric_limits<double>::infinity();
+    }
+    if (k == 0) {
+        return 0.0;  // P[X >= 0] = 1.0
+    }
+    if (p <= 0.0) {
+        return (k == 0) ? 0.0 : -std::numeric_limits<double>::infinity();
+    }
+    if (p >= 1.0) {
+        return 0.0;  // P[X >= k] = 1.0 when p=1
+    }
+    
+    // Optimization: compute whichever tail is smaller
+    // For SNP detection, k (mismatches) is typically small, so compute lower tail
+    if (k <= n / 2 + 1) {
+        // Compute lower tail P[X <= k-1] with only k terms, then use complement
+        double log_lower = -std::numeric_limits<double>::infinity();
+        for (uint32_t i = 0; i < k; ++i) {
+            double log_pmf = log_binom_pmf(n, i, p);
+            log_lower = logsumexp(log_lower, log_pmf);
+        }
+        // P[X >= k] = 1 - P[X <= k-1]
+        // Use log1p(-exp(x)) for numerical stability
+        if (log_lower >= 0.0) {
+            return -std::numeric_limits<double>::infinity();  // Lower tail >= 1
+        }
+        // log(1 - exp(log_lower))
+        double exp_lower = std::exp(log_lower);
+        if (exp_lower >= 1.0) {
+            return -std::numeric_limits<double>::infinity();
+        }
+        return std::log1p(-exp_lower);
+    } else {
+        // Compute upper tail directly with n-k+1 terms
+        double log_sum = -std::numeric_limits<double>::infinity();
+        for (uint32_t i = k; i <= n; ++i) {
+            double log_pmf = log_binom_pmf(n, i, p);
+            log_sum = logsumexp(log_sum, log_pmf);
+        }
+        return log_sum;
+    }
+}
+
 SlamSnpEM::SlamSnpEM(uint32_t maxIter, double convergeRelLL)
     : maxIter_(maxIter), convergeRelLL_(convergeRelLL) {
 }

@@ -77,14 +77,30 @@ private:
     // Masked positions (after thresholding)
     std::unordered_set<uint64_t> maskedPositions_;
     
+    // Cache for p-values (binomial model) - avoids recomputation in writeBed
+    std::unordered_map<uint64_t, double> positionPvalues_;
+    
+    // Lookup table for binomial model: min_k required at each coverage level
+    // min_k_for_snp_[n] = minimum k such that P[X >= k | n, p_err] < pval_threshold
+    // Precomputed up to MAX_LOOKUP_COV, use direct computation above that
+    static constexpr uint32_t MAX_LOOKUP_COV = 1024;
+    std::vector<uint32_t> min_k_for_snp_;
+    double lookup_p_err_ = 0.0;  // p_err used for lookup table
+    
+    // Helper: build lookup table for given p_err
+    void buildBinomialLookup(double p_err);
+    
     // Helper: record observation at a position
     void recordObservation(uint64_t pos, bool isMismatch);
     
     // Helper: build histogram from position counts
     SnpHistogram buildHistogram() const;
     
-    // Helper: filter candidates and compute posteriors
+    // Helper: filter candidates and compute posteriors (EM model)
     void filterAndComputePosteriors();
+    
+    // Helper: filter candidates using binomial p-value (GEDI-style)
+    void filterAndComputeBinomial(double p_err);
     
     // Helper: get reference base at position (for BED ref/alt columns)
     char getRefBase(uint64_t pos) const;

@@ -5,6 +5,12 @@
 #include <unordered_map>
 #include <string>
 
+// Log-space binomial PMF: log(P(k | n, p))
+double log_binom_pmf(uint32_t n, uint32_t k, double p);
+
+// Log-space binomial tail CDF: log(P[X >= k | n, p])
+double log_binom_tail_cdf(uint32_t n, uint32_t k, double p);
+
 // Histogram key: (n, k) packed as uint32_t = (n << 16) | k
 // Value: weight (number of sites with this (n,k) pair)
 using SnpHistogram = std::unordered_map<uint32_t, uint64_t>;

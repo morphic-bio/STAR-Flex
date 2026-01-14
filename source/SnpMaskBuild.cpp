@@ -172,6 +172,91 @@ void SnpMaskBuild::filterAndComputePosteriors() {
     }
 }
 
+void SnpMaskBuild::buildBinomialLookup(double p_err) {
+    min_k_for_snp_.resize(MAX_LOOKUP_COV + 1, UINT32_MAX);
+    lookup_p_err_ = p_err;
+    
+    double log_pval_threshold = std::log(P_.quant.slamSnpMask.pval);
+    
+    // For each coverage level, find minimum k where p-value < threshold
+    // Use binary search for efficiency
+    for (uint32_t n = 1; n <= MAX_LOOKUP_COV; ++n) {
+        uint32_t lo = 0, hi = n + 1;
+        while (lo < hi) {
+            uint32_t mid = lo + (hi - lo) / 2;
+            double log_pval = log_binom_tail_cdf(n, mid, p_err);
+            if (log_pval < log_pval_threshold) {
+                hi = mid;  // mid works, try lower
+            } else {
+                lo = mid + 1;  // mid doesn't work, need higher
+            }
+        }
+        min_k_for_snp_[n] = lo;  // lo is the minimum k that passes
+    }
+}
+
+void SnpMaskBuild::filterAndComputeBinomial(double p_err) {
+    maskedPositions_.clear();
+    positionPvalues_.clear();  // Clear p-value cache
+    
+    if (p_err <= 0.0 || p_err >= 1.0) {
+        return;  // Invalid p_err
+    }
+    
+    // Build lookup table if not already built or p_err changed
+    if (min_k_for_snp_.empty() || lookup_p_err_ != p_err) {
+        buildBinomialLookup(p_err);
+    }
+    
+    double log_pval_threshold = std::log(P_.quant.slamSnpMask.pval);
+    
+    for (const auto& kv : positionCounts_) {
+        uint64_t pos = kv.first;
+        uint32_t packed = kv.second;
+        uint32_t n = packed >> 16;
+        uint32_t k = packed & 0xFFFF;
+        
+        // Apply basic filters
+        if (n < P_.quant.slamSnpMask.minCov) {
+            continue;
+        }
+        if (k < P_.quant.slamSnpMask.minAlt) {
+            continue;
+        }
+        
+        // Check T→C ratio threshold (GEDI -snpConv)
+        double tc_ratio = static_cast<double>(k) / static_cast<double>(n);
+        if (tc_ratio < P_.quant.slamSnpMask.minTcRatio) {
+            continue;
+        }
+        
+        // Fast path: use lookup table for n <= MAX_LOOKUP_COV
+        bool is_snp = false;
+        double pval = 1.0;
+        
+        if (n <= MAX_LOOKUP_COV) {
+            // O(1) lookup - check if k meets minimum threshold
+            is_snp = (k >= min_k_for_snp_[n]);
+            if (is_snp) {
+                // Only compute actual p-value for output (lazy)
+                double log_pval = log_binom_tail_cdf(n, k, p_err);
+                pval = std::exp(log_pval);
+            }
+        } else {
+            // Slow path for very high coverage (rare, n > 1024)
+            double log_pval = log_binom_tail_cdf(n, k, p_err);
+            pval = std::exp(log_pval);
+            is_snp = (log_pval < log_pval_threshold);
+        }
+        
+        // Mask if passes threshold
+        if (is_snp) {
+            maskedPositions_.insert(pos);
+            positionPvalues_[pos] = pval;  // Cache for writeBed
+        }
+    }
+}
+
 char SnpMaskBuild::getRefBase(uint64_t pos) const {
     if (pos >= genome_.nGenome) {
         return 'N';
@@ -240,27 +325,59 @@ bool SnpMaskBuild::buildMask(const std::vector<std::pair<std::string, std::strin
         return false;
     }
     
-    // Build histogram
-    SnpHistogram histogram = buildHistogram();
+    // Determine which model to use
+    bool useBinom = (P_.quant.slamSnpMask.model == "binom");
     
-    if (histogram.empty()) {
-        if (err) *err = "No candidate sites after filtering (minCov=" + 
-                        std::to_string(P_.quant.slamSnpMask.minCov) + ")";
-        return false;
-    }
-    
-    // Fit EM model
-    emResult_ = emModel_->fit(histogram);
-    
-    if (!emResult_.converged && emResult_.iterations >= P_.quant.slamSnpMask.maxIter) {
-        // Warning but not fatal - use the best fit we have
-        if (err) {
-            *err = "EM did not converge after " + std::to_string(emResult_.iterations) + " iterations";
+    if (useBinom) {
+        // Binomial model: use p_err from detection pass (or override)
+        double p_err = P_.quant.slamSnpMask.err;
+        if (p_err < 0.0) {
+            // Use computed error rate from detection pass
+            p_err = P_.quant.slam.snpErrUsed;
+            
+            // Fallback if p_err is too low
+            if (p_err < P_.quant.slam.snpErrMinThreshold) {
+                p_err = P_.quant.slam.snpErrMinThreshold;
+                if (err) {
+                    *err = "p_err (" + std::to_string(P_.quant.slam.snpErrUsed) + 
+                           ") below threshold, using " + std::to_string(p_err);
+                }
+            }
         }
+        
+        // Filter using binomial p-value
+        filterAndComputeBinomial(p_err);
+        
+        // Set dummy EM result for stats (not used in binomial mode)
+        emResult_.iterations = 0;
+        emResult_.converged = true;
+        emResult_.p_ERR = p_err;
+        emResult_.pi_ERR = 1.0;
+        emResult_.pi_HET = 0.0;
+        emResult_.pi_HOM = 0.0;
+    } else {
+        // EM model: fit mixture model
+        SnpHistogram histogram = buildHistogram();
+        
+        if (histogram.empty()) {
+            if (err) *err = "No candidate sites after filtering (minCov=" + 
+                            std::to_string(P_.quant.slamSnpMask.minCov) + ")";
+            return false;
+        }
+        
+        // Fit EM model
+        emResult_ = emModel_->fit(histogram);
+        
+        if (!emResult_.converged && emResult_.iterations >= P_.quant.slamSnpMask.maxIter) {
+            // Warning but not fatal - use the best fit we have
+            if (err) {
+                *err = "EM did not converge after " + std::to_string(emResult_.iterations) + " iterations";
+            }
+        }
+        
+        // Filter and compute posteriors
+        filterAndComputePosteriors();
     }
-    
-    // Filter and compute posteriors
-    filterAndComputePosteriors();
     
     // Compute statistics
     if (stats) {
@@ -268,8 +385,24 @@ bool SnpMaskBuild::buildMask(const std::vector<std::pair<std::string, std::strin
         
         // Count actual candidate sites (not just unique (n,k) pairs)
         uint64_t candidateCount = 0;
-        for (const auto& kv : histogram) {
-            candidateCount += kv.second;  // Each histogram entry has count of sites
+        if (useBinom) {
+            // For binomial model, count sites passing filters
+            for (const auto& kv : positionCounts_) {
+                uint32_t packed = kv.second;
+                uint32_t n = packed >> 16;
+                uint32_t k = packed & 0xFFFF;
+                if (n >= P_.quant.slamSnpMask.minCov && 
+                    k >= P_.quant.slamSnpMask.minAlt &&
+                    (static_cast<double>(k) / static_cast<double>(n)) >= P_.quant.slamSnpMask.minTcRatio) {
+                    candidateCount++;
+                }
+            }
+        } else {
+            // For EM model, use histogram
+            SnpHistogram histogram = buildHistogram();
+            for (const auto& kv : histogram) {
+                candidateCount += kv.second;  // Each histogram entry has count of sites
+            }
         }
         stats->candidateSites = candidateCount;
         stats->maskedSites = maskedPositions_.size();
@@ -362,7 +495,32 @@ bool SnpMaskBuild::writeBed(const std::string& bedPath, const Genome& genome, st
         uint32_t n = packed >> 16;
         uint32_t k = packed & 0xFFFF;
         double f = (n > 0) ? (static_cast<double>(k) / static_cast<double>(n)) : 0.0;
-        double post_snp = emModel_->posterior(n, k);
+        
+        // Compute post_snp and component based on model
+        double post_snp = 0.0;
+        std::string comp = "UNK";
+        bool useBinom = (P_.quant.slamSnpMask.model == "binom");
+        
+        if (useBinom) {
+            // Binomial model: use cached p-value (computed in filterAndComputeBinomial)
+            auto it = positionPvalues_.find(pos);
+            if (it != positionPvalues_.end()) {
+                post_snp = it->second;
+            } else {
+                // Fallback: recompute if not cached (shouldn't happen)
+                double p_err = (P_.quant.slamSnpMask.err >= 0.0) ? P_.quant.slamSnpMask.err : P_.quant.slam.snpErrUsed;
+                if (p_err < P_.quant.slam.snpErrMinThreshold) {
+                    p_err = P_.quant.slam.snpErrMinThreshold;
+                }
+                double log_pval = log_binom_tail_cdf(n, k, p_err);
+                post_snp = std::exp(log_pval);
+            }
+            comp = (post_snp < P_.quant.slamSnpMask.pval) ? "SNP" : "ERR";
+        } else {
+            // EM model: use posterior and component
+            post_snp = emModel_->posterior(n, k);
+            comp = getComponent(n, k);
+        }
         
         // Find chromosome index using binary search
         uint32_t chrIdx = findChrIdx(pos);
@@ -374,7 +532,7 @@ bool SnpMaskBuild::writeBed(const std::string& bedPath, const Genome& genome, st
         entry.k = k;
         entry.f = f;
         entry.post_snp = post_snp;
-        entry.comp = getComponent(n, k);
+        entry.comp = comp;
         entries.push_back(entry);
     }
     
@@ -402,15 +560,17 @@ bool SnpMaskBuild::writeBed(const std::string& bedPath, const Genome& genome, st
             continue;
         }
         
-        uint64_t chrStart = genome.chrStart[entry.chrIdx];
-        uint64_t pos0 = entry.pos - chrStart;
+        uint64_t chrStartPos = genome.chrStart[entry.chrIdx];
+        // STAR's internal positions are 0-based genome-wide indices
+        // Subtract chromosome start to get 0-based chromosome position for BED format
+        uint64_t pos0based = entry.pos - chrStartPos;
         char ref = getRefBase(entry.pos);
         char alt = getAltBase(entry.pos);
         
         std::ostringstream oss;
         oss << genome.chrName[entry.chrIdx] << "\t"
-            << pos0 << "\t"
-            << (pos0 + 1) << "\t"
+            << pos0based << "\t"
+            << (pos0based + 1) << "\t"
             << ref << "\t"
             << alt << "\t"
             << entry.n << "\t"
@@ -442,18 +602,36 @@ bool SnpMaskBuild::writeSummary(const std::string& summaryPath, const SnpMaskBui
         return false;
     }
     
+    bool useBinom = (P_.quant.slamSnpMask.model == "binom");
+    
     out << "metric\tvalue\n";
-    out << "p_ERR\t" << std::fixed << std::setprecision(8) << emResult_.p_ERR << "\n";
-    out << "pi_ERR\t" << std::fixed << std::setprecision(8) << emResult_.pi_ERR << "\n";
-    out << "pi_HET\t" << std::fixed << std::setprecision(8) << emResult_.pi_HET << "\n";
-    out << "pi_HOM\t" << std::fixed << std::setprecision(8) << emResult_.pi_HOM << "\n";
+    
+    if (useBinom) {
+        // Binomial model summary
+        double p_err = (P_.quant.slamSnpMask.err >= 0.0) ? P_.quant.slamSnpMask.err : P_.quant.slam.snpErrUsed;
+        if (p_err < P_.quant.slam.snpErrMinThreshold) {
+            p_err = P_.quant.slam.snpErrMinThreshold;
+        }
+        out << "model\tbinom\n";
+        out << "p_err\t" << std::fixed << std::setprecision(8) << p_err << "\n";
+        out << "pval_threshold\t" << std::fixed << std::setprecision(8) << P_.quant.slamSnpMask.pval << "\n";
+        out << "min_tc_ratio\t" << std::fixed << std::setprecision(8) << P_.quant.slamSnpMask.minTcRatio << "\n";
+    } else {
+        // EM model summary
+        out << "model\tem\n";
+        out << "p_ERR\t" << std::fixed << std::setprecision(8) << emResult_.p_ERR << "\n";
+        out << "pi_ERR\t" << std::fixed << std::setprecision(8) << emResult_.pi_ERR << "\n";
+        out << "pi_HET\t" << std::fixed << std::setprecision(8) << emResult_.pi_HET << "\n";
+        out << "pi_HOM\t" << std::fixed << std::setprecision(8) << emResult_.pi_HOM << "\n";
+        out << "iterations\t" << emResult_.iterations << "\n";
+        out << "final_log_likelihood\t" << std::fixed << std::setprecision(8) << emResult_.final_log_likelihood << "\n";
+    }
+    
     out << "candidates_total\t" << stats.totalSites << "\n";
     out << "candidates_passing\t" << stats.candidateSites << "\n";
     out << "masked_sites\t" << stats.maskedSites << "\n";
     out << "global_baseline_before\t" << std::fixed << std::setprecision(8) << stats.globalBaselineBefore << "\n";
     out << "global_baseline_after\t" << std::fixed << std::setprecision(8) << stats.globalBaselineAfter << "\n";
-    out << "iterations\t" << emResult_.iterations << "\n";
-    out << "final_log_likelihood\t" << std::fixed << std::setprecision(8) << emResult_.final_log_likelihood << "\n";
     out << "coverage_overflow_count\t" << stats.coverageOverflowCount << "\n";
     
     return true;
