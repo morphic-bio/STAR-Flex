@@ -40,6 +40,7 @@
 #include "fld_accumulator.h"
 #include "TranscriptQuantOutput.h"
 #include "SlamQuant.h"
+#include "SlamDump.h"
 #include "SlamVarianceAnalysis.h"
 #include "SlamQcOutput.h"
 #include "SnpMaskBuild.h"
@@ -259,6 +260,20 @@ int main(int argInN, char *argIn[])
         // SNP mask build pre-pass (if requested)
         bool hasMaskIn = !P.quant.slamSnpMask.maskIn.empty() && P.quant.slamSnpMask.maskIn != "-" && P.quant.slamSnpMask.maskIn != "None";
         bool hasBuildFastqs = !P.quant.slamSnpMask.buildFastqsFofn.empty() && P.quant.slamSnpMask.buildFastqsFofn != "-" && P.quant.slamSnpMask.buildFastqsFofn != "None";
+        bool hasBuildBam = !P.quant.slamSnpMask.buildBam.empty() && P.quant.slamSnpMask.buildBam != "-" && P.quant.slamSnpMask.buildBam != "None";
+        
+        if (hasBuildBam && !hasMaskIn && !hasBuildFastqs) {
+            // Build mask from existing BAM
+            // Note: Full integration pending - for now, users should call the external pileup_snp tool directly
+            // See tools/pileup_snp/README.md for usage
+            ostringstream errOut;
+            errOut << "EXITING: --slamSnpMaskBuildBam is not yet fully integrated into STAR.\n"
+                   << "SOLUTION: Use the external pileup_snp tool directly:\n"
+                   << "  tools/pileup_snp/pileup_snp --bam <bam> --bed <candidates.bed> --ref <ref.fa> --output <mask.bed.gz>\n"
+                   << "Then load the mask with --slamSnpMaskIn <mask.bed.gz>\n"
+                   << "Future versions will support direct BAM-based mask building from within STAR.\n";
+            exitWithError(errOut.str(), std::cerr, P.inOut->logMain, EXIT_CODE_PARAMETER, P);
+        }
         
         if (hasBuildFastqs && !hasMaskIn) {
             // Build mask from FASTQs
@@ -312,27 +327,16 @@ int main(int argInN, char *argIn[])
             P.readFilesInit();
             P.openReadsFiles();
             
-            // Create temporary SlamQuant for mask build
-            uint32_t nGenes = (transcriptomeMain != nullptr) ? transcriptomeMain->nGe : 1;
-            std::unique_ptr<SlamQuant> tempSlamQuant(new SlamQuant(nGenes, true, -1.0));
-            
-            // Create ReadAlignChunk with temp SlamQuant
-            // We need to temporarily set quant.slam.yes and point to temp SlamQuant
+            // Create ReadAlignChunk for mask build
+            // Force-enable SLAM + SNP observation collection for this pre-pass, but do NOT swap SlamQuant
+            // (swapping risks dangling pointers and also bypasses debug configuration done in ReadAlignChunk).
             bool originalSlamYes = P.quant.slam.yes;
-            P.quant.slam.yes = true;  // Enable SLAM mode for mask build
-            
+            bool originalSnpDetect = P.quant.slam.snpDetect;
+            P.quant.slam.yes = true;
+            P.quant.slam.snpDetect = true;
+
             ReadAlignChunk* RAchunkMask = new ReadAlignChunk(P, genomeMain, transcriptomeMain, 0,
-                                                              libem_transcriptome.get());
-            
-            // Replace SlamQuant with our temp one
-            if (RAchunkMask->slamQuant) {
-                delete RAchunkMask->slamQuant;
-            }
-            RAchunkMask->slamQuant = tempSlamQuant.release();
-            // CRITICAL: Update RA->slamQuant to point to the new object to avoid dangling pointer
-            if (RAchunkMask->RA != nullptr) {
-                RAchunkMask->RA->slamQuant = RAchunkMask->slamQuant;
-            }
+                                                            libem_transcriptome.get());
             
             // Run alignment to collect observations
             P.inOut->logMain << timeMonthDayTime() << " ..... aligning reads for mask build\n" << flush;
@@ -340,9 +344,15 @@ int main(int argInN, char *argIn[])
             
             // Extract data from SlamQuant and run EM/filtering
             maskBuilder.extractFromSlamQuant(RAchunkMask->slamQuant);
+
+            // If SNP-site debug was enabled, write debug outputs now (mask-only runs exit before SLAM quant writes).
+            if (P.quant.slam.debugEnabled && RAchunkMask->slamQuant != nullptr) {
+                RAchunkMask->slamQuant->writeDebug(*transcriptomeMain, P.quant.slam.errorRate, P.quant.slam.convRate);
+            }
             
             // Restore original settings
             P.quant.slam.yes = originalSlamYes;
+            P.quant.slam.snpDetect = originalSnpDetect;
             P.readFilesNames = originalReadFilesNames;
             // readNends is 1 for SE, 2 for PE (number of mate arrays, not file count)
             P.readNends = (originalReadFilesNames.size() > 1) ? 2 : 1;
@@ -359,6 +369,29 @@ int main(int argInN, char *argIn[])
             delete RAchunkMask;
             
             // Now run mask build processing (EM fit, filtering, etc.)
+            // Log mask build parameters
+            P.inOut->logMain << timeMonthDayTime() << " ..... building SNP mask using model: " 
+                            << P.quant.slamSnpMask.model << "\n";
+            P.inOut->logMain << "    mismatch counting mode (kMode): " << P.quant.slamSnpMask.kMode << "\n";
+            if (P.quant.slamSnpMask.model == "binom") {
+                double p_err = (P.quant.slamSnpMask.err >= 0.0) ? P.quant.slamSnpMask.err : P.quant.slam.snpErrUsed;
+                if (p_err < P.quant.slam.snpErrMinThreshold) {
+                    p_err = P.quant.slam.snpErrMinThreshold;
+                }
+                P.inOut->logMain << "    binomial model parameters:\n"
+                                << "      p_err: " << std::fixed << std::setprecision(6) << p_err << "\n"
+                                << "      pval threshold: " << std::fixed << std::setprecision(6) << P.quant.slamSnpMask.pval << "\n"
+                                << "      minTcRatio: " << std::fixed << std::setprecision(3) << P.quant.slamSnpMask.minTcRatio << "\n"
+                                << "      minCov: " << P.quant.slamSnpMask.minCov << "\n"
+                                << "      minAlt: " << P.quant.slamSnpMask.minAlt << "\n";
+            } else {
+                P.inOut->logMain << "    EM model parameters:\n"
+                                << "      posterior threshold: " << std::fixed << std::setprecision(3) << P.quant.slamSnpMask.posterior << "\n"
+                                << "      minCov: " << P.quant.slamSnpMask.minCov << "\n"
+                                << "      minAlt: " << P.quant.slamSnpMask.minAlt << "\n"
+                                << "      maxIter: " << P.quant.slamSnpMask.maxIter << "\n";
+            }
+            
             SnpMaskBuildStats buildStats;
             if (!maskBuilder.buildMask(fastqPairs, transcriptomeMain, &buildStats, &err)) {
                 ostringstream errOut;
@@ -367,6 +400,20 @@ int main(int argInN, char *argIn[])
                     errOut << "Details: " << err << "\n";
                 }
                 exitWithError(errOut.str(), std::cerr, P.inOut->logMain, EXIT_CODE_PARAMETER, P);
+            }
+            
+            // Log mask build results
+            P.inOut->logMain << timeMonthDayTime() << " ..... SNP mask build completed\n"
+                            << "    total sites: " << buildStats.totalSites << "\n"
+                            << "    candidate sites: " << buildStats.candidateSites << "\n"
+                            << "    masked sites: " << buildStats.maskedSites << "\n"
+                            << "    global baseline before: " << std::fixed << std::setprecision(6) << buildStats.globalBaselineBefore << "\n"
+                            << "    global baseline after: " << std::fixed << std::setprecision(6) << buildStats.globalBaselineAfter << "\n";
+            if (P.quant.slamSnpMask.model == "em") {
+                const auto& emResult = maskBuilder.getEMResult();
+                P.inOut->logMain << "    EM iterations: " << emResult.iterations << "\n"
+                                << "    EM converged: " << (emResult.converged ? "yes" : "no") << "\n"
+                                << "    p_ERR: " << std::fixed << std::setprecision(6) << emResult.p_ERR << "\n";
             }
             
             // Write outputs
@@ -474,7 +521,7 @@ int main(int argInN, char *argIn[])
                                  << " transcript sequences for error model\n";
             }
         }
-    };
+    }
 
     // Pre-initialize inline CB correction whitelist (needed before mapping)
     if (P.pSolo.inlineCBCorrection && P.pSolo.cbWLyes && !P.pSolo.cbWLstr.empty()) {
@@ -1464,6 +1511,37 @@ int main(int argInN, char *argIn[])
         mergedSlam.write(*transcriptomeMain, P.quant.slam.outFile,
                          P.quant.slam.errorRate, P.quant.slam.convRate);
 
+        // Optional: write dump for external re-quant
+        if (!P.quant.slam.dumpBinary.empty() && P.quant.slam.dumpBinary != "-" &&
+            P.quant.slam.dumpBinary != "None") {
+            SlamDumpMetadata meta;
+            meta.errorRate = P.quant.slam.errorRate;
+            meta.convRate = P.quant.slam.convRate;
+            meta.geneIds = transcriptomeMain->geID;
+            meta.geneNames = transcriptomeMain->geName;
+            if (genomeMain.genomeOut.g != nullptr) {
+                meta.chrNames = genomeMain.genomeOut.g->chrName;
+                meta.chrStart.clear();
+                meta.chrStart.reserve(genomeMain.genomeOut.g->chrStart.size());
+                for (auto v : genomeMain.genomeOut.g->chrStart) {
+                    meta.chrStart.push_back(static_cast<uint64_t>(v));
+                }
+            }
+            std::vector<const SlamReadBuffer*> buffers;
+            buffers.reserve(P.runThreadN);
+            for (int ichunk = 0; ichunk < P.runThreadN; ++ichunk) {
+                if (RAchunk[ichunk] != nullptr && RAchunk[ichunk]->slamQuant != nullptr) {
+                    buffers.push_back(RAchunk[ichunk]->slamQuant->dumpBuffer());
+                }
+            }
+            std::string dumpErr;
+            if (writeSlamDump(P.quant.slam.dumpBinary, meta, buffers, P.quant.slam.dumpMaxReads, &dumpErr)) {
+                P.inOut->logMain << "SLAM dump written to: " << P.quant.slam.dumpBinary << "\n";
+            } else {
+                P.inOut->logMain << "WARNING: failed to write SLAM dump: " << dumpErr << "\n";
+            }
+        }
+
         // Write diagnostics
         std::string diagFile = P.quant.slam.outFile + ".diagnostics";
         mergedSlam.writeDiagnostics(diagFile);
@@ -1577,7 +1655,7 @@ int main(int argInN, char *argIn[])
                          << flush;
         string wigOutFileNamePrefix = P.outFileNamePrefix + "Signal";
         signalFromBAM(P.outBAMfileCoordName, wigOutFileNamePrefix, P);
-    };
+    }
 
     g_statsAll.writeLines(P.inOut->outChimJunction, P.pCh.outJunctionFormat, "#", STAR_VERSION + string("   ") + P.commandLine);
 
@@ -1613,4 +1691,5 @@ int main(int argInN, char *argIn[])
     delete P.inOut; // to close files
 
     return 0;
-};
+}
+}

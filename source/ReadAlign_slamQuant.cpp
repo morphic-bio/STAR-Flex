@@ -187,6 +187,29 @@ bool ReadAlign::slamCollect(const Transcript& trOut, const std::set<uint32_t>& g
     }
     SlamMismatchCategory category = isIntronic ? SlamMismatchCategory::Intronic : SlamMismatchCategory::Exonic;
     SlamMismatchCategory senseCategory = isIntronic ? SlamMismatchCategory::IntronicSense : SlamMismatchCategory::ExonicSense;
+
+    // Optional dump record for external re-quant
+    SlamBufferedRead dumpRead;
+    const bool dumpEnabled = slamQuant->dumpEnabled() && !slamQuant->dumpBufferFull();
+    if (dumpEnabled) {
+        std::string name(readName ? readName : "");
+        size_t end = name.find_first_of(" \t");
+        if (end != std::string::npos) {
+            name = name.substr(0, end);
+        }
+        if (!name.empty() && name[0] == '@') {
+            name.erase(0, 1);
+        }
+        dumpRead.readName = name;
+        dumpRead.readLength0 = static_cast<uint32_t>(readLength[0]);
+        dumpRead.readLength1 = static_cast<uint32_t>(readLength[1]);
+        dumpRead.isMinus = isMinus;
+        dumpRead.oppositeStrand = oppositeStrand;
+        dumpRead.geneIds.assign(geneIds.begin(), geneIds.end());
+        dumpRead.weight = weight;
+        dumpRead.isIntronic = isIntronic;
+        dumpRead.fileIndex = static_cast<uint32_t>(P.quant.slam.currentFileIndex);
+    }
     bool snpDetect = slamQuant->snpDetectEnabled() && !isIntronic;
     std::vector<uint32_t> mismatchPositions;
     std::vector<uint32_t> debugConvReadPos;
@@ -277,7 +300,18 @@ bool ReadAlign::slamCollect(const Transcript& trOut, const std::set<uint32_t>& g
                 continue;
             }
             if (snpDetect) {
-                slamQuant->recordSnpObservation(gpos, g1 != r1);
+                // For SLAM-seq SNP detection, only count T→C conversions
+                // STAR base encoding: A=0, C=1, G=2, T=3
+                // T→C: genomic T (3) → read C (1)
+                // A→G: genomic A (0) → read G (2) (opposite strand equivalent)
+                bool isTtoC = (g1 == 3 && r1 == 1);
+                bool isAtoG = (g1 == 0 && r1 == 2);
+                bool isConv = (isTtoC || isAtoG);
+                bool isAnyMis = (g1 != r1);
+                if (slamQuant->snpSiteDebugEnabled()) {
+                    slamQuant->debugSnpSiteObserve(gpos, isAnyMis, isConv, weight, trOut.primaryFlag, trOut.mapq);
+                }
+                slamQuant->recordSnpObservation(gpos, isAnyMis, isConv);
             }
             uint64 rposRaw = rStart + ii;
             if (readLength[0] > 0 && rposRaw == readLength[0]) {
@@ -322,6 +356,19 @@ bool ReadAlign::slamCollect(const Transcript& trOut, const std::set<uint32_t>& g
                 }
                 
                 slamQuant->recordVariancePosition(readPos, qual, isT, isTc);
+            }
+
+            // Buffer for external re-quant dump (before trim filtering)
+            if (dumpEnabled) {
+                SlamBufferedPosition bp;
+                bp.readPos = readPos;
+                bp.genomicPos = gpos;
+                bp.refBase = g1;
+                bp.readBase = r1;
+                bp.qual = qual;
+                bp.secondMate = secondMate;
+                bp.overlap = overlap;
+                dumpRead.positions.push_back(bp);
             }
             
             // Compat position filtering (overlap and trim)
@@ -388,6 +435,11 @@ bool ReadAlign::slamCollect(const Transcript& trOut, const std::set<uint32_t>& g
                 }
             }
         }
+    }
+
+    // Commit dump record (after position buffering)
+    if (dumpEnabled) {
+        slamQuant->bufferDumpRead(std::move(dumpRead));
     }
 
     uint8_t k8 = static_cast<uint8_t>(k > 255 ? 255 : k);

@@ -3,6 +3,8 @@
 
 #include "Genome.h"
 #include "Transcriptome.h"
+#include "htslib/htslib/bgzf.h"
+#include "htslib/htslib/kstring.h"
 
 #include <fstream>
 #include <sstream>
@@ -13,6 +15,7 @@
 #include <cmath>
 #include <cstdio>
 #include <memory>
+#include <cstdlib>
 
 namespace {
 constexpr uint32_t kSnpMinCoverage = 10;
@@ -40,11 +43,17 @@ const char* debugDropReasonName(SlamDebugDropReason reason) {
 }
 }
 
-SlamQuant::SlamQuant(uint32_t nGenes, bool snpDetect, double snpMismatchFrac)
-    : geneStats_(nGenes), snpDetectEnabled_(snpDetect), snpMismatchFrac_(snpMismatchFrac) {}
+SlamQuant::SlamQuant(uint32_t nGenes, bool snpDetect, double snpMismatchFrac, bool snpObsAnyMismatch)
+    : geneStats_(nGenes),
+      snpDetectEnabled_(snpDetect),
+      snpObsAnyMismatch_(snpObsAnyMismatch),
+      snpMismatchFrac_(snpMismatchFrac) {}
 
-SlamQuant::SlamQuant(uint32_t nGenes, std::vector<uint8_t> allowedGenes, bool snpDetect, double snpMismatchFrac)
-    : geneStats_(nGenes), snpDetectEnabled_(snpDetect), snpMismatchFrac_(snpMismatchFrac),
+SlamQuant::SlamQuant(uint32_t nGenes, std::vector<uint8_t> allowedGenes, bool snpDetect, double snpMismatchFrac, bool snpObsAnyMismatch)
+    : geneStats_(nGenes),
+      snpDetectEnabled_(snpDetect),
+      snpObsAnyMismatch_(snpObsAnyMismatch),
+      snpMismatchFrac_(snpMismatchFrac),
       allowedGenes_(std::move(allowedGenes)) {}
 
 void SlamQuant::enableVarianceAnalysis(uint32_t maxReads, uint32_t minReads,
@@ -96,7 +105,9 @@ void SlamQuant::initDebug(const Transcriptome& tr,
                           const std::unordered_set<std::string>& debugReads,
                           size_t maxReads,
                           const std::string& outPrefix) {
-    debugEnabled_ = !debugGenes.empty() || !debugReads.empty();
+    // Enable debug mode if any debug category is requested. SNP-site debug is configured separately
+    // but shares the debug output prefix.
+    debugEnabled_ = !debugGenes.empty() || !debugReads.empty() || !outPrefix.empty();
     debugMaxReads_ = maxReads;
     debugOutPrefix_ = outPrefix;
     debugReadRecords_.clear();
@@ -209,6 +220,81 @@ void SlamQuant::debugLogRead(const SlamDebugReadRecord& record) {
     debugReadRecords_.push_back(record);
 }
 
+void SlamQuant::enableSnpSiteDebug(uint64_t absPos, int window, const std::string& locString) {
+    if (!debugEnabled_) {
+        // Debug output prefix is required to write files; caller should have ensured initDebug().
+        debugEnabled_ = true;
+    }
+    debugSnpEnabled_ = true;
+    debugSnpAbsPos_ = absPos;
+    debugSnpWindow_ = (window < 0) ? 0 : window;
+    debugSnpLoc_ = locString;
+    size_t n = static_cast<size_t>(debugSnpWindow_ * 2 + 1);
+    auto resetVec = [&](std::vector<uint64_t>& v) { v.assign(n, 0); };
+    resetVec(debugSnpCov_);
+    resetVec(debugSnpAnyMis_);
+    resetVec(debugSnpConvMis_);
+    resetVec(debugSnpCovPrimary_);
+    resetVec(debugSnpAnyMisPrimary_);
+    resetVec(debugSnpConvMisPrimary_);
+    resetVec(debugSnpCovNh1_);
+    resetVec(debugSnpAnyMisNh1_);
+    resetVec(debugSnpConvMisNh1_);
+    resetVec(debugSnpCovNhGt1_);
+    resetVec(debugSnpAnyMisNhGt1_);
+    resetVec(debugSnpConvMisNhGt1_);
+    resetVec(debugSnpCovMapq20_);
+    resetVec(debugSnpAnyMisMapq20_);
+    resetVec(debugSnpConvMisMapq20_);
+}
+
+void SlamQuant::debugSnpSiteObserve(uint64_t absPos, bool anyMismatch, bool convMismatch,
+                                   double weight, bool primaryFlag, int mapq) {
+    if (!debugSnpEnabled_) {
+        return;
+    }
+    int64_t delta = static_cast<int64_t>(absPos) - static_cast<int64_t>(debugSnpAbsPos_);
+    if (delta < -debugSnpWindow_ || delta > debugSnpWindow_) {
+        return;
+    }
+    size_t idx = static_cast<size_t>(delta + debugSnpWindow_);
+
+    debugSnpCov_[idx] += 1;
+    if (anyMismatch) debugSnpAnyMis_[idx] += 1;
+    if (convMismatch) debugSnpConvMis_[idx] += 1;
+
+    if (primaryFlag) {
+        debugSnpCovPrimary_[idx] += 1;
+        if (anyMismatch) debugSnpAnyMisPrimary_[idx] += 1;
+        if (convMismatch) debugSnpConvMisPrimary_[idx] += 1;
+    }
+
+    // Infer NH from weight (Alignments mode => weight~1/NH; Uniform => weight==1)
+    uint32_t nh = 1;
+    if (weight > 0.0) {
+        double inv = 1.0 / weight;
+        if (inv < 1.0) inv = 1.0;
+        if (inv > 1e6) inv = 1e6;
+        nh = static_cast<uint32_t>(std::llround(inv));
+        if (nh == 0) nh = 1;
+    }
+    if (nh <= 1) {
+        debugSnpCovNh1_[idx] += 1;
+        if (anyMismatch) debugSnpAnyMisNh1_[idx] += 1;
+        if (convMismatch) debugSnpConvMisNh1_[idx] += 1;
+    } else {
+        debugSnpCovNhGt1_[idx] += 1;
+        if (anyMismatch) debugSnpAnyMisNhGt1_[idx] += 1;
+        if (convMismatch) debugSnpConvMisNhGt1_[idx] += 1;
+    }
+
+    if (mapq >= 20) {
+        debugSnpCovMapq20_[idx] += 1;
+        if (anyMismatch) debugSnpAnyMisMapq20_[idx] += 1;
+        if (convMismatch) debugSnpConvMisMapq20_[idx] += 1;
+    }
+}
+
 const char* slamMismatchCategoryName(SlamMismatchCategory cat) {
     switch (cat) {
         case SlamMismatchCategory::Exonic:
@@ -241,10 +327,11 @@ void SlamQuant::addRead(uint32_t geneId, uint16_t nT, uint8_t k, double weight) 
     stats.coverage += weight * static_cast<double>(nT);
 }
 
-void SlamQuant::recordSnpObservation(uint64_t pos, bool isMismatch) {
+void SlamQuant::recordSnpObservation(uint64_t pos, bool anyMismatch, bool convMismatch) {
     if (!snpDetectEnabled_) {
         return;
     }
+    const bool isMismatch = snpObsAnyMismatch_ ? anyMismatch : convMismatch;
     uint32_t &entry = snpMask_[pos];
     uint32_t cov = entry >> 16;
     uint32_t mis = entry & 0xFFFF;
@@ -624,6 +711,32 @@ void SlamQuant::merge(const SlamQuant& other) {
             }
         }
     }
+
+    if (debugSnpEnabled_ && other.debugSnpEnabled_ &&
+        debugSnpAbsPos_ == other.debugSnpAbsPos_ &&
+        debugSnpWindow_ == other.debugSnpWindow_) {
+        auto addVec = [&](std::vector<uint64_t>& dst, const std::vector<uint64_t>& src) {
+            if (dst.size() != src.size()) return;
+            for (size_t i = 0; i < dst.size(); ++i) {
+                dst[i] += src[i];
+            }
+        };
+        addVec(debugSnpCov_, other.debugSnpCov_);
+        addVec(debugSnpAnyMis_, other.debugSnpAnyMis_);
+        addVec(debugSnpConvMis_, other.debugSnpConvMis_);
+        addVec(debugSnpCovPrimary_, other.debugSnpCovPrimary_);
+        addVec(debugSnpAnyMisPrimary_, other.debugSnpAnyMisPrimary_);
+        addVec(debugSnpConvMisPrimary_, other.debugSnpConvMisPrimary_);
+        addVec(debugSnpCovNh1_, other.debugSnpCovNh1_);
+        addVec(debugSnpAnyMisNh1_, other.debugSnpAnyMisNh1_);
+        addVec(debugSnpConvMisNh1_, other.debugSnpConvMisNh1_);
+        addVec(debugSnpCovNhGt1_, other.debugSnpCovNhGt1_);
+        addVec(debugSnpAnyMisNhGt1_, other.debugSnpAnyMisNhGt1_);
+        addVec(debugSnpConvMisNhGt1_, other.debugSnpConvMisNhGt1_);
+        addVec(debugSnpCovMapq20_, other.debugSnpCovMapq20_);
+        addVec(debugSnpAnyMisMapq20_, other.debugSnpAnyMisMapq20_);
+        addVec(debugSnpConvMisMapq20_, other.debugSnpConvMisMapq20_);
+    }
 }
 
 void SlamQuant::write(const Transcriptome& tr, const std::string& outFile,
@@ -766,6 +879,42 @@ void SlamQuant::writeDebug(const Transcriptome& tr, double errorRate, double con
                     << (rec.snpBuffered ? 1 : 0) << "\t"
                     << rec.convReadPos << "\t"
                     << rec.convGenPos << "\n";
+            }
+        }
+    }
+
+    if (debugSnpEnabled_ && !debugSnpCov_.empty()) {
+        std::ofstream out((base + ".snp_sites.tsv").c_str());
+        if (out.good()) {
+            out << "loc\tabsPos0\twindow\toffset\tabsPos0_at_offset\t"
+                << "cov\tany_mis\tconv_mis\t"
+                << "cov_primary\tany_mis_primary\tconv_mis_primary\t"
+                << "cov_nh1\tany_mis_nh1\tconv_mis_nh1\t"
+                << "cov_nhgt1\tany_mis_nhgt1\tconv_mis_nhgt1\t"
+                << "cov_mapq20\tany_mis_mapq20\tconv_mis_mapq20\n";
+            for (int off = -debugSnpWindow_; off <= debugSnpWindow_; ++off) {
+                size_t idx = static_cast<size_t>(off + debugSnpWindow_);
+                uint64_t pos = static_cast<uint64_t>(static_cast<int64_t>(debugSnpAbsPos_) + off);
+                out << debugSnpLoc_ << "\t"
+                    << debugSnpAbsPos_ << "\t"
+                    << debugSnpWindow_ << "\t"
+                    << off << "\t"
+                    << pos << "\t"
+                    << debugSnpCov_[idx] << "\t"
+                    << debugSnpAnyMis_[idx] << "\t"
+                    << debugSnpConvMis_[idx] << "\t"
+                    << debugSnpCovPrimary_[idx] << "\t"
+                    << debugSnpAnyMisPrimary_[idx] << "\t"
+                    << debugSnpConvMisPrimary_[idx] << "\t"
+                    << debugSnpCovNh1_[idx] << "\t"
+                    << debugSnpAnyMisNh1_[idx] << "\t"
+                    << debugSnpConvMisNh1_[idx] << "\t"
+                    << debugSnpCovNhGt1_[idx] << "\t"
+                    << debugSnpAnyMisNhGt1_[idx] << "\t"
+                    << debugSnpConvMisNhGt1_[idx] << "\t"
+                    << debugSnpCovMapq20_[idx] << "\t"
+                    << debugSnpAnyMisMapq20_[idx] << "\t"
+                    << debugSnpConvMisMapq20_[idx] << "\n";
             }
         }
     }
@@ -1031,48 +1180,88 @@ void SlamQuant::writeTopMismatches(const Transcriptome& tr, const std::string& r
     }
 }
 
-bool SlamSnpMask::loadBed(const std::string& path, const Genome& genome, std::string* err) {
-    positions_.clear();
-    std::ifstream in(path.c_str());
-    if (!in.good()) {
-        if (err) *err = "Failed to open SNP BED: " + path;
-        return false;
-    }
-
+namespace {
+template <typename T>
+bool loadBedInternal(const std::string& path,
+                     const std::vector<std::string>& chrNames,
+                     const std::vector<T>& chrStart,
+                     std::unordered_set<uint64_t>& positions,
+                     std::string* err) {
+    positions.clear();
     std::unordered_map<std::string, uint32_t> chrMap;
-    chrMap.reserve(genome.chrName.size());
-    for (uint32_t i = 0; i < genome.chrName.size(); ++i) {
-        chrMap[genome.chrName[i]] = i;
+    chrMap.reserve(chrNames.size());
+    for (uint32_t i = 0; i < chrNames.size(); ++i) {
+        chrMap[chrNames[i]] = i;
     }
 
-    std::string line;
-    while (std::getline(in, line)) {
-        if (line.empty() || line[0] == '#') continue;
+    auto parseLine = [&](const std::string& line) {
+        if (line.empty() || line[0] == '#') return;
         std::istringstream iss(line);
         std::string chr;
         uint64_t start = 0;
         uint64_t end = 0;
         if (!(iss >> chr >> start >> end)) {
-            continue;
+            return;
         }
         auto it = chrMap.find(chr);
         if (it == chrMap.end()) {
-            continue;
+            return;
         }
-        uint64_t chrStart = genome.chrStart[it->second];
+        if (it->second >= chrStart.size()) {
+            return;
+        }
+        uint64_t cstart = static_cast<uint64_t>(chrStart[it->second]);
         if (end <= start) {
-            continue;
+            return;
         }
         uint64_t maxLen = end - start;
         if (maxLen > 1000) {
-            // Avoid pathological regions; SNP BEDs should be single-base.
-            continue;
+            return;
         }
         for (uint64_t pos = start; pos < end; ++pos) {
-            positions_.insert(chrStart + pos);
+            positions.insert(cstart + pos);
+        }
+    };
+
+    const bool isGz = (path.size() >= 3 && path.compare(path.size() - 3, 3, ".gz") == 0);
+    if (isGz) {
+        BGZF* fp = bgzf_open(path.c_str(), "r");
+        if (!fp) {
+            if (err) *err = "Failed to open SNP BED (bgzip/gzip): " + path;
+            return false;
+        }
+        kstring_t ks = {0, 0, nullptr};
+        while (bgzf_getline(fp, '\n', &ks) >= 0) {
+            parseLine(std::string(ks.s, ks.l));
+        }
+        if (ks.s) {
+            free(ks.s);
+        }
+        bgzf_close(fp);
+    } else {
+        std::ifstream in(path.c_str());
+        if (!in.good()) {
+            if (err) *err = "Failed to open SNP BED: " + path;
+            return false;
+        }
+        std::string line;
+        while (std::getline(in, line)) {
+            parseLine(line);
         }
     }
     return true;
+}
+} // namespace
+
+bool SlamSnpMask::loadBed(const std::string& path, const Genome& genome, std::string* err) {
+    return loadBedInternal(path, genome.chrName, genome.chrStart, positions_, err);
+}
+
+bool SlamSnpMask::loadBedWithChrMap(const std::string& path,
+                                    const std::vector<std::string>& chrNames,
+                                    const std::vector<uint64_t>& chrStart,
+                                    std::string* err) {
+    return loadBedInternal(path, chrNames, chrStart, positions_, err);
 }
 
 // Read buffer methods for auto-trim replay
@@ -1091,6 +1280,17 @@ void SlamQuant::clearReadBuffer() {
     if (readBuffer_) {
         readBuffer_->clear();
     }
+}
+
+void SlamQuant::enableDumpBuffer(uint64_t maxReads) {
+    dumpBuffer_.reset(new SlamReadBuffer(maxReads));
+}
+
+bool SlamQuant::bufferDumpRead(SlamBufferedRead&& read) {
+    if (!dumpBuffer_) {
+        return false;
+    }
+    return dumpBuffer_->addRead(std::move(read));
 }
 
 // Replay buffered reads with trim applied

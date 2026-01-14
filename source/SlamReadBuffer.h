@@ -32,6 +32,7 @@ struct SlamBufferedRead {
     std::vector<uint32_t> geneIds;    // Assigned genes
     double weight;                     // Assignment weight
     bool isIntronic;                   // Intronic classification
+    uint32_t fileIndex = 0;            // Source file index (for trimScope=per-file)
     
     // Per-position data for mismatch/transition counting
     std::vector<SlamBufferedPosition> positions;

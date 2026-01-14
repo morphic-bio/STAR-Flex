@@ -397,6 +397,8 @@ class Parameters {
                 string debugReadList;       // File with read names to instrument
                 string debugOutPrefix;      // Prefix for debug outputs
                 int debugMaxReads=2000;     // Max debug read records (0 disables)
+                string debugSnpLoc;         // Optional SNP site debug locus: <chrom>:<pos1> (1-based)
+                int debugSnpWindow=2;       // Debug window around locus (pos +/- window)
                 unordered_set<string> debugGenes; // Parsed gene list
                 unordered_set<string> debugReads; // Parsed read list
                 bool debugEnabled=false;    // Debug logging enabled
@@ -448,12 +450,16 @@ class Parameters {
                 int currentFileIndex = 0;                // Current file being processed in per-file mode
                 int totalFileCount = 0;                  // Total number of input files
                 int skipToFileIndex = -1;                // Skip reads until reaching this file index (-1=disabled)
+                // Optional dump for external re-quant
+                string dumpBinary;                       // --slamDumpBinary (path to dump)
+                uint64_t dumpMaxReads = 1000000;         // --slamDumpMaxReads (max reads to dump)
             } slam;
 
             struct {
                 // Mask source flags (precedence: maskIn > buildFastqs)
                 string maskIn;                // --slamSnpMaskIn (existing mask, highest priority)
                 string buildFastqsFofn;      // --slamSnpMaskBuildFastqs (FOFN for pre-pass)
+                string buildBam;              // --slamSnpMaskBuildBam (BAM for pre-pass, alternative to FASTQ)
                 int buildOnlyInt = 0;         // --slamSnpMaskOnly (int for parsing)
                 bool buildOnly = false;       // derived from buildOnlyInt
                 
@@ -462,18 +468,37 @@ class Parameters {
                 string summaryOut;           // --slamSnpMaskSummaryOut
                 string bamOut;               // --slamSnpMaskBamOut (optional, default empty)
                 
+                // Compatibility mode: "gedi" mirrors GEDI thresholds, "" = default STAR
+                string compat;                // --slamSnpMaskCompat (gedi|"")
+                // What constitutes an "alt" observation for SNP masking:
+                // - conv: only T->C (and A->G on opposite strand) conversions
+                // - any: any mismatch (GEDI-style), regardless of base
+                string kMode;                 // --slamSnpMaskKMode (conv|any)
+                
+                // Model selection
+                string model = "binom";        // --slamSnpMaskModel (binom|em, default: binom)
+                
+                // Binomial model parameters
+                // Initial values are sentinels (-2.0 for double, -1 for int); actual defaults are set
+                // in finalization based on compat mode. This allows detecting user-set values.
+                double pval = -2.0;           // --slamSnpMaskPval (sentinel: -2, STAR default: 0.001)
+                double minTcRatio = -2.0;     // --slamSnpMaskMinTcRatio (sentinel: -2, STAR default: 0.3)
+                double err = -1.0;            // --slamSnpMaskErr (-1 = use computed snp_err_used)
+                
+                // Coverage/count parameters (sentinel: -1, parsed from parametersDefault)
+                int32_t minCov = -1;          // --slamSnpMaskMinCov (STAR default: 20, GEDI: 6)
+                int32_t minAlt = -1;          // --slamSnpMaskMinAlt (STAR default: 3, GEDI: 1)
+                
                 // EM model parameters
-                uint32_t minCov = 20;         // --slamSnpMaskMinCov
-                uint32_t minAlt = 3;          // --slamSnpMaskMinAlt
                 double posterior = 0.99;      // --slamSnpMaskPosterior
                 uint32_t maxIter = 50;        // --slamSnpMaskMaxIter
                 double convergeRelLL = 1e-7;  // --slamSnpMaskConvergeRelLL
                 
-                // Artifact filters
-                uint32_t junctionFlank = 6;   // --slamSnpMaskJunctionFlank
-                uint32_t indelFlank = 3;      // --slamSnpMaskIndelFlank
-                uint32_t minMapQ = 20;        // --slamSnpMaskMinMapQ
-                uint32_t minBaseQ = 20;       // --slamSnpMaskMinBaseQ
+                // Artifact filters (sentinel: -1, parsed from parametersDefault)
+                int32_t junctionFlank = -1;   // --slamSnpMaskJunctionFlank (STAR: 6, GEDI: 0)
+                int32_t indelFlank = -1;      // --slamSnpMaskIndelFlank (STAR: 3, GEDI: 0)
+                int32_t minMapQ = -1;         // --slamSnpMaskMinMapQ (STAR: 20, GEDI: 0)
+                int32_t minBaseQ = -1;        // --slamSnpMaskMinBaseQ (STAR: 20, GEDI: 0)
             } slamSnpMask;
 
             struct {

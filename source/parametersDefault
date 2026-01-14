@@ -1003,6 +1003,15 @@ slamDebugOutPrefix                    -
 slamDebugMaxReads                     2000
     int: Max debug read records (0 disables per-read logging)
 
+slamDebugSnpLoc                       -
+    string: Optional SNP site debug locus in the form <chrom>:<pos1> (1-based, samtools style)
+            Example: chr1:26429152
+            When set, STAR will emit an additional debug file <slamDebugOutPrefix>.snp_sites.tsv
+            summarizing how SNP observations at/near this locus were counted, including NH-weight and primaryFlag.
+
+slamDebugSnpWindow                    2
+    int: Window size for SNP site debug. STAR will log the target locus and +/- this many bases.
+
 slamErrorRate                         0.001
     double: Background error rate for SLAM EM solver
 
@@ -1104,6 +1113,13 @@ slamQcReport                         -
             4. PHRED quality + T assignment rate by position
             Empty (default) = disabled.
 
+slamDumpBinary                        -
+    string: Write a binary dump of per-read SLAM data for external re-quantification.
+            If set, STAR will collect per-read SLAM inputs and write a dump file.
+
+slamDumpMaxReads                   1000000
+    uint64: Maximum number of reads to dump (to limit memory usage).
+
 slamSnpMaskIn                        -
     string: Path to existing SNP mask BED file (bgzip-compressed, tabix-indexed)
             If set, this mask will be loaded and used for the main SLAM run.
@@ -1115,6 +1131,14 @@ slamSnpMaskBuildFastqs               -
             Blank lines and # comments are ignored. Supports .gz FASTQs.
             If set, STAR-Flex will run a pre-pass alignment to build the mask before the main SLAM run.
             Requires --slamSnpMaskBedOut. Ignored if --slamSnpMaskIn is set.
+
+slamSnpMaskBuildBam                  -
+    string: Path to existing BAM file (with .bai index) for SNP mask build.
+            Alternative to --slamSnpMaskBuildFastqs: builds mask from existing BAM instead of re-aligning FASTQs.
+            Faster when BAM already exists. Requires --slamSnpMaskBedOut and --genomeFastaFiles.
+            Ignored if --slamSnpMaskIn or --slamSnpMaskBuildFastqs is set.
+            Note: Currently requires external pileup_snp tool (tools/pileup_snp/pileup_snp).
+            Future versions may integrate pileup logic directly into STAR.
 
 slamSnpMaskOnly                      0
     int: 0/1 - if 1, exit after mask build (skip main SLAM run)
@@ -1130,11 +1154,59 @@ slamSnpMaskBamOut                    -
     string: Optional output path for BAM file from mask build alignment (for QC)
             Default: empty (no BAM output, faster execution)
 
-slamSnpMaskMinCov                    20
-    uint32: Minimum coverage required for a site to be considered for masking
+slamSnpMaskCompat                    -
+    string: Compatibility mode for SNP mask parameters
+            "gedi" : Set GEDI-compatible defaults for maximum overlap with GEDI SNP detection:
+                     - kMode=any (GEDI counts any mismatch as "alt", not just T->C)
+                     - model=binom (binomial p-value)
+                     - pval=0.001 (GEDI -snppval)
+                     - minTcRatio=0.3 (GEDI -snpConv)
+                     - minCov=6 (GEDI default coverage)
+                     - minAlt=1 (GEDI doesn't enforce)
+                     - minMapQ=0 (GEDI doesn't filter)
+                     - minBaseQ=0 (GEDI doesn't filter)
+                     - junctionFlank=0 (GEDI doesn't filter)
+                     - indelFlank=0 (GEDI doesn't filter)
+                     - err=<snp_err_used> (from detection pass)
+            User-set parameters take precedence over compat defaults.
+            Example: --slamSnpMaskCompat gedi --slamSnpMaskMinCov 20
+                     will use minCov=20 (user override) with other GEDI defaults.
+            Default: empty (use STAR stringent defaults)
 
-slamSnpMaskMinAlt                    3
-    uint32: Minimum number of T->C mismatches required for candidate site
+slamSnpMaskKMode                     -
+    string: What constitutes an "alt" observation (k) for SNP masking.
+            - conv: count only T->C conversions (and A->G on opposite strand) as k
+            - any: count any mismatch as k (GEDI-style)
+            Default: conv (STAR) or any (with --slamSnpMaskCompat gedi)
+
+slamSnpMaskModel                     binom
+    string: SNP detection model: "binom" (default, GEDI-style binomial p-value) or "em" (EM mixture model)
+            Default: binom (matches GEDI's -snppval approach)
+
+slamSnpMaskPval                     0.001
+    double: Binomial p-value threshold for masking (GEDI-style)
+            Sites with P[X >= k | n, p_err] < this value will be masked.
+            Only used when model="binom". Default: 0.001 (matches GEDI -snppval)
+
+slamSnpMaskMinTcRatio               0.3
+    double: Minimum T→C conversion ratio (k/n) threshold
+            Sites must have k/n >= this value to be considered (GEDI -snpConv).
+            Only used when model="binom". Default: 0.3 (matches GEDI -snpConv)
+
+slamSnpMaskErr                      -1
+    double: Optional override for error rate (p_err) used in binomial model
+            If < 0 (default), uses computed snp_err_used from detection pass.
+            If >= 0, uses this value instead. Only used when model="binom".
+
+slamSnpMaskMinCov                    -1
+    int: Minimum coverage required for a site to be considered for masking
+         Default: 20 (STAR stringent) or 6 (with --slamSnpMaskCompat gedi)
+         Set -1 for auto (depends on compat mode).
+
+slamSnpMaskMinAlt                    -1
+    int: Minimum number of T->C mismatches required for candidate site
+         Default: 3 (STAR stringent) or 1 (with --slamSnpMaskCompat gedi)
+         Set -1 for auto (depends on compat mode).
 
 slamSnpMaskPosterior                 0.99
     double: Posterior probability threshold for masking (in [0,1])
@@ -1146,17 +1218,25 @@ slamSnpMaskMaxIter                   50
 slamSnpMaskConvergeRelLL             1e-7
     double: Relative log-likelihood change threshold for EM convergence
 
-slamSnpMaskJunctionFlank             6
-    uint32: Exclude positions within ±N bp of splice junctions
+slamSnpMaskJunctionFlank             -1
+    int: Exclude positions within ±N bp of splice junctions
+         Default: 6 (STAR stringent) or 0 (with --slamSnpMaskCompat gedi)
+         Set -1 for auto (depends on compat mode).
 
-slamSnpMaskIndelFlank                3
-    uint32: Exclude positions within ±N bp of indels/softclips
+slamSnpMaskIndelFlank                -1
+    int: Exclude positions within ±N bp of indels/softclips
+         Default: 3 (STAR stringent) or 0 (with --slamSnpMaskCompat gedi)
+         Set -1 for auto (depends on compat mode).
 
-slamSnpMaskMinMapQ                   20
-    uint32: Minimum MAPQ for bases counted in mask build
+slamSnpMaskMinMapQ                   -1
+    int: Minimum MAPQ for bases counted in mask build
+         Default: 20 (STAR stringent) or 0 (with --slamSnpMaskCompat gedi)
+         Set -1 for auto (depends on compat mode).
 
-slamSnpMaskMinBaseQ                  20
-    uint32: Minimum base quality (Phred) for bases counted in mask build
+slamSnpMaskMinBaseQ                  -1
+    int: Minimum base quality (Phred) for bases counted in mask build
+         Default: 20 (STAR stringent) or 0 (with --slamSnpMaskCompat gedi)
+         Set -1 for auto (depends on compat mode).
 
 quantTranscriptomeSAMoutput BanSingleEnd_BanIndels_ExtendSoftclip
     string: alignment filtering for TranscriptomeSAM output

@@ -20,6 +20,10 @@ class SlamCompat;
 class SlamSnpMask {
 public:
     bool loadBed(const std::string& path, const Genome& genome, std::string* err);
+    bool loadBedWithChrMap(const std::string& path,
+                           const std::vector<std::string>& chrNames,
+                           const std::vector<uint64_t>& chrStart,
+                           std::string* err);
     bool contains(uint64_t pos) const { return positions_.count(pos) > 0; }
     size_t size() const { return positions_.size(); }
 
@@ -135,14 +139,17 @@ const char* slamMismatchCategoryName(SlamMismatchCategory cat);
 
 class SlamQuant {
 public:
-    explicit SlamQuant(uint32_t nGenes, bool snpDetect = false, double snpMismatchFrac = -1.0);
-    SlamQuant(uint32_t nGenes, std::vector<uint8_t> allowedGenes, bool snpDetect = false, double snpMismatchFrac = -1.0);
+    explicit SlamQuant(uint32_t nGenes, bool snpDetect = false, double snpMismatchFrac = -1.0, bool snpObsAnyMismatch = false);
+    SlamQuant(uint32_t nGenes, std::vector<uint8_t> allowedGenes, bool snpDetect = false, double snpMismatchFrac = -1.0, bool snpObsAnyMismatch = false);
 
     void addRead(uint32_t geneId, uint16_t nT, uint8_t k, double weight);
     void addTransitionBase(SlamMismatchCategory category, uint32_t readPos, bool secondMate,
                            bool overlap, bool opposite, int genomicBase, int readBase, double weight);
     bool snpDetectEnabled() const { return snpDetectEnabled_; }
-    void recordSnpObservation(uint64_t pos, bool isMismatch);
+    // Record an observation for SNP masking. Depending on configuration, "alt" can mean:
+    // - conversion mismatch (T->C/A->G) or
+    // - any mismatch
+    void recordSnpObservation(uint64_t pos, bool anyMismatch, bool convMismatch);
     void bufferSnpRead(uint32_t geneId, uint16_t nT,
                        const std::vector<uint32_t>& mismatchPositions, double weight);
     void finalizeSnpMask(SlamSnpBufferStats* outStats = nullptr);
@@ -177,6 +184,14 @@ public:
     // Replay buffered reads with trim applied
     // Returns number of reads replayed
     uint64_t replayBufferedReads(SlamCompat* compat, const SlamSnpMask* snpMask, int strandness);
+
+    // Dump buffer for external re-quantification
+    void enableDumpBuffer(uint64_t maxReads);
+    bool dumpEnabled() const { return dumpBuffer_ != nullptr; }
+    bool dumpBufferFull() const { return dumpBuffer_ && dumpBuffer_->isFull(); }
+    uint64_t dumpBufferSize() const { return dumpBuffer_ ? dumpBuffer_->size() : 0; }
+    bool bufferDumpRead(SlamBufferedRead&& read);
+    const SlamReadBuffer* dumpBuffer() const { return dumpBuffer_.get(); }
     void merge(const SlamQuant& other);
     void write(const Transcriptome& tr, const std::string& outFile,
                double errorRate, double convRate) const;
@@ -204,6 +219,12 @@ public:
                             bool oppositeStrand, uint16_t nT, uint8_t k);
     void debugLogRead(const SlamDebugReadRecord& record);
     void writeDebug(const Transcriptome& tr, double errorRate, double convRate) const;
+    // Enable/collect SNP-site debug for investigating counting parity.
+    // absPos is STAR's 0-based genome-wide coordinate (same coordinate space as snpMask_ keys).
+    void enableSnpSiteDebug(uint64_t absPos, int window, const std::string& locString);
+    bool snpSiteDebugEnabled() const { return debugSnpEnabled_; }
+    void debugSnpSiteObserve(uint64_t absPos, bool anyMismatch, bool convMismatch,
+                             double weight, bool primaryFlag, int mapq);
 
     const std::vector<SlamGeneStats>& genes() const { return geneStats_; }
     SlamDiagnostics& diagnostics() { return diag_; }
@@ -218,6 +239,7 @@ private:
     std::array<std::vector<SlamPositionStats>, kSlamMismatchCategoryCount> positionTransitions_;
     bool snpDetectEnabled_ = false;
     bool snpFinalized_ = false;
+    bool snpObsAnyMismatch_ = false; // if true, count any mismatch as alt; otherwise count conversions only
     double snpMismatchFrac_ = -1.0;  // <=0 means auto-estimate
     std::unordered_map<uint64_t, uint32_t> snpMask_;
     std::vector<uint32_t> snpReadBuffer_;
@@ -230,6 +252,28 @@ private:
     std::vector<SlamDebugGeneStats> debugGeneStats_;
     std::unordered_set<std::string> debugReadSet_;
     std::vector<SlamDebugReadRecord> debugReadRecords_;
+
+    // SNP-site debug (separate from gene/read debug; shares debugOutPrefix_)
+    bool debugSnpEnabled_ = false;
+    uint64_t debugSnpAbsPos_ = 0;
+    int debugSnpWindow_ = 0;
+    std::string debugSnpLoc_;
+    // Per-offset arrays (index = offset + debugSnpWindow_)
+    std::vector<uint64_t> debugSnpCov_;
+    std::vector<uint64_t> debugSnpAnyMis_;
+    std::vector<uint64_t> debugSnpConvMis_;
+    std::vector<uint64_t> debugSnpCovPrimary_;
+    std::vector<uint64_t> debugSnpAnyMisPrimary_;
+    std::vector<uint64_t> debugSnpConvMisPrimary_;
+    std::vector<uint64_t> debugSnpCovNh1_;
+    std::vector<uint64_t> debugSnpAnyMisNh1_;
+    std::vector<uint64_t> debugSnpConvMisNh1_;
+    std::vector<uint64_t> debugSnpCovNhGt1_;
+    std::vector<uint64_t> debugSnpAnyMisNhGt1_;
+    std::vector<uint64_t> debugSnpConvMisNhGt1_;
+    std::vector<uint64_t> debugSnpCovMapq20_;
+    std::vector<uint64_t> debugSnpAnyMisMapq20_;
+    std::vector<uint64_t> debugSnpConvMisMapq20_;
     
     // Variance analysis
     std::unique_ptr<SlamVarianceAnalyzer> varianceAnalyzer_;
@@ -238,6 +282,7 @@ private:
     
     // Read buffer for auto-trim replay
     std::unique_ptr<SlamReadBuffer> readBuffer_;
+    std::unique_ptr<SlamReadBuffer> dumpBuffer_;
 };
 
 #endif
