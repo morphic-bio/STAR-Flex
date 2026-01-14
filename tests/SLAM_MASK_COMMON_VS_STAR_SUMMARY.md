@@ -73,3 +73,11 @@ absolute 0h levels** but **do not materially affect 6h–0h deltas**.
 - GEDI `.tsv.gz` outputs used for comparison **do not include Conversions/Coverage**,
   so the correlation summary here focuses on NTR (MAP).
 - The GEDI mask BED must be **sorted** before tabix indexing.
+
+### Trim Notes (STAR SLAM)
+- Auto-trim is computed from the **6h detection pass** using variance-based
+  trim (`--autoTrim variance`).
+- The detected trims are applied to both 6h and 0h runs via:
+  - `--slamCompatTrim5p <trim5p>`
+  - `--slamCompatTrim3p <trim3p>`
+- Trim values are reported in `qc/trim_6h.slam_qc.json` and echoed in logs.
