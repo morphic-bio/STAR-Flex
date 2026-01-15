@@ -30,6 +30,12 @@ public:
     
     const SlamCompatConfig& cfg() const { return cfg_; }
     
+    // Update trim values (for mid-run auto-trim)
+    void updateTrims(int trim5p, int trim3p) {
+        cfg_.trim5p = trim5p;
+        cfg_.trim3p = trim3p;
+    }
+    
     // Overlap-gene weighting helper
     double compatOverlapWeight(double baseWeight, size_t readLevelGeneCount) const;
     

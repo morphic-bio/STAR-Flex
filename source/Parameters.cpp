@@ -11,6 +11,7 @@
 #include "bamRemoveDuplicates.h"
 #include "streamFuns.h"
 #include <fstream>
+#include <cctype>
 
 // Define global atomic counter for processed read groups (matches Salmon's processedReads)
 // Used for pre-burn-in gating: aux params are enabled when this count >= numPreBurninFrags (5000)
@@ -281,6 +282,10 @@ Parameters::Parameters() {//initalize parameters info
     parArray.push_back(new ParameterInfoScalar <uint32> (-1, -1, "trimCutadaptMinLength", &trimCutadaptMinLength));
     parArray.push_back(new ParameterInfoVector <string> (-1, -1, "trimCutadaptAdapter", &trimCutadaptAdapter));
     parArray.push_back(new ParameterInfoScalar <string> (-1, -1, "trimCutadaptCompat", &trimCutadaptCompat));
+    parArray.push_back(new ParameterInfoScalar <string> (-1, -1, "trimQcReport", &trimQcReport));
+    parArray.push_back(new ParameterInfoScalar <string> (-1, -1, "trimQcJson", &trimQcJson));
+    parArray.push_back(new ParameterInfoScalar <string> (-1, -1, "trimQcHtml", &trimQcHtml));
+    parArray.push_back(new ParameterInfoScalar <uint64> (-1, -1, "trimQcMaxReads", &trimQcMaxReads));
 
     //binning, anchors, windows
     parArray.push_back(new ParameterInfoScalar <uint>   (-1, -1, "winBinNbits", &winBinNbits));
@@ -394,12 +399,15 @@ Parameters::Parameters() {//initalize parameters info
     parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "slamQuantMode", &quant.slam.modeInt));
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamSnpBed", &quant.slam.snpBed));
     parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "slamSnpDetect", &quant.slam.snpDetectInt));
+    parArray.push_back(new ParameterInfoScalar <double>   (-1, -1, "slamSnpDetectFrac", &quant.slam.snpDetectFrac));
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamStrandness", &quant.slam.strandnessStr));
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamWeightMode", &quant.slam.weightModeStr));
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamDebugGeneList", &quant.slam.debugGeneList));
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamDebugReadList", &quant.slam.debugReadList));
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamDebugOutPrefix", &quant.slam.debugOutPrefix));
     parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "slamDebugMaxReads", &quant.slam.debugMaxReads));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamDebugSnpLoc", &quant.slam.debugSnpLoc));
+    parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "slamDebugSnpWindow", &quant.slam.debugSnpWindow));
     parArray.push_back(new ParameterInfoScalar <double>   (-1, -1, "slamErrorRate", &quant.slam.errorRate));
     parArray.push_back(new ParameterInfoScalar <double>   (-1, -1, "slamConvRate", &quant.slam.convRate));
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamOutFile", &quant.slam.outFile));
@@ -410,6 +418,53 @@ Parameters::Parameters() {//initalize parameters info
     parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "slamCompatIgnoreOverlap", &quant.slam.compatIgnoreOverlapInt));
     parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "slamCompatTrim5p", &quant.slam.compatTrim5p));
     parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "slamCompatTrim3p", &quant.slam.compatTrim3p));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "autoTrim", &quant.slam.autoTrimMode));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "trimScope", &quant.slam.trimScope));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "trimSource", &quant.slam.trimSource));
+    parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "autoTrimMaxReads", &quant.slam.autoTrimMaxReads));
+    parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "autoTrimMinReads", &quant.slam.autoTrimMinReads));
+    parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "autoTrimSmoothWindow", &quant.slam.autoTrimSmoothWindow));
+    parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "autoTrimSegMinLen", &quant.slam.autoTrimSegMinLen));
+    parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "autoTrimMaxTrim", &quant.slam.autoTrimMaxTrim));
+    parArray.push_back(new ParameterInfoScalar <uint64_t> (-1, -1, "autoTrimBufferReads", &quant.slam.autoTrimBufferReads));
+    parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "autoTrimDetectionReads", &quant.slam.autoTrimDetectionReads));
+    parArray.push_back(new ParameterInfoScalar <double>  (-1, -1, "snpErrMinThreshold", &quant.slam.snpErrMinThreshold));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamQcJson", &quant.slam.slamQcJson));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamQcHtml", &quant.slam.slamQcHtml));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamQcReport", &quant.slam.slamQcReport));
+    parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "slamGrandSlamOut", &quant.slam.grandSlamOut));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamDumpBinary", &quant.slam.dumpBinary));
+    parArray.push_back(new ParameterInfoScalar <uint64_t> (-1, -1, "slamDumpMaxReads", &quant.slam.dumpMaxReads));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamDumpWeights", &quant.slam.dumpWeights));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamDumpWeightsMode", &quant.slam.dumpWeightsModeStr));
+    
+    // SLAM SNP mask build parameters
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamSnpMaskIn", &quant.slamSnpMask.maskIn));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamSnpMaskVcfIn", &quant.slamSnpMask.vcfIn));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamSnpMaskVcfSample", &quant.slamSnpMask.vcfSample));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamSnpMaskVcfMode", &quant.slamSnpMask.vcfMode));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamSnpMaskVcfFilter", &quant.slamSnpMask.vcfFilter));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamSnpMaskBuildFastqs", &quant.slamSnpMask.buildFastqsFofn));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamSnpMaskBuildBam", &quant.slamSnpMask.buildBam));
+    parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "slamSnpMaskOnly", &quant.slamSnpMask.buildOnlyInt));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamSnpMaskBedOut", &quant.slamSnpMask.bedOut));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamSnpMaskSummaryOut", &quant.slamSnpMask.summaryOut));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamSnpMaskBamOut", &quant.slamSnpMask.bamOut));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamSnpMaskCompat", &quant.slamSnpMask.compat));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamSnpMaskKMode", &quant.slamSnpMask.kMode));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamSnpMaskModel", &quant.slamSnpMask.model));
+    parArray.push_back(new ParameterInfoScalar <double>   (-1, -1, "slamSnpMaskPval", &quant.slamSnpMask.pval));
+    parArray.push_back(new ParameterInfoScalar <double>   (-1, -1, "slamSnpMaskMinTcRatio", &quant.slamSnpMask.minTcRatio));
+    parArray.push_back(new ParameterInfoScalar <double>   (-1, -1, "slamSnpMaskErr", &quant.slamSnpMask.err));
+    parArray.push_back(new ParameterInfoScalar <int32>    (-1, -1, "slamSnpMaskMinCov", &quant.slamSnpMask.minCov));
+    parArray.push_back(new ParameterInfoScalar <int32>    (-1, -1, "slamSnpMaskMinAlt", &quant.slamSnpMask.minAlt));
+    parArray.push_back(new ParameterInfoScalar <double>   (-1, -1, "slamSnpMaskPosterior", &quant.slamSnpMask.posterior));
+    parArray.push_back(new ParameterInfoScalar <uint32>   (-1, -1, "slamSnpMaskMaxIter", &quant.slamSnpMask.maxIter));
+    parArray.push_back(new ParameterInfoScalar <double>   (-1, -1, "slamSnpMaskConvergeRelLL", &quant.slamSnpMask.convergeRelLL));
+    parArray.push_back(new ParameterInfoScalar <int32>    (-1, -1, "slamSnpMaskJunctionFlank", &quant.slamSnpMask.junctionFlank));
+    parArray.push_back(new ParameterInfoScalar <int32>    (-1, -1, "slamSnpMaskIndelFlank", &quant.slamSnpMask.indelFlank));
+    parArray.push_back(new ParameterInfoScalar <int32>    (-1, -1, "slamSnpMaskMinMapQ", &quant.slamSnpMask.minMapQ));
+    parArray.push_back(new ParameterInfoScalar <int32>    (-1, -1, "slamSnpMaskMinBaseQ", &quant.slamSnpMask.minBaseQ));
 
     //2-pass
     parArray.push_back(new ParameterInfoScalar <uint>   (-1, -1, "twopass1readsN", &twoPass.pass1readsN));
@@ -1398,6 +1453,25 @@ void Parameters::inputParameters (int argInN, char* argIn[]) {//input parameters
                    << "Got: " << quant.slam.weightModeStr << "\n";
             exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
         }
+        string dumpWeightsModeLower = quant.slam.dumpWeightsModeStr;
+        if (dumpWeightsModeLower.empty() || dumpWeightsModeLower == "-") {
+            dumpWeightsModeLower = "dump";
+        }
+        for (auto& c : dumpWeightsModeLower) c = std::tolower(c);
+        if (dumpWeightsModeLower == "dump" || dumpWeightsModeLower == "default") {
+            quant.slam.dumpWeightsMode = 0;
+            quant.slam.dumpWeightsModeStr = "dump";
+        } else if (dumpWeightsModeLower == "vbgene" || dumpWeightsModeLower == "vb" ||
+                   dumpWeightsModeLower == "gene") {
+            quant.slam.dumpWeightsMode = 1;
+            quant.slam.dumpWeightsModeStr = "vbGene";
+        } else {
+            ostringstream errOut;
+            errOut << "EXITING because of FATAL PARAMETER ERROR: "
+                   << "--slamDumpWeightsMode must be dump or vbGene\n"
+                   << "Got: " << quant.slam.dumpWeightsModeStr << "\n";
+            exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
+        }
         auto trimLine = [](const std::string& input) -> std::string {
             size_t start = input.find_first_not_of(" \t\r\n");
             if (start == std::string::npos) {
@@ -1442,7 +1516,17 @@ void Parameters::inputParameters (int argInN, char* argIn[]) {//input parameters
             quant.slam.debugReadList != "None" && quant.slam.debugReadList != "none") {
             loadListFile(quant.slam.debugReadList, quant.slam.debugReads, true);
         }
-        quant.slam.debugEnabled = !quant.slam.debugGenes.empty() || !quant.slam.debugReads.empty();
+        if (quant.slam.debugSnpWindow < 0) {
+            ostringstream errOut;
+            errOut << "EXITING because of FATAL PARAMETER ERROR: "
+                   << "--slamDebugSnpWindow must be >= 0\n";
+            exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
+        }
+
+        bool debugSnpEnabled = !quant.slam.debugSnpLoc.empty() && quant.slam.debugSnpLoc != "-" &&
+                               quant.slam.debugSnpLoc != "None" && quant.slam.debugSnpLoc != "none";
+
+        quant.slam.debugEnabled = !quant.slam.debugGenes.empty() || !quant.slam.debugReads.empty() || debugSnpEnabled;
         if (quant.slam.debugEnabled) {
             if (quant.slam.debugOutPrefix.empty() || quant.slam.debugOutPrefix == "-") {
                 quant.slam.debugOutPrefix = outFileNamePrefix + "SlamQuant.debug";
@@ -1469,6 +1553,253 @@ void Parameters::inputParameters (int argInN, char* argIn[]) {//input parameters
                    << "Got: " << quant.slam.compatModeStr << "\n";
             exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
         }
+        
+        // Apply SNP mask defaults and compatibility mode (--slamSnpMaskCompat gedi)
+        // Sentinel value (-1 for int, -2.0 for double) indicates the parameter was not set by user.
+        // In GEDI compat mode, unset parameters get GEDI-like values.
+        // Otherwise, unset parameters get STAR stringent defaults.
+        {
+            bool isGediCompat = false;
+            if (!quant.slamSnpMask.compat.empty()) {
+                string maskCompatLower = quant.slamSnpMask.compat;
+                for (auto& c : maskCompatLower) c = std::tolower(c);
+                if (maskCompatLower == "gedi") {
+                    isGediCompat = true;
+                } else if (maskCompatLower != "none" && maskCompatLower != "-") {
+                    ostringstream errOut;
+                    errOut << "EXITING because of FATAL PARAMETER ERROR: "
+                           << "--slamSnpMaskCompat must be 'gedi' or empty\n"
+                           << "Got: " << quant.slamSnpMask.compat << "\n";
+                    exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
+                }
+            }
+            
+            // Track settings for logging
+            vector<string> appliedSettings;
+            vector<string> userOverrides;
+            
+            // STAR stringent defaults vs GEDI permissive defaults
+            // pval: STAR=0.001, GEDI=0.001 (same) - no sentinel needed
+            if (quant.slamSnpMask.pval < 0.0) {  // sentinel or invalid
+                quant.slamSnpMask.pval = 0.001;
+            }
+            // Only log as user override if different from default
+            if (quant.slamSnpMask.pval != 0.001) {
+                userOverrides.push_back("pval=" + to_string(quant.slamSnpMask.pval));
+            }
+            
+            // minTcRatio: STAR=0.3, GEDI=0.3 (same) - no sentinel needed
+            if (quant.slamSnpMask.minTcRatio < 0.0) {  // sentinel or invalid
+                quant.slamSnpMask.minTcRatio = 0.3;
+            }
+            // Only log as user override if different from default
+            if (quant.slamSnpMask.minTcRatio != 0.3) {
+                userOverrides.push_back("minTcRatio=" + to_string(quant.slamSnpMask.minTcRatio));
+            }
+
+            // kMode: STAR=conv, GEDI=any (GEDI counts any mismatch as "alt")
+            {
+                std::string km = quant.slamSnpMask.kMode;
+                if (km.empty() || km == "-" || km == "None" || km == "none") {
+                    km = isGediCompat ? "any" : "conv";
+                    quant.slamSnpMask.kMode = km;
+                    appliedSettings.push_back("kMode=" + km + (isGediCompat ? " (GEDI compat)" : " (STAR default)"));
+                } else {
+                    for (auto& c : km) c = std::tolower(c);
+                    if (km != "conv" && km != "any") {
+                        ostringstream errOut;
+                        errOut << "EXITING because of FATAL PARAMETER ERROR: "
+                               << "--slamSnpMaskKMode must be 'conv' or 'any'\n"
+                               << "Got: " << quant.slamSnpMask.kMode << "\n";
+                        exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
+                    }
+                    quant.slamSnpMask.kMode = km;
+                    userOverrides.push_back("kMode=" + km);
+                }
+            }
+            
+            // minCov: STAR=20, GEDI=6
+            if (quant.slamSnpMask.minCov < 0) {  // sentinel (-1)
+                quant.slamSnpMask.minCov = isGediCompat ? 6 : 20;
+                appliedSettings.push_back("minCov=" + to_string(quant.slamSnpMask.minCov) + 
+                    (isGediCompat ? " (GEDI compat)" : " (STAR default)"));
+            } else {
+                userOverrides.push_back("minCov=" + to_string(quant.slamSnpMask.minCov));
+            }
+            
+            // minAlt: STAR=3, GEDI=1
+            if (quant.slamSnpMask.minAlt < 0) {  // sentinel (-1)
+                quant.slamSnpMask.minAlt = isGediCompat ? 1 : 3;
+                appliedSettings.push_back("minAlt=" + to_string(quant.slamSnpMask.minAlt) + 
+                    (isGediCompat ? " (GEDI compat)" : " (STAR default)"));
+            } else {
+                userOverrides.push_back("minAlt=" + to_string(quant.slamSnpMask.minAlt));
+            }
+            
+            // minMapQ: STAR=20, GEDI=0
+            if (quant.slamSnpMask.minMapQ < 0) {  // sentinel (-1)
+                quant.slamSnpMask.minMapQ = isGediCompat ? 0 : 20;
+                appliedSettings.push_back("minMapQ=" + to_string(quant.slamSnpMask.minMapQ) + 
+                    (isGediCompat ? " (GEDI compat)" : " (STAR default)"));
+            } else {
+                userOverrides.push_back("minMapQ=" + to_string(quant.slamSnpMask.minMapQ));
+            }
+            
+            // minBaseQ: STAR=20, GEDI=0
+            if (quant.slamSnpMask.minBaseQ < 0) {  // sentinel (-1)
+                quant.slamSnpMask.minBaseQ = isGediCompat ? 0 : 20;
+                appliedSettings.push_back("minBaseQ=" + to_string(quant.slamSnpMask.minBaseQ) + 
+                    (isGediCompat ? " (GEDI compat)" : " (STAR default)"));
+            } else {
+                userOverrides.push_back("minBaseQ=" + to_string(quant.slamSnpMask.minBaseQ));
+            }
+            
+            // junctionFlank: STAR=6, GEDI=0
+            if (quant.slamSnpMask.junctionFlank < 0) {  // sentinel (-1)
+                quant.slamSnpMask.junctionFlank = isGediCompat ? 0 : 6;
+                appliedSettings.push_back("junctionFlank=" + to_string(quant.slamSnpMask.junctionFlank) + 
+                    (isGediCompat ? " (GEDI compat)" : " (STAR default)"));
+            } else {
+                userOverrides.push_back("junctionFlank=" + to_string(quant.slamSnpMask.junctionFlank));
+            }
+            
+            // indelFlank: STAR=3, GEDI=0
+            if (quant.slamSnpMask.indelFlank < 0) {  // sentinel (-1)
+                quant.slamSnpMask.indelFlank = isGediCompat ? 0 : 3;
+                appliedSettings.push_back("indelFlank=" + to_string(quant.slamSnpMask.indelFlank) + 
+                    (isGediCompat ? " (GEDI compat)" : " (STAR default)"));
+            } else {
+                userOverrides.push_back("indelFlank=" + to_string(quant.slamSnpMask.indelFlank));
+            }
+            
+            // err: -1 means use computed snp_err_used (same for both modes)
+            if (quant.slamSnpMask.err >= 0.0) {
+                userOverrides.push_back("err=" + to_string(quant.slamSnpMask.err));
+            } else {
+                appliedSettings.push_back("err=<snp_err_used>");
+            }
+            
+            // Log the settings
+            if (isGediCompat) {
+                inOut->logMain << "SNP mask GEDI compat mode enabled:\n";
+            }
+            for (const auto& s : appliedSettings) {
+                inOut->logMain << "    " << s << "\n";
+            }
+            if (!userOverrides.empty()) {
+                inOut->logMain << "  User overrides:\n";
+                for (const auto& s : userOverrides) {
+                    inOut->logMain << "    " << s << "\n";
+                }
+            }
+        }
+        
+        // Validate SNP mask build parameters
+        bool hasMaskIn = !quant.slamSnpMask.maskIn.empty() && quant.slamSnpMask.maskIn != "-" && quant.slamSnpMask.maskIn != "None";
+        bool hasVcfIn = !quant.slamSnpMask.vcfIn.empty() && quant.slamSnpMask.vcfIn != "-" && quant.slamSnpMask.vcfIn != "None";
+        bool hasBuildFastqs = !quant.slamSnpMask.buildFastqsFofn.empty() && quant.slamSnpMask.buildFastqsFofn != "-" && quant.slamSnpMask.buildFastqsFofn != "None";
+        
+        if (hasMaskIn && hasVcfIn) {
+            inOut->logMain << "WARNING: --slamSnpMaskIn takes precedence over --slamSnpMaskVcfIn. "
+                           << "Will load existing mask and skip VCF load.\n";
+        }
+        if (hasMaskIn && hasBuildFastqs) {
+            inOut->logMain << "WARNING: --slamSnpMaskIn takes precedence over --slamSnpMaskBuildFastqs. "
+                           << "Will load existing mask and skip build.\n";
+        }
+        if (hasVcfIn && hasBuildFastqs) {
+            inOut->logMain << "WARNING: --slamSnpMaskVcfIn takes precedence over --slamSnpMaskBuildFastqs. "
+                           << "Will load VCF mask and skip build.\n";
+        }
+
+        if (hasVcfIn) {
+            if (quant.slamSnpMask.bedOut.empty()) {
+                ostringstream errOut;
+                errOut << "EXITING because of FATAL PARAMETER ERROR: "
+                       << "--slamSnpMaskVcfIn requires --slamSnpMaskBedOut\n";
+                exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
+            }
+            string modeLower = quant.slamSnpMask.vcfMode;
+            for (auto& c : modeLower) c = std::tolower(c);
+            quant.slamSnpMask.vcfMode = modeLower;
+            if (quant.slamSnpMask.vcfMode != "gt" && quant.slamSnpMask.vcfMode != "any") {
+                ostringstream errOut;
+                errOut << "EXITING because of FATAL PARAMETER ERROR: "
+                       << "--slamSnpMaskVcfMode must be 'gt' or 'any'\n";
+                exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
+            }
+            string filterLower = quant.slamSnpMask.vcfFilter;
+            for (auto& c : filterLower) c = std::tolower(c);
+            quant.slamSnpMask.vcfFilter = filterLower;
+            if (quant.slamSnpMask.vcfFilter != "pass" && quant.slamSnpMask.vcfFilter != "all") {
+                ostringstream errOut;
+                errOut << "EXITING because of FATAL PARAMETER ERROR: "
+                       << "--slamSnpMaskVcfFilter must be 'pass' or 'all'\n";
+                exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
+            }
+            if (quant.slamSnpMask.vcfSample == "-" || quant.slamSnpMask.vcfSample == "None" ||
+                quant.slamSnpMask.vcfSample == "none") {
+                quant.slamSnpMask.vcfSample.clear();
+            }
+        }
+        
+        if (hasBuildFastqs && !hasMaskIn && !hasVcfIn) {
+            if (quant.slamSnpMask.bedOut.empty()) {
+                ostringstream errOut;
+                errOut << "EXITING because of FATAL PARAMETER ERROR: "
+                       << "--slamSnpMaskBuildFastqs requires --slamSnpMaskBedOut\n";
+                exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
+            }
+            if (quant.slamSnpMask.minCov == 0) {
+                ostringstream errOut;
+                errOut << "EXITING because of FATAL PARAMETER ERROR: "
+                       << "--slamSnpMaskMinCov must be > 0\n";
+                exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
+            }
+            // Validate model selection
+            if (quant.slamSnpMask.model != "binom" && quant.slamSnpMask.model != "em") {
+                ostringstream errOut;
+                errOut << "EXITING because of FATAL PARAMETER ERROR: "
+                       << "--slamSnpMaskModel must be 'binom' or 'em' (got: " << quant.slamSnpMask.model << ")\n";
+                exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
+            }
+            
+            // Validate binomial parameters
+            if (quant.slamSnpMask.model == "binom") {
+                if (quant.slamSnpMask.pval <= 0.0 || quant.slamSnpMask.pval >= 1.0) {
+                    ostringstream errOut;
+                    errOut << "EXITING because of FATAL PARAMETER ERROR: "
+                           << "--slamSnpMaskPval must be in (0,1)\n";
+                    exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
+                }
+                if (quant.slamSnpMask.minTcRatio < 0.0 || quant.slamSnpMask.minTcRatio > 1.0) {
+                    ostringstream errOut;
+                    errOut << "EXITING because of FATAL PARAMETER ERROR: "
+                           << "--slamSnpMaskMinTcRatio must be in [0,1]\n";
+                    exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
+                }
+            }
+            
+            // Validate EM parameters
+            if (quant.slamSnpMask.model == "em") {
+                if (quant.slamSnpMask.posterior < 0.0 || quant.slamSnpMask.posterior > 1.0) {
+                    ostringstream errOut;
+                    errOut << "EXITING because of FATAL PARAMETER ERROR: "
+                           << "--slamSnpMaskPosterior must be in [0,1]\n";
+                    exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
+                }
+            }
+            
+            if (quant.slamSnpMask.maxIter == 0) {
+                ostringstream errOut;
+                errOut << "EXITING because of FATAL PARAMETER ERROR: "
+                       << "--slamSnpMaskMaxIter must be > 0\n";
+                exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
+            }
+        }
+        
+        // Convert buildOnlyInt to bool
+        quant.slamSnpMask.buildOnly = (quant.slamSnpMask.buildOnlyInt != 0);
         
         // Apply granular overrides (if explicitly set via int flags, they override mode defaults)
         // Sentinel is -1 (not set), so any value >= 0 is an explicit override (including 0 to disable)
@@ -1754,6 +2085,10 @@ void Parameters::inputParameters (int argInN, char* argIn[]) {//input parameters
             inOut->logMain << "NOTICE: --trimCutadaptCompat Cutadapt3 is enabled. Using cutadapt 3.x compatibility mode.\n";
             inOut->logMain << "         This mode reproduces Trim Galore/cutadapt 3.2 behavior for adapter matching.\n";
         }
+
+        trimQcEnabled = (!trimQcReport.empty() && trimQcReport != "-") ||
+                        (!trimQcJson.empty() && trimQcJson != "-") ||
+                        (!trimQcHtml.empty() && trimQcHtml != "-");
 
     //alignEnds
     alignEndsType.ext[0][0]=false;

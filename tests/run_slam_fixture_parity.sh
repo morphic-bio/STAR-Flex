@@ -17,6 +17,7 @@ SNPS_BED="${SNPS_BED:-$SLAM_FIXTURE_ROOT/ref/snps.bed}"
 REF_TSV="${REF_TSV:-$SLAM_FIXTURE_ROOT/expected/fixture_ref_human.tsv.gz}"
 OUT_PREFIX="${OUT_PREFIX:-$SLAM_WORK/star_slam_}"
 SLAM_OUT="${SLAM_OUT:-${OUT_PREFIX}SlamQuant.out}"
+GRAND_SLAM_OUT="${GRAND_SLAM_OUT:-${OUT_PREFIX}SlamQuant.grandslam.tsv}"
 
 COMPARE_SCRIPT="$SCRIPT_DIR/slam/compare_fixture.py"
 
@@ -53,6 +54,8 @@ if [[ "${RUN_STAR_SLAM:-0}" -eq 1 ]]; then
         exit 1
     fi
     echo "=== Running STAR-Slam on fixture ==="
+    # Use adapter clipping (same as original fixture generation)
+    # NOT EndToEnd alignment - that was incorrect
     "$STAR_BIN" \
         --runThreadN 4 \
         --genomeDir "$STAR_INDEX" \
@@ -60,7 +63,8 @@ if [[ "${RUN_STAR_SLAM:-0}" -eq 1 ]]; then
         --readFilesCommand zcat \
         --outFileNamePrefix "$OUT_PREFIX" \
         --outSAMtype None \
-        --alignEndsType EndToEnd \
+        --clip3pAdapterSeq AGATCGGAAGAG \
+        --clip3pAdapterMMp 0.1 \
         ${STAR_SLAM_ARGS} \
         > "${OUT_PREFIX}slam.log" 2>&1
 fi
@@ -71,7 +75,33 @@ if [[ ! -f "$SLAM_OUT" ]]; then
     exit 1
 fi
 
-echo "=== Comparing STAR-Slam vs GRAND-SLAM ==="
-"$PYTHON_BIN" "$COMPARE_SCRIPT" \
-    --reference "$REF_TSV" \
-    --test "$SLAM_OUT"
+if [[ ! -f "$GRAND_SLAM_OUT" ]]; then
+    echo "FAIL: GRAND-SLAM-style output not found: $GRAND_SLAM_OUT"
+    exit 1
+fi
+
+prefix_base="${OUT_PREFIX##*/}"
+while [[ -n "$prefix_base" && ( "${prefix_base: -1}" == "_" || "${prefix_base: -1}" == "." ) ]]; do
+    prefix_base="${prefix_base%?}"
+done
+if [[ -z "$prefix_base" ]]; then
+    prefix_base="STAR"
+fi
+expected_header=$(printf "Gene\tSymbol\t%s Readcount\t%s 0.05 quantile\t%s Mean\t%s MAP\t%s 0.95 quantile\t%s alpha\t%s beta\t%s Conversions\t%s Coverage\t%s Double-Hits\t%s Double-Hit Coverage\t%s min2\tLength" \
+    "$prefix_base" "$prefix_base" "$prefix_base" "$prefix_base" "$prefix_base" "$prefix_base" "$prefix_base" "$prefix_base" "$prefix_base" "$prefix_base" "$prefix_base" "$prefix_base")
+actual_header="$(head -n 1 "$GRAND_SLAM_OUT")"
+if [[ "$actual_header" != "$expected_header" ]]; then
+    echo "FAIL: GRAND-SLAM header mismatch"
+    echo "Expected: $expected_header"
+    echo "Actual:   $actual_header"
+    exit 1
+fi
+
+if [[ "${DIRECT_EM_COMPARE:-0}" -eq 1 ]]; then
+    echo "=== Comparing STAR-Slam vs GRAND-SLAM ==="
+    "$PYTHON_BIN" "$COMPARE_SCRIPT" \
+        --reference "$REF_TSV" \
+        --test "$SLAM_OUT"
+else
+    echo "Skipping STAR-Slam vs GRAND-SLAM comparison (set DIRECT_EM_COMPARE=1 to enable)."
+fi

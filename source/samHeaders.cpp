@@ -2,21 +2,26 @@
 #include <iostream>
 #include "BAMfunctions.h"
 
-void samHeaders(Parameters &P, Genome &genomeOut, Transcriptome &transcriptomeMain) 
+void samHeaders(Parameters &P, Genome &genomeOut, Transcriptome *transcriptomeMain) 
 {
     /////////////////////////////////////////////////////////////////////////////////// transcriptome BAM header
     if ( P.quant.trSAM.bamYes ) {//header for transcriptome BAM
+        if (transcriptomeMain == nullptr) {
+            exitWithError("EXITING because of fatal INPUT error: transcriptome is not available for TranscriptomeSAM output\n"
+                          "SOLUTION: re-run with --quantMode TranscriptomeSAM or disable transcriptome BAM output.\n",
+                          std::cerr, P.inOut->logMain, EXIT_CODE_PARAMETER, P);
+        }
         ostringstream samHeaderStream;
         vector <uint> trlength;
-        for (uint32 ii=0;ii<transcriptomeMain.trID.size();ii++) {
-            uint32 iex1=transcriptomeMain.trExI[ii]+transcriptomeMain.trExN[ii]-1; //last exon of the transcript
-            trlength.push_back(transcriptomeMain.exLenCum[iex1]+transcriptomeMain.exSE[2*iex1+1]-transcriptomeMain.exSE[2*iex1]+1);
-            samHeaderStream << "@SQ\tSN:"<< transcriptomeMain.trID.at(ii) <<"\tLN:"<<trlength.back()<<"\n";
+        for (uint32 ii=0; ii<transcriptomeMain->trID.size(); ii++) {
+            uint32 iex1=transcriptomeMain->trExI[ii]+transcriptomeMain->trExN[ii]-1; //last exon of the transcript
+            trlength.push_back(transcriptomeMain->exLenCum[iex1]+transcriptomeMain->exSE[2*iex1+1]-transcriptomeMain->exSE[2*iex1]+1);
+            samHeaderStream << "@SQ\tSN:"<< transcriptomeMain->trID.at(ii) <<"\tLN:"<<trlength.back()<<"\n";
         };
         for (uint32 ii=0;ii<P.outSAMattrRGlineSplit.size();ii++) {//@RG lines
             samHeaderStream << "@RG\t" << P.outSAMattrRGlineSplit.at(ii) <<"\n";
         };
-        outBAMwriteHeader(P.inOut->outQuantBAMfile,samHeaderStream.str(),transcriptomeMain.trID,trlength);
+        outBAMwriteHeader(P.inOut->outQuantBAMfile, samHeaderStream.str(), transcriptomeMain->trID, trlength);
     };
     
     //////////////////////////////////////////////////////////////////////////////// main headers

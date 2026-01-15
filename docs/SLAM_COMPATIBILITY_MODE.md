@@ -254,7 +254,120 @@ STAR --quantMode Slam \
 
 This produces per-read logs with gene assignments, weights, and drop reasons. Note that debug output currently logs overall read processing status but does not explicitly annotate which compat-specific features (lenient overlap, intronic classification, etc.) affected each read decision. Compat feature effects can be inferred from the aggregate counters in the diagnostics file.
 
+## Validation Results
+
+### Fixture Parity Tests
+
+Tests were run on the SLAM fixture dataset (100K reads) comparing STAR-Flex with GEDI-compat mode against GRAND-SLAM reference.
+
+#### Run A: GEDI Compat Mode Defaults
+
+**Configuration:**
+```bash
+--slamQuantMode 1 --slamSnpDetect 1 --slamCompatMode gedi
+```
+
+**Correlation Metrics:**
+
+| Threshold | Filter | N Genes | NTR Pearson | NTR Spearman | k/nT Pearson | k/nT Spearman |
+|-----------|--------|---------|-------------|--------------|--------------|---------------|
+| >=20 | readcount | 384 | 0.982929 | 0.963909 | 0.987470 | 0.986444 |
+| >=50 | readcount | 76 | 0.996176 | 0.979539 | 0.997971 | 0.993322 |
+| >=100 | readcount | 23 | 0.993175 | 0.988131 | 0.995595 | 0.987154 |
+
+#### Run B: GEDI Compat Mode with Overlap Weight Override
+
+**Configuration:**
+```bash
+--slamQuantMode 1 --slamSnpDetect 1 --slamCompatMode gedi --slamCompatOverlapWeight 0
+```
+
+**Correlation Metrics:**
+
+| Threshold | Filter | N Genes | NTR Pearson | NTR Spearman | k/nT Pearson | k/nT Spearman |
+|-----------|--------|---------|-------------|--------------|--------------|---------------|
+| >=20 | readcount | 384 | 0.989526 | 0.967828 | 0.991410 | 0.990479 |
+| >=50 | readcount | 76 | 0.996190 | 0.979457 | 0.997982 | 0.993322 |
+| >=100 | readcount | 23 | 0.993175 | 0.988131 | 0.995595 | 0.987154 |
+
+#### Observations
+
+1. **Override semantics work correctly**: Run B shows different correlations than Run A, confirming that `--slamCompatOverlapWeight 0` successfully overrides the gedi mode default.
+
+2. **Correlation changes**: Disabling overlap weighting improves correlations slightly:
+   - NTR Pearson: 0.982929 → 0.989526 (+0.0066)
+   - k/nT Pearson: 0.987470 → 0.991410 (+0.0039)
+
+3. **High correlations maintained**: Both configurations show excellent correlations (>0.98) with GRAND-SLAM reference, indicating the compat mode is functioning as intended.
+
+4. **Threshold stability**: Correlations remain high across thresholds (>=20, >=50, >=100), with best performance at >=50 threshold.
+
+## Auto-Trim and Multi-File Processing
+
+### Auto-Trim Mode
+
+STAR-Flex supports automatic detection of optimal 5' and 3' trim values based on variance analysis of the first N reads:
+
+```bash
+STAR --quantMode Slam \
+     --autoTrim variance \
+     --autoTrimDetectionReads 100000 \
+     --autoTrimMinReads 1000 \
+     # ... other parameters
+```
+
+The variance-based auto-trim analyzes per-position quality scores and T→C conversion rates to identify problematic regions at read ends, then computes optimal trim values using knee detection.
+
+### Multi-File Trim Scope
+
+When processing multiple input files in a single run, the `--trimScope` parameter controls how auto-trim is applied:
+
+| Value | Behavior |
+|-------|----------|
+| `first` (default) | Compute trim from first file, apply to all files |
+| `per-file` | Compute and apply separate trim values for each file |
+
+**Example with per-file trim:**
+
+```bash
+STAR --quantMode Slam \
+     --autoTrim variance \
+     --trimScope per-file \
+     --readFilesIn file1.fq,file2.fq,file3.fq \
+     # ... other parameters
+```
+
+### Important: FILE Marker Requirement
+
+The `trimScope=per-file` mode requires FILE markers in the read stream to detect file boundaries. These markers are automatically generated when:
+
+1. Using comma-separated `--readFilesIn` (e.g., `file1.fq,file2.fq,file3.fq`)
+2. Using `--readFilesCommand` with multiple input files
+
+**Warning**: If FILE markers are not present (e.g., when using a single concatenated input), `trimScope=per-file` cannot reliably detect file boundaries and will emit a warning.
+
+### Read ID Handling
+
+In multi-file mode with `trimScope=per-file`, read IDs are kept globally unique across all files. This ensures:
+- Consistent behavior with downstream tools expecting unique read IDs
+- Correct BAM record ordering for coordinate-sorted output
+- Proper handling by samtools and other BAM processing tools
+
+### Timing and Statistics
+
+Statistics in `Log.final.out` reflect the overall run:
+- Mapping speed is calculated from the overall start time (not per-file)
+- Read counts accumulate across all files
+- Detection pass reads are excluded from final statistics
+
 ## Changelog
+
+- **v1.1.0**: Auto-trim and multi-file support
+  - Variance-based auto-trim with knee detection
+  - Per-file trim scope for multi-file runs
+  - Global read ID uniqueness across files
+  - Detection pass output suppression
+  - FILE marker requirement documentation
 
 - **v1.0.0**: Initial implementation
   - Intronic classification with single-part gate
@@ -262,3 +375,5 @@ This produces per-read logs with gene assignments, weights, and drop reasons. No
   - Read-level overlap-gene weighting
   - Position filtering with trim guards
   - Full diagnostics integration
+  - Override semantics with sentinel values (-1 = not set, 0/1 = explicit override)
+  - Per-alignment lenient acceptance counter (not per-transcript)

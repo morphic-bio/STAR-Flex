@@ -765,7 +765,72 @@ ExonicSense:
 - At early positions (0-10): GEDI shows higher rates than STAR
 - At late positions (40-49): **STAR shows 10-20x higher rates than GEDI**
 
-This demonstrates GEDI's unexplained suppression of late-position T→C calls, while STAR maintains relatively uniform rates consistent with the expected uniform 4sU modification model.
+Both tools show elevated T→C rates at early positions (alignment edge artifact), but STAR's rates are **symmetric** (elevated at both early AND late positions), while GEDI's rates are **asymmetric** (elevated early, suppressed late). The STAR/GEDI ratio changes from ~0.55 (early) to ~15x (late), demonstrating GEDI's unexplained suppression of late-position T→C calls.
+
+---
+
+## PHRED Quality vs Position Analysis Script
+
+**Script:** `tests/slam/analyze_phred_by_position.py`
+
+### Purpose
+Demonstrates that position-dependent T→C rate differences between STAR and GEDI are **NOT correlated with base quality scores**.
+
+### Usage
+```bash
+cd /mnt/pikachu/STAR-Flex
+python3 tests/slam/analyze_phred_by_position.py
+```
+
+### Inputs
+- BAM file: `/storage/SLAM-Seq-prod-compare-20260109/star/WDHD1_0h3_Aligned.sortedByCoord.out.bam`
+- STAR mismatchdetails: `test/tmp_prod_compat/default_SlamQuant.out.mismatchdetails.tsv`
+- GEDI mismatchdetails: `/storage/SLAM-Seq-prod-compare-20260109/gedi/WDHD1_0h3_Sense_fixed.mismatchdetails.tsv`
+
+### Outputs
+1. **Console**: Position-by-position quality and T→C rate statistics
+2. **Plot**: `test/tmp_prod_compat/phred_position_analysis.png`
+
+### Key Results
+
+**T→C Rate Pattern (both tools show U-shape, but GEDI is suppressed at late positions):**
+| Positions | STAR Rate | GEDI Rate | STAR/GEDI Ratio |
+|-----------|-----------|-----------|-----------------|
+| Early (0-10) | 2.18% | 3.94% | 0.55 (GEDI higher) |
+| Middle (15-35) | ~0.1% | ~0.1% | ~1.0 (similar) |
+| Late (40-49) | 3.16% | 0.21% | **15.2x (STAR much higher)** |
+
+**Quality is uniform across positions:**
+| Position | Avg PHRED | Std Dev |
+|----------|-----------|---------|
+| 0 | Q39.1 | 4.4 |
+| 25 | Q39.4 | 3.6 |
+| 49 | Q38.8 | 5.1 |
+
+**Correlation Analysis:**
+```
+PHRED vs STAR T→C rate:       r = -0.809
+PHRED vs GEDI T→C rate:       r = -0.398
+PHRED vs (STAR-GEDI) diff:    r = -0.274, p = 0.054
+```
+
+### Interpretation
+
+Both tools show elevated T→C rates at early AND late positions (alignment edge effect). However:
+- STAR's rates are symmetric (similar at positions 0-10 and 40-49)
+- GEDI's rates are asymmetric (elevated early, but suppressed late)
+
+The correlation between PHRED quality and the STAR-GEDI difference is **r = -0.274** (weak, not statistically significant at p=0.054).
+
+**Key insight:** If quality were driving the STAR/GEDI divergence at late positions, we would expect:
+- Strong correlation (|r| > 0.7)
+- Low quality at late positions where divergence is highest
+
+Instead:
+- Quality is uniformly high (~Q39) across all positions
+- Weak correlation shows quality is NOT the driver
+
+**Conclusion:** GEDI's asymmetric late-position suppression is not due to quality filtering.
 
 ---
 

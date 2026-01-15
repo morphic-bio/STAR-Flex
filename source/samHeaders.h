@@ -5,6 +5,6 @@
 #include "Genome.h"
 #include "Transcriptome.h"
 
-void samHeaders(Parameters &P, Genome &genomeMain, Transcriptome &transcriptomeMain);
+void samHeaders(Parameters &P, Genome &genomeMain, Transcriptome *transcriptomeMain);
 
 #endif

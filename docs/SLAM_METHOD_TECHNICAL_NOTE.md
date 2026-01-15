@@ -141,6 +141,32 @@ This mode is expected to diverge slightly from the BED-based reference (differen
 SNP calling), but still provides strong agreement. This is the recommended
 default when no external SNP set is available.
 
+#### Auto-estimated SNP mismatch threshold
+
+When `--slamSnpDetectFrac` is not set or `<= 0` (default), STAR-SLAM automatically
+estimates the mismatch fraction threshold using a knee/elbow detection algorithm:
+
+1. **Build histogram**: For each genomic position with coverage >= 10, compute
+   `f = mismatches / coverage` and bin into 100 bins across [0, 1].
+
+2. **Cumulative distribution**: Compute `N(>= f)` from high to low bins.
+
+3. **Knee detection (Kneedle-style)**:
+   - Apply `log1p(N)` transformation for stability.
+   - Normalize x (bin centers) and y (log counts) to [0, 1].
+   - Find the bin maximizing distance from diagonal `y = 1 - x`.
+
+4. **Guardrails**:
+   - Minimum 1,000 eligible sites required, otherwise fallback.
+   - Knee strength must exceed epsilon (0.02), otherwise fallback.
+   - Result clamped to [0.10, 0.60] to avoid pathological thresholds.
+
+5. **Fallback**: If auto-estimation fails, uses 0.22 (GEDI-parity value).
+
+For reproducibility, set an explicit threshold: `--slamSnpDetectFrac 0.22`.
+The log output reports the mode used (`auto`, `auto_fallback`, or `explicit`)
+along with the estimated value and knee bin when auto-estimation succeeds.
+
 | Threshold | Filter | N Genes | NTR Pearson | NTR Spearman | k/nT Pearson | k/nT Spearman |
 |-----------|--------|---------|-------------|--------------|--------------|---------------|
 | >=20      | readcount | 384 | 0.989764 | 0.967831 | 0.991470 | 0.990457 |

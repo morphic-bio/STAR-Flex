@@ -76,24 +76,115 @@ ReadAlignChunk::ReadAlignChunk(Parameters& Pin, Genome &genomeIn, Transcriptome 
     slamQuant = nullptr;
     slamCompat = nullptr;
     if (P.quant.slam.yes && chunkTr != nullptr) {
-        slamQuant = new SlamQuant(chunkTr->nGe, buildSlamAllowedGenes(*chunkTr), P.quant.slam.snpDetect);
+        // For SNP mask build pre-pass, allow "alt" to mean any mismatch (GEDI-like) vs conversions only.
+        bool snpObsAnyMismatch = false;
+        bool hasBuildFastqs = !P.quant.slamSnpMask.buildFastqsFofn.empty() && P.quant.slamSnpMask.buildFastqsFofn != "-" &&
+                              P.quant.slamSnpMask.buildFastqsFofn != "None" && P.quant.slamSnpMask.buildFastqsFofn != "none";
+        bool hasBuildBam = !P.quant.slamSnpMask.buildBam.empty() && P.quant.slamSnpMask.buildBam != "-" &&
+                           P.quant.slamSnpMask.buildBam != "None" && P.quant.slamSnpMask.buildBam != "none";
+        if (hasBuildFastqs || hasBuildBam) {
+            snpObsAnyMismatch = (P.quant.slamSnpMask.kMode == "any");
+        }
+
+        slamQuant = new SlamQuant(chunkTr->nGe, buildSlamAllowedGenes(*chunkTr), P.quant.slam.snpDetect, P.quant.slam.snpDetectFrac, snpObsAnyMismatch);
+        // Enable dump buffer for external re-quant (skip auto-trim detection pass).
+        bool wantDump = !P.quant.slam.dumpBinary.empty() && P.quant.slam.dumpBinary != "-" &&
+                        P.quant.slam.dumpBinary != "None";
+        bool wantWeights = !P.quant.slam.dumpWeights.empty() && P.quant.slam.dumpWeights != "-" &&
+                           P.quant.slam.dumpWeights != "None";
+        if ((wantDump || wantWeights) && !P.quant.slam.autoTrimDetectionPass) {
+            slamQuant->enableDumpBuffer(P.quant.slam.dumpMaxReads);
+        }
         if (P.quant.slam.debugEnabled) {
             slamQuant->initDebug(*chunkTr, P.quant.slam.debugGenes, P.quant.slam.debugReads,
                                  static_cast<size_t>(P.quant.slam.debugMaxReads),
                                  P.quant.slam.debugOutPrefix);
         }
+        if (!P.quant.slam.debugSnpLoc.empty() && P.quant.slam.debugSnpLoc != "-" &&
+            P.quant.slam.debugSnpLoc != "None" && P.quant.slam.debugSnpLoc != "none") {
+            // Parse <chrom>:<pos1> (1-based) and convert to STAR absolute genome coordinate.
+            std::string loc = P.quant.slam.debugSnpLoc;
+            if (loc.rfind("chr", 0) == 0) {
+                // allow chr prefix; genome names typically already include it
+            }
+            size_t colon = loc.find(':');
+            if (colon != std::string::npos && colon + 1 < loc.size()) {
+                std::string chr = loc.substr(0, colon);
+                std::string posStr = loc.substr(colon + 1);
+                uint64_t pos1 = 0;
+                try {
+                    pos1 = static_cast<uint64_t>(std::stoull(posStr));
+                } catch (...) {
+                    pos1 = 0;
+                }
+                if (pos1 > 0) {
+                    // Find chromosome index
+                    int chrIdx = -1;
+                    for (size_t i = 0; i < mapGen.chrName.size(); ++i) {
+                        if (mapGen.chrName[i] == chr) {
+                            chrIdx = static_cast<int>(i);
+                            break;
+                        }
+                    }
+                    // Also try stripping/adding "chr" if needed
+                    if (chrIdx < 0 && chr.rfind("chr", 0) == 0) {
+                        std::string chr2 = chr.substr(3);
+                        for (size_t i = 0; i < mapGen.chrName.size(); ++i) {
+                            if (mapGen.chrName[i] == chr2) {
+                                chrIdx = static_cast<int>(i);
+                                break;
+                            }
+                        }
+                    } else if (chrIdx < 0) {
+                        std::string chr2 = "chr" + chr;
+                        for (size_t i = 0; i < mapGen.chrName.size(); ++i) {
+                            if (mapGen.chrName[i] == chr2) {
+                                chrIdx = static_cast<int>(i);
+                                break;
+                            }
+                        }
+                    }
+                    if (chrIdx >= 0 && static_cast<size_t>(chrIdx) < mapGen.chrStart.size()) {
+                        uint64_t pos0 = pos1 - 1; // 1-based -> 0-based
+                        uint64_t absPos = mapGen.chrStart[chrIdx] + pos0;
+                        slamQuant->enableSnpSiteDebug(absPos, P.quant.slam.debugSnpWindow, loc);
+                    }
+                }
+            }
+        }
         
-        // Create SlamCompat if any compat mode is enabled
-        if (P.quant.slam.compatIntronic || P.quant.slam.compatLenientOverlap ||
+        // Enable variance analysis during detection pass (single-threaded)
+        // With rewind approach, detection pass collects variance stats, then files are rewound
+        // and main mapping pass uses computed trims from the start
+        // Always enabled during detection pass when SLAM is active
+        if (P.quant.slam.autoTrimDetectionPass) {
+            slamQuant->enableVarianceAnalysis(
+                P.quant.slam.autoTrimMaxReads, 
+                P.quant.slam.autoTrimMinReads,
+                P.quant.slam.autoTrimSmoothWindow,
+                P.quant.slam.autoTrimSegMinLen,
+                P.quant.slam.autoTrimMaxTrim);
+        }
+        
+        // Create SlamCompat if any compat mode is enabled or auto-trim is active
+        bool needsCompat = P.quant.slam.compatIntronic || P.quant.slam.compatLenientOverlap ||
             P.quant.slam.compatOverlapWeight || P.quant.slam.compatIgnoreOverlap ||
-            P.quant.slam.compatTrim5p != 0 || P.quant.slam.compatTrim3p != 0) {
+            P.quant.slam.compatTrim5p != 0 || P.quant.slam.compatTrim3p != 0 ||
+            (P.quant.slam.autoTrimMode == "variance" && P.quant.slam.autoTrimComputed);
+        if (needsCompat) {
             SlamCompatConfig cfg;
             cfg.intronic = P.quant.slam.compatIntronic;
             cfg.lenientOverlap = P.quant.slam.compatLenientOverlap;
             cfg.overlapWeight = P.quant.slam.compatOverlapWeight;
             cfg.ignoreOverlap = P.quant.slam.compatIgnoreOverlap;
-            cfg.trim5p = P.quant.slam.compatTrim5p;
-            cfg.trim3p = P.quant.slam.compatTrim3p;
+            // Use auto-trim values if computed, otherwise use manual trims
+            if (P.quant.slam.autoTrimComputed) {
+                cfg.trim5p = P.quant.slam.autoTrim5p;
+                cfg.trim3p = P.quant.slam.autoTrim3p;
+            } else {
+                cfg.trim5p = P.quant.slam.compatTrim5p;
+                cfg.trim3p = P.quant.slam.compatTrim3p;
+            }
             slamCompat = new SlamCompat(*chunkTr, cfg);
         }
     }
@@ -239,6 +330,24 @@ ReadAlignChunk::~ReadAlignChunk() {
     // but we should still clean up the per-chunk instance
     delete slamQuant;
 };
+
+void ReadAlignChunk::reinitSlamCompat(int trim5p, int trim3p) {
+    if (slamCompat != nullptr) {
+        // Update existing SlamCompat with new trim values
+        slamCompat->updateTrims(trim5p, trim3p);
+    } else if (P.quant.slam.yes && chunkTr != nullptr) {
+        // Create SlamCompat if it doesn't exist yet (trims were computed but no other compat features)
+        SlamCompatConfig cfg;
+        cfg.intronic = P.quant.slam.compatIntronic;
+        cfg.lenientOverlap = P.quant.slam.compatLenientOverlap;
+        cfg.overlapWeight = P.quant.slam.compatOverlapWeight;
+        cfg.ignoreOverlap = P.quant.slam.compatIgnoreOverlap;
+        cfg.trim5p = trim5p;
+        cfg.trim3p = trim3p;
+        slamCompat = new SlamCompat(*chunkTr, cfg);
+        RA->slamCompat = slamCompat;
+    }
+}
 
 ///////////////
 void ReadAlignChunk::chunkFstreamOpen(string filePrefix, int iChunk, fstream &fstreamOut) {//open fstreams for chunks

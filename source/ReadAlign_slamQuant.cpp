@@ -1,6 +1,7 @@
 #include "ReadAlign.h"
 #include "SlamQuant.h"
 #include "SlamCompat.h"
+#include "SlamReadBuffer.h"
 #include <sstream>
 
 namespace {
@@ -69,6 +70,7 @@ inline std::string buildReadLoc(const Transcript& trOut, const Genome& genOut) {
     }
     return oss.str();
 }
+
 } // namespace
 
 bool ReadAlign::slamCollect(const Transcript& trOut, const std::set<uint32_t>& geneIds, double weight, bool isIntronic) {
@@ -103,9 +105,16 @@ bool ReadAlign::slamCollect(const Transcript& trOut, const std::set<uint32_t>& g
         return false;
     }
 
+    // Record read for variance analysis (only during detection pass)
+    bool varianceCollecting = false;
+    if (slamQuant && slamQuant->varianceAnalysisEnabled() && P.quant.slam.autoTrimDetectionPass) {
+        varianceCollecting = slamQuant->recordVarianceRead();
+    }
+    
     char* R = Read1[trOut.roStr == 0 ? 0 : 2];
     bool isMinus = (trOut.Str == 1);
     bool oppositeStrand = isOppositeStrand(*chunkTr, geneIds, trOut.Str);
+    
     bool debugGeneMatch = false;
     if (debugEnabled && slamQuant->debugGenesEnabled()) {
         for (uint32_t geneId : geneIds) {
@@ -178,6 +187,29 @@ bool ReadAlign::slamCollect(const Transcript& trOut, const std::set<uint32_t>& g
     }
     SlamMismatchCategory category = isIntronic ? SlamMismatchCategory::Intronic : SlamMismatchCategory::Exonic;
     SlamMismatchCategory senseCategory = isIntronic ? SlamMismatchCategory::IntronicSense : SlamMismatchCategory::ExonicSense;
+
+    // Optional dump record for external re-quant
+    SlamBufferedRead dumpRead;
+    const bool dumpEnabled = slamQuant->dumpEnabled() && !slamQuant->dumpBufferFull();
+    if (dumpEnabled) {
+        std::string name(readName ? readName : "");
+        size_t end = name.find_first_of(" \t");
+        if (end != std::string::npos) {
+            name = name.substr(0, end);
+        }
+        if (!name.empty() && name[0] == '@') {
+            name.erase(0, 1);
+        }
+        dumpRead.readName = name;
+        dumpRead.readLength0 = static_cast<uint32_t>(readLength[0]);
+        dumpRead.readLength1 = static_cast<uint32_t>(readLength[1]);
+        dumpRead.isMinus = isMinus;
+        dumpRead.oppositeStrand = oppositeStrand;
+        dumpRead.geneIds.assign(geneIds.begin(), geneIds.end());
+        dumpRead.weight = weight;
+        dumpRead.isIntronic = isIntronic;
+        dumpRead.fileIndex = static_cast<uint32_t>(P.quant.slam.currentFileIndex);
+    }
     bool snpDetect = slamQuant->snpDetectEnabled() && !isIntronic;
     std::vector<uint32_t> mismatchPositions;
     std::vector<uint32_t> debugConvReadPos;
@@ -268,7 +300,18 @@ bool ReadAlign::slamCollect(const Transcript& trOut, const std::set<uint32_t>& g
                 continue;
             }
             if (snpDetect) {
-                slamQuant->recordSnpObservation(gpos, g1 != r1);
+                // For SLAM-seq SNP detection, only count T→C conversions
+                // STAR base encoding: A=0, C=1, G=2, T=3
+                // T→C: genomic T (3) → read C (1)
+                // A→G: genomic A (0) → read G (2) (opposite strand equivalent)
+                bool isTtoC = (g1 == 3 && r1 == 1);
+                bool isAtoG = (g1 == 0 && r1 == 2);
+                bool isConv = (isTtoC || isAtoG);
+                bool isAnyMis = (g1 != r1);
+                if (slamQuant->snpSiteDebugEnabled()) {
+                    slamQuant->debugSnpSiteObserve(gpos, isAnyMis, isConv, weight, trOut.primaryFlag, trOut.mapq);
+                }
+                slamQuant->recordSnpObservation(gpos, isAnyMis, isConv);
             }
             uint64 rposRaw = rStart + ii;
             if (readLength[0] > 0 && rposRaw == readLength[0]) {
@@ -283,6 +326,49 @@ bool ReadAlign::slamCollect(const Transcript& trOut, const std::set<uint32_t>& g
                 } else {
                     overlap = containsPos(mate2Intervals, mate2Idx, gpos);
                 }
+            }
+            
+            // Get quality score for this position (needed for variance and buffering)
+            uint8_t qual = 30; // Default quality if not available
+            if (Qual0 && !secondMate && readPos < readLength[0] && Qual0[0] && readPos < strlen(Qual0[0])) {
+                qual = static_cast<uint8_t>(Qual0[0][readPos] - 33); // Convert ASCII to Phred
+            } else if (Qual0 && secondMate && readLength[1] > 0 && Qual0[1]) {
+                uint32_t mateLocalPos = readPos - static_cast<uint32_t>(readLength[0]);
+                if (mateLocalPos < strlen(Qual0[1])) {
+                    qual = static_cast<uint8_t>(Qual0[1][mateLocalPos] - 33);
+                }
+            }
+            
+            // Record variance stats for auto-trim (before trim filtering, only during detection pass)
+            // Only collect if varianceCollecting is true (read was recorded and under maxReads limit)
+            if (varianceCollecting) {
+                // Determine if this is a T base and if it's a T→C conversion
+                bool isT = false;
+                bool isTc = false;
+                if (!isIntronic) {
+                    if (!isMinus) {
+                        isT = (g1 == 3); // T
+                        isTc = (g1 == 3 && r1 == 1); // T→C
+                    } else {
+                        isT = (g1 == 0); // A (complement of T)
+                        isTc = (g1 == 0 && r1 == 2); // A→G (complement of T→C)
+                    }
+                }
+                
+                slamQuant->recordVariancePosition(readPos, qual, isT, isTc);
+            }
+
+            // Buffer for external re-quant dump (before trim filtering)
+            if (dumpEnabled) {
+                SlamBufferedPosition bp;
+                bp.readPos = readPos;
+                bp.genomicPos = gpos;
+                bp.refBase = g1;
+                bp.readBase = r1;
+                bp.qual = qual;
+                bp.secondMate = secondMate;
+                bp.overlap = overlap;
+                dumpRead.positions.push_back(bp);
             }
             
             // Compat position filtering (overlap and trim)
@@ -316,6 +402,7 @@ bool ReadAlign::slamCollect(const Transcript& trOut, const std::set<uint32_t>& g
                     slamQuant->addTransitionBase(senseCategory, readPos, secondMate, overlap, false, g1, r1, weight);
                 }
             }
+            
             if (!isIntronic) {
                 if (!isMinus) {
                     if (g1 == 3) { // T
@@ -348,6 +435,11 @@ bool ReadAlign::slamCollect(const Transcript& trOut, const std::set<uint32_t>& g
                 }
             }
         }
+    }
+
+    // Commit dump record (after position buffering)
+    if (dumpEnabled) {
+        slamQuant->bufferDumpRead(std::move(dumpRead));
     }
 
     uint8_t k8 = static_cast<uint8_t>(k > 255 ? 255 : k);

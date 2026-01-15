@@ -82,32 +82,26 @@ This fork adds several features beyond upstream STAR:
     - tximport parity tests (STAR vs R tximport, and CLI tool): `tests/tximport/star_tximport_e2e_test.sh`
     - On the JAX PE validation runs, gene-level correlations between STAR and Salmon tximport-style summaries are typically very high (Spearman/Pearson ~0.99+), and base-vs-auto (trimming) parity is expected to be ~1.0.
 
-- **SLAM-seq (STAR-SLAM) gene-level quantification**: Enable SLAM quantification directly in STAR.
-  - **Required**: `--slamQuantMode 1`
-  - **SNP handling** (choose one):
-    - `--slamSnpDetect 1` (internal SNP detection; default choice when no sample-specific VCF is available)
-    - `--slamSnpBed /path/to/snps.bed` (use only when a sample-specific VCF/BED is known; if set, it disables internal detection)
-  - **Strandness filter** (optional): `--slamStrandness Unspecific|Sense|Antisense` (default: `Unspecific`).
-  - **Alignment mode** (recommended): `--alignEndsType EndToEnd` to avoid soft-clipping artifacts.
-  - **Adapter clipping**: leave off for fixed-length, adapter-free reads (e.g., SE50). Only set
-    `--clip3pAdapterSeq` / `--clip3pAdapterMMp` when adapters are present.
-  - **Debug instrumentation** (optional): `--slamDebugGeneList`, `--slamDebugReadList`, `--slamDebugOutPrefix`, `--slamDebugMaxReads`.
-  - **Optional**: `--slamErrorRate`, `--slamConvRate`, `--slamOutFile`
-  - **Run script** (fixture parity): `tests/run_slam_fixture_parity.sh` (set `RUN_STAR_SLAM=1` and `STAR_SLAM_ARGS`).
-  - **Example:**
+- **[SLAM-seq (STAR-SLAM)](docs/SLAM_seq.md)**: Integrated SLAM-seq quantification with GRAND-SLAM parity.
+  - **Features**:
+    - **Gene Quantification**: Full gene-level NTR estimation (Binomial/EM models).
+    - **GRAND-SLAM Output**: Generates `<prefix>SlamQuant.grandslam.tsv` for seamless tool compatibility (`--slamGrandSlamOut 1`).
+    - **Auto-Trimming**: Robust variance-based detection of artifact-prone read ends (`--autoTrim variance`).
+    - **QC Reports**: Comprehensive HTML reports for T->C rates, error modeling, and trimming (`--slamQcReport`).
+  - **Usage**:
     ```bash
     STAR \
       --runMode alignReads \
       --genomeDir /path/to/star_index \
       --readFilesIn reads.fastq.gz \
-      --readFilesCommand zcat \
-      --outSAMtype None \
-      --alignEndsType EndToEnd \
       --slamQuantMode 1 \
-      --slamSnpDetect 1 \
-      --outFileNamePrefix out/
+      --slamGrandSlamOut 1 \
+      --autoTrim variance \
+      --slamQcReport output/qc_report \
+      --outFileNamePrefix output/
     ```
-  - For GRAND-SLAM parity from BAM, include `--outSAMattributes MD NH` and avoid soft-clipping (end-to-end; trim/clip only if adapters are present or mismatch-position plots show artifacts).
+  - **Documentation**: See **[docs/SLAM_seq.md](docs/SLAM_seq.md)** for detailed theory, usage guide, and parameter reference.
+  - **Benchmarks**: See [docs/SLAM_METHOD_TECHNICAL_NOTE.md](docs/SLAM_METHOD_TECHNICAL_NOTE.md) for parity benchmarks.
 
 - **Samtools-style spill-to-disk BAM sorting** (`--outBAMsortMethod samtools`): Optional coordinate-sorting backend that uses a spill-to-disk strategy (bounded by `--limitBAMsortRAM`) to reduce temporary disk usage compared to STAR’s legacy bin-based sorter.
   - Rationale: the legacy STAR sorter partitions alignments into many genomic bins and can create large temporary files; the spill-to-disk sorter keeps in-memory buffers up to the RAM cap and only writes spill files as needed.

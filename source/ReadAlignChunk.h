@@ -54,6 +54,9 @@ public:
     void chunkFstreamOpen(string filePrefix, int iChunk, fstream &fstreamOut);
     void chunkFstreamCat (fstream &chunkOut, ofstream &allOut, bool mutexFlag, pthread_mutex_t &mutexVal);
     void chunkFilesCat(ostream *allOut, string filePrefix, uint &iC);
+    
+    // Reinitialize SlamCompat with new trim values (for mid-run auto-trim)
+    void reinitSlamCompat(int trim5p, int trim3p);
 
     Genome &mapGen;
 private:

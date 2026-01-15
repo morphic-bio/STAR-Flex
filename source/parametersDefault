@@ -358,6 +358,20 @@ trimCutadaptCompat              -
             Off  ... off (same as -)
             Cutadapt3 ... cutadapt 3.x compatibility mode (for matching Trim Galore/cutadapt 3.2 behavior)
 
+### Trim QC (FastQC-like)
+trimQcReport                    -
+    string: output prefix for trim QC JSON/HTML (writes <prefix>.trim_qc.json/html)
+            - ... disabled (default)
+
+trimQcJson                      -
+    string: explicit output path for trim QC JSON (optional)
+
+trimQcHtml                      -
+    string: explicit output path for trim QC HTML (optional)
+
+trimQcMaxReads                  0
+    uint64: maximum number of reads to collect QC for (0 = no limit)
+
 ### Limits
 limitGenomeGenerateRAM               31000000000
     int>0: maximum available RAM (bytes) for genome generation
@@ -976,6 +990,15 @@ slamSnpBed                            -
 slamSnpDetect                         0
     int: 0/1 - enable internal SNP detection and masking (ignored if slamSnpBed is set)
 
+slamSnpDetectFrac                    -1.0
+    double: mismatch fraction threshold for SNP detection
+            <= 0    ... auto-estimate threshold using knee/elbow detection (default)
+            > 0     ... explicit threshold (e.g., 0.22 for backward compatibility)
+            Only used when slamSnpDetect=1 and slamSnpBed is not set.
+            Auto-estimation uses the mismatch-fraction distribution to find a knee point,
+            with fallback to 0.22 if insufficient data or weak knee signal.
+            Clamped to [0.10, 0.60] to avoid pathological thresholds.
+
 slamStrandness                        Unspecific
     string: SLAM-seq strandness (Unspecific, Sense, Antisense)
 
@@ -994,6 +1017,15 @@ slamDebugOutPrefix                    -
 slamDebugMaxReads                     2000
     int: Max debug read records (0 disables per-read logging)
 
+slamDebugSnpLoc                       -
+    string: Optional SNP site debug locus in the form <chrom>:<pos1> (1-based, samtools style)
+            Example: chr1:26429152
+            When set, STAR will emit an additional debug file <slamDebugOutPrefix>.snp_sites.tsv
+            summarizing how SNP observations at/near this locus were counted, including NH-weight and primaryFlag.
+
+slamDebugSnpWindow                    2
+    int: Window size for SNP site debug. STAR will log the target locus and +/- this many bases.
+
 slamErrorRate                         0.001
     double: Background error rate for SLAM EM solver
 
@@ -1002,6 +1034,10 @@ slamConvRate                          0.05
 
 slamOutFile                           -
     string: Output file for SlamQuant (default: <prefix>SlamQuant.out)
+
+slamGrandSlamOut                      1
+    int: Enable GRAND-SLAM-style output table (0/1).
+         Output path: <prefix>SlamQuant.grandslam.tsv (default on)
 
 slamCompatMode                        none
     string: SLAM compatibility mode (none, gedi)
@@ -1023,6 +1059,230 @@ slamCompatTrim5p                     0
 
 slamCompatTrim3p                     0
     int: Number of bases to trim from 3' end of each mate
+
+autoTrim                             -
+    string: Auto-trim mode: "variance" for variance-based trimming, "-" to disable.
+    Note: Variance stats are always collected during detection pass when SLAM is enabled,
+    regardless of this setting. This flag only controls whether trims are computed and applied.
+
+trimScope                            first
+    string: Trim scope for multi-file runs:
+        "first"    ... shared trim computed from first file and applied to all files (default)
+        "per-file" ... separate trim computed and applied for each file
+    Note: "per-file" mode requires FILE markers in the read stream, which are automatically
+    generated when using comma-separated --readFilesIn (e.g., file1.fq,file2.fq,file3.fq)
+    or when using --readFilesCommand with multiple files.
+
+trimSource                           -
+    string: Path to a specific file for computing shared auto-trim values.
+    When set, auto-trim is computed from this file instead of the first input file.
+    The computed trims are then applied to all input files.
+    Use this when the first file is not representative (e.g., low depth or outlier).
+    Ignored when --trimScope per-file is set (per-file always computes trims independently).
+    Set to "-" to disable (use first input file).
+
+autoTrimMaxReads                     100000
+    int: Maximum number of reads to scan for variance analysis (0=unlimited)
+
+autoTrimMinReads                     1000
+    int: Minimum number of reads required for auto-trim computation
+
+autoTrimSmoothWindow                 5
+    int: Median smoothing window size for T→C stdev curve (default 5)
+    Used in segmented regression auto-trim to reduce noise before fitting.
+
+autoTrimSegMinLen                    3
+    int: Minimum segment length for segmented regression (default 3)
+    Each of the three segments (5' artifact, middle signal, 3' artifact) must have
+    at least this many positions.
+
+autoTrimMaxTrim                      15
+    int: Maximum trim to apply at either end (default 15)
+    Breakpoints beyond this limit will be clamped.
+
+autoTrimBufferReads                   1000000
+    uint64_t: Deprecated - legacy parameter (ignored with rewind-based auto-trim)
+
+autoTrimDetectionReads               100000
+    int: Maximum number of reads for auto-trim detection pass (default 100K)
+    With rewind-based auto-trim, this controls how many reads are processed in the 
+    single-threaded detection pass before rewinding and running the full mapping.
+
+snpErrMinThreshold                   0.001
+    double: Minimum threshold for SNP error rate estimation (default 0.001)
+    If the estimated T→C error rate (p_err) is below this threshold, fall back to this value.
+    Used for GEDI -err parameter to ensure a minimum error rate.
+
+slamQcJson                           -
+    string: Path for QC JSON output (empty=auto-generate next to output prefix)
+
+slamQcHtml                           -
+    string: Path for QC HTML report output (empty=auto-generate next to output prefix)
+
+slamQcReport                         -
+    string: Prefix for comprehensive QC report (JSON + HTML with 4 plots).
+            If set, generates:
+            - <prefix>.slam_qc.json (comprehensive QC data)
+            - <prefix>.slam_qc.html (interactive Plotly report)
+            The report includes:
+            1. T transition rates (T→C and T→A by position)
+            2. Trim overlay (vertical bars showing trim5p/trim3p)
+            3. T→C stdev + smoothed curve + segmented regression fits
+            4. PHRED quality + T assignment rate by position
+            Empty (default) = disabled.
+
+slamDumpBinary                        -
+    string: Write a binary dump of per-read SLAM data for external re-quantification.
+            If set, STAR will collect per-read SLAM inputs and write a dump file.
+
+slamDumpMaxReads                   1000000
+    uint64: Maximum number of reads to dump (to limit memory usage).
+
+slamDumpWeights                      -
+    string: Write a keyed weight sidecar file for external re-quantification.
+            Records per-read weights in dump order with hash keys for matching.
+
+slamDumpWeightsMode                 dump
+    string: Weight mode for --slamDumpWeights. Options: dump (use SLAM weights),
+            vbGene (reweight by TranscriptVB gene posteriors).
+
+slamSnpMaskIn                        -
+    string: Path to existing SNP mask BED file (bgzip-compressed, tabix-indexed)
+            If set, this mask will be loaded and used for the main SLAM run.
+            Takes precedence over --slamSnpMaskBuildFastqs.
+
+slamSnpMaskVcfIn                     -
+    string: Path to VCF/gVCF file (bgzip-compressed, tabix-indexed) containing SNPs.
+            If set, STAR will load SNPs from the VCF and write a BED mask.
+            Takes precedence over --slamSnpMaskBuildFastqs.
+            Requires --slamSnpMaskBedOut.
+
+slamSnpMaskVcfSample                 -
+    string: Sample name to use for genotype filtering when --slamSnpMaskVcfMode gt.
+            If empty and VCF has exactly one sample, that sample is used.
+
+slamSnpMaskVcfMode                   gt
+    string: VCF SNP selection mode.
+            gt  ... only include sites where the sample genotype has a non-ref SNP allele
+            any ... include any SNP site regardless of genotype
+
+slamSnpMaskVcfFilter                 pass
+    string: VCF FILTER handling.
+            pass ... include PASS or '.' records only
+            all  ... include all records regardless of FILTER
+
+slamSnpMaskBuildFastqs               -
+    string: Path to FOFN (file-of-filenames) listing WT0/time-zero FASTQs for mask build.
+            Format: one line per sample, tab-separated R1<TAB>R2 for PE, or single path for SE.
+            Blank lines and # comments are ignored. Supports .gz FASTQs.
+            If set, STAR-Flex will run a pre-pass alignment to build the mask before the main SLAM run.
+            Requires --slamSnpMaskBedOut. Ignored if --slamSnpMaskIn is set.
+
+slamSnpMaskBuildBam                  -
+    string: Path to existing BAM file (with .bai index) for SNP mask build.
+            Alternative to --slamSnpMaskBuildFastqs: builds mask from existing BAM instead of re-aligning FASTQs.
+            Faster when BAM already exists. Requires --slamSnpMaskBedOut and --genomeFastaFiles.
+            Ignored if --slamSnpMaskIn or --slamSnpMaskBuildFastqs is set.
+            Note: Currently requires external pileup_snp tool (tools/pileup_snp/pileup_snp).
+            Future versions may integrate pileup logic directly into STAR.
+
+slamSnpMaskOnly                      0
+    int: 0/1 - if 1, exit after mask build (skip main SLAM run)
+
+slamSnpMaskBedOut                    -
+    string: Output path for SNP mask BED file (bgzip-compressed, tabix-indexed)
+            Required when --slamSnpMaskBuildFastqs is set.
+
+slamSnpMaskSummaryOut                -
+    string: Output path for mask build summary TSV (optional)
+
+slamSnpMaskBamOut                    -
+    string: Optional output path for BAM file from mask build alignment (for QC)
+            Default: empty (no BAM output, faster execution)
+
+slamSnpMaskCompat                    -
+    string: Compatibility mode for SNP mask parameters
+            "gedi" : Set GEDI-compatible defaults for maximum overlap with GEDI SNP detection:
+                     - kMode=any (GEDI counts any mismatch as "alt", not just T->C)
+                     - model=binom (binomial p-value)
+                     - pval=0.001 (GEDI -snppval)
+                     - minTcRatio=0.3 (GEDI -snpConv)
+                     - minCov=6 (GEDI default coverage)
+                     - minAlt=1 (GEDI doesn't enforce)
+                     - minMapQ=0 (GEDI doesn't filter)
+                     - minBaseQ=0 (GEDI doesn't filter)
+                     - junctionFlank=0 (GEDI doesn't filter)
+                     - indelFlank=0 (GEDI doesn't filter)
+                     - err=<snp_err_used> (from detection pass)
+            User-set parameters take precedence over compat defaults.
+            Example: --slamSnpMaskCompat gedi --slamSnpMaskMinCov 20
+                     will use minCov=20 (user override) with other GEDI defaults.
+            Default: empty (use STAR stringent defaults)
+
+slamSnpMaskKMode                     -
+    string: What constitutes an "alt" observation (k) for SNP masking.
+            - conv: count only T->C conversions (and A->G on opposite strand) as k
+            - any: count any mismatch as k (GEDI-style)
+            Default: conv (STAR) or any (with --slamSnpMaskCompat gedi)
+
+slamSnpMaskModel                     binom
+    string: SNP detection model: "binom" (default, GEDI-style binomial p-value) or "em" (EM mixture model)
+            Default: binom (matches GEDI's -snppval approach)
+
+slamSnpMaskPval                     0.001
+    double: Binomial p-value threshold for masking (GEDI-style)
+            Sites with P[X >= k | n, p_err] < this value will be masked.
+            Only used when model="binom". Default: 0.001 (matches GEDI -snppval)
+
+slamSnpMaskMinTcRatio               0.3
+    double: Minimum T→C conversion ratio (k/n) threshold
+            Sites must have k/n >= this value to be considered (GEDI -snpConv).
+            Only used when model="binom". Default: 0.3 (matches GEDI -snpConv)
+
+slamSnpMaskErr                      -1
+    double: Optional override for error rate (p_err) used in binomial model
+            If < 0 (default), uses computed snp_err_used from detection pass.
+            If >= 0, uses this value instead. Only used when model="binom".
+
+slamSnpMaskMinCov                    -1
+    int: Minimum coverage required for a site to be considered for masking
+         Default: 20 (STAR stringent) or 6 (with --slamSnpMaskCompat gedi)
+         Set -1 for auto (depends on compat mode).
+
+slamSnpMaskMinAlt                    -1
+    int: Minimum number of T->C mismatches required for candidate site
+         Default: 3 (STAR stringent) or 1 (with --slamSnpMaskCompat gedi)
+         Set -1 for auto (depends on compat mode).
+
+slamSnpMaskPosterior                 0.99
+    double: Posterior probability threshold for masking (in [0,1])
+            Sites with P(SNP) >= this value will be masked.
+
+slamSnpMaskMaxIter                   50
+    uint32: Maximum number of EM iterations
+
+slamSnpMaskConvergeRelLL             1e-7
+    double: Relative log-likelihood change threshold for EM convergence
+
+slamSnpMaskJunctionFlank             -1
+    int: Exclude positions within ±N bp of splice junctions
+         Default: 6 (STAR stringent) or 0 (with --slamSnpMaskCompat gedi)
+         Set -1 for auto (depends on compat mode).
+
+slamSnpMaskIndelFlank                -1
+    int: Exclude positions within ±N bp of indels/softclips
+         Default: 3 (STAR stringent) or 0 (with --slamSnpMaskCompat gedi)
+         Set -1 for auto (depends on compat mode).
+
+slamSnpMaskMinMapQ                   -1
+    int: Minimum MAPQ for bases counted in mask build
+         Default: 20 (STAR stringent) or 0 (with --slamSnpMaskCompat gedi)
+         Set -1 for auto (depends on compat mode).
+
+slamSnpMaskMinBaseQ                  -1
+    int: Minimum base quality (Phred) for bases counted in mask build
+         Default: 20 (STAR stringent) or 0 (with --slamSnpMaskCompat gedi)
+         Set -1 for auto (depends on compat mode).
 
 quantTranscriptomeSAMoutput BanSingleEnd_BanIndels_ExtendSoftclip
     string: alignment filtering for TranscriptomeSAM output
