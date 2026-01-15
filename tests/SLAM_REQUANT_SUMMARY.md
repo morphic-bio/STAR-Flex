@@ -7,6 +7,8 @@ in `plans/external_SLAM_plan.md`.
 New parameters:
 - `--slamDumpBinary <path>`: write binary dump for external re-quant
 - `--slamDumpMaxReads <N>`: cap number of dumped reads (default 1,000,000)
+- `--slamDumpWeights <path>`: write keyed weight sidecar for external re-quant
+- `--slamDumpWeightsMode dump|vbGene`: choose weight source for sidecar
 
 The dump stores:
 - gene IDs + names
