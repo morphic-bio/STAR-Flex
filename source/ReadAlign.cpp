@@ -12,6 +12,9 @@ ReadAlign::ReadAlign (Parameters& Pin, Genome &genomeIn, Transcriptome *TrIn, in
 {
     readNmates=P.readNmates; //not readNends
     bamRecordIndexPtr = &g_bamRecordIndex;
+    if (P.trimQcEnabled) {
+        trimQc.init(static_cast<uint32_t>(P.readNmates), P.trimQcMaxReads, P.readQualityScoreBase);
+    }
     //RNGs
     rngMultOrder.seed(P.runRNGseed*(iChunk+1));
     rngUniformReal0to1=std::uniform_real_distribution<double> (0.0, 1.0);

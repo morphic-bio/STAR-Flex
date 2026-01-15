@@ -27,7 +27,8 @@ bool writeSlamQcComprehensiveJson(const SlamQuant& slamQuant,
                                  const std::string& outputPath,
                                  int trim5p,
                                  int trim3p,
-                                 const SlamVarianceTrimResult* trimResult = nullptr);
+                                 const SlamVarianceTrimResult* trimResult = nullptr,
+                                 const std::vector<double>* varianceStddevTcRate = nullptr);
 
 // Write QC HTML report using Plotly CDN (4-panel comprehensive report)
 bool writeSlamQcComprehensiveHtml(const std::string& jsonPath,

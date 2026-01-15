@@ -442,6 +442,7 @@ class Parameters {
                 int autoTrim3p = 0;                // Auto-computed 3' trim (0=not computed)
                 bool autoTrimComputed = false;    // Whether auto-trim has been computed
                 uint32_t autoTrimFileIndex = 0;    // File index where auto-trim was computed
+                std::vector<double> varianceStddevTcRate; // Variance curve from detection pass (optional)
                 
                 // Global SNP error rate estimation (from auto-trim detection pass)
                 double snpErrEst = 0.0;           // Estimated T→C error rate (p_err)

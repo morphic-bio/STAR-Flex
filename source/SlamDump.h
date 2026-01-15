@@ -58,7 +58,8 @@ bool writeSlamWeights(const std::string& path,
                       const SlamDumpMetadata& dumpMeta,
                       const std::vector<const SlamReadBuffer*>& buffers,
                       uint64_t maxReads,
-                      std::string* err);
+                      const std::vector<double>* overrideWeights = nullptr,
+                      std::string* err = nullptr);
 
 bool readSlamWeights(const std::string& path,
                      SlamWeightMetadata* meta,

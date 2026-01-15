@@ -2,6 +2,7 @@
 #include <sys/stat.h>
 #include <fstream>
 #include <iomanip>
+#include <limits>
 
 #include "IncludeDefine.h"
 #include "Parameters.h"
@@ -851,6 +852,23 @@ int main(int argInN, char *argIn[])
                 }
                 P.inOut->logMain << "\n";
                 
+                // Cache variance curve for comprehensive QC (detection pass)
+                if (analyzer != nullptr) {
+                    const auto& vstats = analyzer->getStats();
+                    uint32_t maxPos = 0;
+                    for (const auto& kv : vstats) {
+                        if (kv.first > maxPos) {
+                            maxPos = kv.first;
+                        }
+                    }
+                    P.quant.slam.varianceStddevTcRate.assign(maxPos + 1, std::numeric_limits<double>::quiet_NaN());
+                    for (const auto& kv : vstats) {
+                        P.quant.slam.varianceStddevTcRate[kv.first] = kv.second.stddevTcRate();
+                    }
+                } else {
+                    P.quant.slam.varianceStddevTcRate.clear();
+                }
+
                 // Write QC outputs (always write if analyzer exists, even when trim detection fails)
                 if (analyzer != nullptr) {
                     std::string qcJsonPath = P.quant.slam.slamQcJson;
@@ -1084,6 +1102,23 @@ int main(int argInN, char *argIn[])
                     }
                     P.inOut->logMain << "\n";
                     
+                    // Cache variance curve for comprehensive QC (per-file detection pass)
+                    if (analyzer != nullptr) {
+                        const auto& vstats = analyzer->getStats();
+                        uint32_t maxPos = 0;
+                        for (const auto& kv : vstats) {
+                            if (kv.first > maxPos) {
+                                maxPos = kv.first;
+                            }
+                        }
+                        P.quant.slam.varianceStddevTcRate.assign(maxPos + 1, std::numeric_limits<double>::quiet_NaN());
+                        for (const auto& kv : vstats) {
+                            P.quant.slam.varianceStddevTcRate[kv.first] = kv.second.stddevTcRate();
+                        }
+                    } else {
+                        P.quant.slam.varianceStddevTcRate.clear();
+                    }
+
                     // Write per-file QC outputs (always write if analyzer exists)
                     if (analyzer != nullptr) {
                         std::string qcJsonPath = P.quant.slam.slamQcJson;
@@ -1786,7 +1821,11 @@ int main(int argInN, char *argIn[])
             int trim5p = P.quant.slam.autoTrimComputed ? P.quant.slam.autoTrim5p : 0;
             int trim3p = P.quant.slam.autoTrimComputed ? P.quant.slam.autoTrim3p : 0;
             
-            if (writeSlamQcComprehensiveJson(mergedSlam, qcJsonPath, trim5p, trim3p, trimResultPtr)) {
+            const std::vector<double>* varianceCurve = nullptr;
+            if (!P.quant.slam.varianceStddevTcRate.empty()) {
+                varianceCurve = &P.quant.slam.varianceStddevTcRate;
+            }
+            if (writeSlamQcComprehensiveJson(mergedSlam, qcJsonPath, trim5p, trim3p, trimResultPtr, varianceCurve)) {
                 P.inOut->logMain << "SLAM comprehensive QC JSON written to: " << qcJsonPath << "\n";
                 
                 if (writeSlamQcComprehensiveHtml(qcJsonPath, qcHtmlPath)) {

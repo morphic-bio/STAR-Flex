@@ -315,6 +315,7 @@ bool writeSlamWeights(const std::string& path,
                       const SlamDumpMetadata& dumpMeta,
                       const std::vector<const SlamReadBuffer*>& buffers,
                       uint64_t maxReads,
+                      const std::vector<double>* overrideWeights,
                       std::string* err) {
     std::ofstream out(path.c_str(), std::ios::binary);
     if (!out.good()) {
@@ -340,7 +341,11 @@ bool writeSlamWeights(const std::string& path,
             SlamWeightKey key = computeSlamWeightKey(r);
             out.write(reinterpret_cast<const char*>(&key.h1), sizeof(key.h1));
             out.write(reinterpret_cast<const char*>(&key.h2), sizeof(key.h2));
-            out.write(reinterpret_cast<const char*>(&r.weight), sizeof(r.weight));
+            double weightOut = r.weight;
+            if (overrideWeights && written < overrideWeights->size()) {
+                weightOut = (*overrideWeights)[written];
+            }
+            out.write(reinterpret_cast<const char*>(&weightOut), sizeof(weightOut));
             ++written;
         }
         if (maxReads > 0 && written >= maxReads) break;

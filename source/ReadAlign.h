@@ -15,6 +15,7 @@
 #include "ReadAnnotations.h"
 #include "SpliceGraph.h"
 #include "ClipMate.h"
+#include "TrimQc.h"
 #include <zlib.h>
 
 // Forward declarations
@@ -47,6 +48,7 @@ class ReadAlign {
         char* readName; // Read name for current read
 
         Stats statsRA; //mapping statistics
+        TrimQcCollector trimQc; // per-thread trim QC collector
 
         istream* readInStream[MAX_N_MATES];
         BAMoutput *outBAMcoord, *outBAMunsorted, *outBAMquant;//sorted by coordinate, unsorted, transcriptomic BAM structure

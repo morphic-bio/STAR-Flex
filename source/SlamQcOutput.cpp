@@ -336,7 +336,8 @@ bool writeSlamQcComprehensiveJson(const SlamQuant& slamQuant,
                                    const std::string& outputPath,
                                    int trim5p,
                                    int trim3p,
-                                   const SlamVarianceTrimResult* trimResult) {
+                                   const SlamVarianceTrimResult* trimResult,
+                                   const std::vector<double>* varianceStddevTcRate) {
     std::ofstream out(outputPath.c_str());
     if (!out.good()) {
         return false;
@@ -480,7 +481,16 @@ bool writeSlamQcComprehensiveJson(const SlamQuant& slamQuant,
             out << "      \"stddev_qual\": null,\n";
             out << "      \"t_count\": 0,\n";
             out << "      \"mean_tc_rate\": null,\n";
-            out << "      \"stddev_tc_rate\": null\n";
+            if (varianceStddevTcRate && pos < varianceStddevTcRate->size()) {
+                double v = (*varianceStddevTcRate)[pos];
+                if (std::isnan(v)) {
+                    out << "      \"stddev_tc_rate\": null\n";
+                } else {
+                    out << "      \"stddev_tc_rate\": " << std::fixed << std::setprecision(6) << v << "\n";
+                }
+            } else {
+                out << "      \"stddev_tc_rate\": null\n";
+            }
         }
         
         out << "    }";
@@ -555,6 +565,10 @@ bool writeSlamQcComprehensiveHtml(const std::string& jsonPath,
     out << "        });\n";
     out << "        const meanQual = data.positions.map(p => p.mean_qual);\n";
     out << "        const tCount = data.positions.map(p => p.t_count || 0);\n";
+    out << "        const seg = data.segmented_regression || null;\n";
+    out << "        const hasVarianceRaw = tcStdev.some(v => v !== null && !isNaN(v));\n";
+    out << "        const hasVarianceSmooth = !!(seg && seg.smoothed_stdev_curve && seg.smoothed_stdev_curve.some(v => v !== null && !isNaN(v)));\n";
+    out << "        const hasVariance = hasVarianceRaw || hasVarianceSmooth;\n";
     out << "        \n";
     out << "        // Trim bars\n";
     out << "        const shapes = [];\n";
@@ -585,67 +599,71 @@ bool writeSlamQcComprehensiveHtml(const std::string& jsonPath,
     out << "          legend: { x: 0.7, y: 0.9 }\n";
     out << "        });\n";
     out << "        \n";
-    out << "        // Plot 2: T→C stdev + smoothed + segmented fit\n";
-    out << "        const traces2 = [\n";
-    out << "          { x: positions, y: tcStdev, type: 'scatter', mode: 'lines+markers', name: 'T→C Stdev (variance)', marker: { size: 4, color: '#2196F3' }, line: { width: 1 } }\n";
-    out << "        ];\n";
-    out << "        \n";
-    out << "        if (data.segmented_regression) {\n";
-    out << "          const seg = data.segmented_regression;\n";
-    out << "          if (seg.smoothed_stdev_curve && seg.smoothed_stdev_curve.length > 0) {\n";
-    out << "            const smoothed = seg.smoothed_stdev_curve;\n";
-    out << "            const smoothedPos = Array.from({length: smoothed.length}, (_, i) => i + 1);\n";
-    out << "            traces2.push({ x: smoothedPos, y: smoothed, type: 'scatter', mode: 'lines', name: 'Smoothed', line: { width: 2, color: '#333', dash: 'dash' } });\n";
-    out << "            \n";
-    out << "            // Segmented regression lines\n";
-    out << "            const b1 = seg.breakpoint_b1;\n";
-    out << "            const b2 = seg.breakpoint_b2;\n";
-    out << "            const b3 = seg.breakpoint_b3;\n";
-    out << "            const mode = seg.mode || '';\n";
-    out << "            if (b1 > 0) {\n";
-    out << "              const x1 = Array.from({length: b1}, (_, i) => i + 1);\n";
-    out << "              const y1 = x1.map(x => seg.segment1.slope * (x - 1) + seg.segment1.intercept);\n";
-    out << "              traces2.push({ x: x1, y: y1, type: 'scatter', mode: 'lines', name: 'Seg1', line: { width: 2, color: '#f44336' } });\n";
-    out << "            }\n";
-    out << "            const x2 = Array.from({length: b2 - b1 + 1}, (_, i) => b1 + i + 1);\n";
-    out << "            const y2 = x2.map(x => seg.segment2.slope * (x - 1) + seg.segment2.intercept);\n";
-    out << "            traces2.push({ x: x2, y: y2, type: 'scatter', mode: 'lines', name: 'Seg2', line: { width: 2, color: '#4CAF50' } });\n";
-    out << "            if (b3 !== undefined && b3 !== null && b3 > 0) {\n";
-    out << "              if (b3 > b2 + 1) {\n";
-    out << "                const x3 = Array.from({length: b3 - b2 - 1}, (_, i) => b2 + i + 2);\n";
+    out << "        // Plot 2: T→C stdev + smoothed + segmented fit (only if variance data exists)\n";
+    out << "        if (hasVariance) {\n";
+    out << "          const traces2 = [\n";
+    out << "            { x: positions, y: tcStdev, type: 'scatter', mode: 'lines+markers', name: 'T→C Stdev (variance)', marker: { size: 4, color: '#2196F3' }, line: { width: 1 } }\n";
+    out << "          ];\n";
+    out << "          \n";
+    out << "          if (seg) {\n";
+    out << "            if (seg.smoothed_stdev_curve && seg.smoothed_stdev_curve.length > 0) {\n";
+    out << "              const smoothed = seg.smoothed_stdev_curve;\n";
+    out << "              const smoothedPos = Array.from({length: smoothed.length}, (_, i) => i + 1);\n";
+    out << "              traces2.push({ x: smoothedPos, y: smoothed, type: 'scatter', mode: 'lines', name: 'Smoothed', line: { width: 2, color: '#333', dash: 'dash' } });\n";
+    out << "              \n";
+    out << "              // Segmented regression lines\n";
+    out << "              const b1 = seg.breakpoint_b1;\n";
+    out << "              const b2 = seg.breakpoint_b2;\n";
+    out << "              const b3 = seg.breakpoint_b3;\n";
+    out << "              const mode = seg.mode || '';\n";
+    out << "              if (b1 > 0) {\n";
+    out << "                const x1 = Array.from({length: b1}, (_, i) => i + 1);\n";
+    out << "                const y1 = x1.map(x => seg.segment1.slope * (x - 1) + seg.segment1.intercept);\n";
+    out << "                traces2.push({ x: x1, y: y1, type: 'scatter', mode: 'lines', name: 'Seg1', line: { width: 2, color: '#f44336' } });\n";
+    out << "              }\n";
+    out << "              const x2 = Array.from({length: b2 - b1 + 1}, (_, i) => b1 + i + 1);\n";
+    out << "              const y2 = x2.map(x => seg.segment2.slope * (x - 1) + seg.segment2.intercept);\n";
+    out << "              traces2.push({ x: x2, y: y2, type: 'scatter', mode: 'lines', name: 'Seg2', line: { width: 2, color: '#4CAF50' } });\n";
+    out << "              if (b3 !== undefined && b3 !== null && b3 > 0) {\n";
+    out << "                if (b3 > b2 + 1) {\n";
+    out << "                  const x3 = Array.from({length: b3 - b2 - 1}, (_, i) => b2 + i + 2);\n";
+    out << "                  const y3 = x3.map(x => {\n";
+    out << "                    const xv = (mode === 'auto_segmented_halves_bic2') ? (x - b2) : (x - 1);\n";
+    out << "                    return seg.segment3.slope * xv + seg.segment3.intercept;\n";
+    out << "                  });\n";
+    out << "                  traces2.push({ x: x3, y: y3, type: 'scatter', mode: 'lines', name: 'Seg3', line: { width: 2, color: '#ff9800' } });\n";
+    out << "                }\n";
+    out << "                if (seg.segment4 && b3 < smoothed.length - 1) {\n";
+    out << "                  const x4 = Array.from({length: smoothed.length - b3 - 1}, (_, i) => b3 + i + 2);\n";
+    out << "                  const y4 = x4.map(x => {\n";
+    out << "                    const xv = (mode === 'auto_segmented_halves_bic2') ? (x - b2) : (x - 1);\n";
+    out << "                    return seg.segment4.slope * xv + seg.segment4.intercept;\n";
+    out << "                  });\n";
+    out << "                  traces2.push({ x: x4, y: y4, type: 'scatter', mode: 'lines', name: 'Seg4', line: { width: 2, color: '#9c27b0' } });\n";
+    out << "                }\n";
+    out << "              } else if (b2 < smoothed.length - 1) {\n";
+    out << "                const x3 = Array.from({length: smoothed.length - b2 - 1}, (_, i) => b2 + i + 2);\n";
     out << "                const y3 = x3.map(x => {\n";
     out << "                  const xv = (mode === 'auto_segmented_halves_bic2') ? (x - b2) : (x - 1);\n";
     out << "                  return seg.segment3.slope * xv + seg.segment3.intercept;\n";
     out << "                });\n";
     out << "                traces2.push({ x: x3, y: y3, type: 'scatter', mode: 'lines', name: 'Seg3', line: { width: 2, color: '#ff9800' } });\n";
     out << "              }\n";
-    out << "              if (seg.segment4 && b3 < smoothed.length - 1) {\n";
-    out << "                const x4 = Array.from({length: smoothed.length - b3 - 1}, (_, i) => b3 + i + 2);\n";
-    out << "                const y4 = x4.map(x => {\n";
-    out << "                  const xv = (mode === 'auto_segmented_halves_bic2') ? (x - b2) : (x - 1);\n";
-    out << "                  return seg.segment4.slope * xv + seg.segment4.intercept;\n";
-    out << "                });\n";
-    out << "                traces2.push({ x: x4, y: y4, type: 'scatter', mode: 'lines', name: 'Seg4', line: { width: 2, color: '#9c27b0' } });\n";
-    out << "              }\n";
-    out << "            } else if (b2 < smoothed.length - 1) {\n";
-    out << "              const x3 = Array.from({length: smoothed.length - b2 - 1}, (_, i) => b2 + i + 2);\n";
-    out << "              const y3 = x3.map(x => {\n";
-    out << "                const xv = (mode === 'auto_segmented_halves_bic2') ? (x - b2) : (x - 1);\n";
-    out << "                return seg.segment3.slope * xv + seg.segment3.intercept;\n";
-    out << "              });\n";
-    out << "              traces2.push({ x: x3, y: y3, type: 'scatter', mode: 'lines', name: 'Seg3', line: { width: 2, color: '#ff9800' } });\n";
     out << "            }\n";
     out << "          }\n";
+    out << "          \n";
+    out << "          Plotly.newPlot('plot2', traces2, {\n";
+    out << "            title: 'T→C Standard Deviation by Position (segmented fit)',\n";
+    out << "            xaxis: { title: 'Read Position (1-based)' },\n";
+    out << "            yaxis: { title: 'T→C Stdev (%)' },\n";
+    out << "            shapes: shapes,\n";
+    out << "            hovermode: 'closest',\n";
+    out << "            legend: { x: 0.7, y: 0.9 }\n";
+    out << "          });\n";
+    out << "        } else {\n";
+    out << "          const plot2 = document.getElementById('plot2');\n";
+    out << "          if (plot2) plot2.style.display = 'none';\n";
     out << "        }\n";
-    out << "        \n";
-    out << "        Plotly.newPlot('plot2', traces2, {\n";
-    out << "          title: 'T→C Standard Deviation by Position (segmented fit)',\n";
-    out << "          xaxis: { title: 'Read Position (1-based)' },\n";
-    out << "          yaxis: { title: 'T→C Stdev (%)' },\n";
-    out << "          shapes: shapes,\n";
-    out << "          hovermode: 'closest',\n";
-    out << "          legend: { x: 0.7, y: 0.9 }\n";
-    out << "        });\n";
     out << "        \n";
     out << "        // Plot 3: PHRED + T assignment rate\n";
     out << "        Plotly.newPlot('plot3', [\n";
