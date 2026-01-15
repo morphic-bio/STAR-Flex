@@ -358,6 +358,20 @@ trimCutadaptCompat              -
             Off  ... off (same as -)
             Cutadapt3 ... cutadapt 3.x compatibility mode (for matching Trim Galore/cutadapt 3.2 behavior)
 
+### Trim QC (FastQC-like)
+trimQcReport                    -
+    string: output prefix for trim QC JSON/HTML (writes <prefix>.trim_qc.json/html)
+            - ... disabled (default)
+
+trimQcJson                      -
+    string: explicit output path for trim QC JSON (optional)
+
+trimQcHtml                      -
+    string: explicit output path for trim QC HTML (optional)
+
+trimQcMaxReads                  0
+    uint64: maximum number of reads to collect QC for (0 = no limit)
+
 ### Limits
 limitGenomeGenerateRAM               31000000000
     int>0: maximum available RAM (bytes) for genome generation
@@ -1124,10 +1138,34 @@ slamDumpWeights                      -
     string: Write a keyed weight sidecar file for external re-quantification.
             Records per-read weights in dump order with hash keys for matching.
 
+slamDumpWeightsMode                 dump
+    string: Weight mode for --slamDumpWeights. Options: dump (use SLAM weights),
+            vbGene (reweight by TranscriptVB gene posteriors).
+
 slamSnpMaskIn                        -
     string: Path to existing SNP mask BED file (bgzip-compressed, tabix-indexed)
             If set, this mask will be loaded and used for the main SLAM run.
             Takes precedence over --slamSnpMaskBuildFastqs.
+
+slamSnpMaskVcfIn                     -
+    string: Path to VCF/gVCF file (bgzip-compressed, tabix-indexed) containing SNPs.
+            If set, STAR will load SNPs from the VCF and write a BED mask.
+            Takes precedence over --slamSnpMaskBuildFastqs.
+            Requires --slamSnpMaskBedOut.
+
+slamSnpMaskVcfSample                 -
+    string: Sample name to use for genotype filtering when --slamSnpMaskVcfMode gt.
+            If empty and VCF has exactly one sample, that sample is used.
+
+slamSnpMaskVcfMode                   gt
+    string: VCF SNP selection mode.
+            gt  ... only include sites where the sample genotype has a non-ref SNP allele
+            any ... include any SNP site regardless of genotype
+
+slamSnpMaskVcfFilter                 pass
+    string: VCF FILTER handling.
+            pass ... include PASS or '.' records only
+            all  ... include all records regardless of FILTER
 
 slamSnpMaskBuildFastqs               -
     string: Path to FOFN (file-of-filenames) listing WT0/time-zero FASTQs for mask build.

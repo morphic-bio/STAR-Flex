@@ -11,6 +11,7 @@
 #include "ReadAlignChunk.h"
 #include "ReadAlign.h"
 #include "Stats.h"
+#include "SlamQuant.h"
 #include "genomeGenerate.h"
 #include "outputSJ.h"
 #include "ThreadControl.h"
@@ -33,6 +34,7 @@
 #include "ProbeListIndex.h"
 #include "TranscriptQuantEC.h"
 #include "LibFormatDetection.h"
+#include "TrimQcOutput.h"
 #include "vb_engine.h"
 #include "em_engine.h"
 #include "ec_loader.h"
@@ -50,6 +52,7 @@
 #include "InlineCBCorrection.h"
 #include "alignment_model.h"  // For Transcriptome and AlignmentModel
 #include <memory>
+#include <unordered_map>
 #include <cstdlib>
 #include <cerrno>
 #include <cstring>
@@ -101,6 +104,62 @@ bool ensureDirectoryTree(const std::string &path, mode_t mode, std::string &fail
             break;
         }
         start = slash + 1;
+    }
+    return true;
+}
+
+bool buildVbGeneWeights(const std::vector<const SlamReadBuffer*>& buffers,
+                        const std::vector<double>& genePosterior,
+                        uint64_t maxReads,
+                        std::vector<double>* out,
+                        std::string* err) {
+    if (out == nullptr) {
+        if (err) *err = "Null output for VB gene weights";
+        return false;
+    }
+    std::vector<const SlamBufferedRead*> reads;
+    reads.reserve(maxReads > 0 ? static_cast<size_t>(maxReads) : 1024);
+    for (const auto* buffer : buffers) {
+        if (buffer == nullptr) continue;
+        for (const auto& r : buffer->reads()) {
+            if (maxReads > 0 && reads.size() >= maxReads) break;
+            reads.push_back(&r);
+        }
+        if (maxReads > 0 && reads.size() >= maxReads) break;
+    }
+    out->assign(reads.size(), 0.0);
+    if (reads.empty()) {
+        return true;
+    }
+    std::vector<double> scores(reads.size(), 0.0);
+    std::unordered_map<std::string, double> sumByRead;
+    std::unordered_map<std::string, size_t> countByRead;
+    sumByRead.reserve(reads.size());
+    countByRead.reserve(reads.size());
+
+    for (size_t i = 0; i < reads.size(); ++i) {
+        const auto& r = *reads[i];
+        double score = 0.0;
+        for (uint32_t gid : r.geneIds) {
+            if (gid < genePosterior.size()) {
+                score += genePosterior[gid];
+            }
+        }
+        scores[i] = score;
+        std::string key = std::to_string(r.fileIndex) + "\t" + r.readName;
+        sumByRead[key] += score;
+        countByRead[key] += 1;
+    }
+    for (size_t i = 0; i < reads.size(); ++i) {
+        const auto& r = *reads[i];
+        std::string key = std::to_string(r.fileIndex) + "\t" + r.readName;
+        double denom = sumByRead[key];
+        size_t count = countByRead[key];
+        if (denom > 0.0) {
+            (*out)[i] = scores[i] / denom;
+        } else if (count > 0) {
+            (*out)[i] = 1.0 / static_cast<double>(count);
+        }
     }
     return true;
 }
@@ -201,6 +260,8 @@ int main(int argInN, char *argIn[])
 
     // transcripome placeholder
     Transcriptome *transcriptomeMain = NULL;
+    std::vector<double> vbGenePosterior;
+    bool vbGenePosteriorReady = false;
 
     // this will execute --runMode soloCellFiltering and exit
     Solo soloCellFilter(P, *transcriptomeMain);
@@ -259,6 +320,7 @@ int main(int argInN, char *argIn[])
 
         // SNP mask build pre-pass (if requested)
         bool hasMaskIn = !P.quant.slamSnpMask.maskIn.empty() && P.quant.slamSnpMask.maskIn != "-" && P.quant.slamSnpMask.maskIn != "None";
+        bool hasVcfIn = !P.quant.slamSnpMask.vcfIn.empty() && P.quant.slamSnpMask.vcfIn != "-" && P.quant.slamSnpMask.vcfIn != "None";
         bool hasBuildFastqs = !P.quant.slamSnpMask.buildFastqsFofn.empty() && P.quant.slamSnpMask.buildFastqsFofn != "-" && P.quant.slamSnpMask.buildFastqsFofn != "None";
         bool hasBuildBam = !P.quant.slamSnpMask.buildBam.empty() && P.quant.slamSnpMask.buildBam != "-" && P.quant.slamSnpMask.buildBam != "None";
         
@@ -275,7 +337,47 @@ int main(int argInN, char *argIn[])
             exitWithError(errOut.str(), std::cerr, P.inOut->logMain, EXIT_CODE_PARAMETER, P);
         }
         
-        if (hasBuildFastqs && !hasMaskIn) {
+        if (hasVcfIn && !hasMaskIn) {
+            P.inOut->logMain << timeMonthDayTime() << " ..... loading SNP mask from VCF\n" << flush;
+            *P.inOut->logStdOut << timeMonthDayTime() << " ..... loading SNP mask from VCF\n" << flush;
+
+            SlamSnpMask maskFromVcf;
+            SlamSnpMaskVcfOptions opts;
+            opts.sample = P.quant.slamSnpMask.vcfSample;
+            opts.mode = P.quant.slamSnpMask.vcfMode;
+            opts.filter = P.quant.slamSnpMask.vcfFilter;
+            opts.bedOut = P.quant.slamSnpMask.bedOut;
+            opts.summaryOut = P.quant.slamSnpMask.summaryOut;
+            SlamSnpMaskVcfStats stats;
+            std::string err;
+            if (!maskFromVcf.loadVcf(P.quant.slamSnpMask.vcfIn, *genomeMain.genomeOut.g, opts, &stats, &err)) {
+                ostringstream errOut;
+                errOut << "EXITING because of fatal error loading VCF SNP mask: "
+                       << P.quant.slamSnpMask.vcfIn << "\n";
+                if (!err.empty()) {
+                    errOut << "Details: " << err << "\n";
+                }
+                exitWithError(errOut.str(), std::cerr, P.inOut->logMain, EXIT_CODE_PARAMETER, P);
+            }
+            P.inOut->logMain << timeMonthDayTime() << " ..... VCF mask loaded\n"
+                            << "    records: " << stats.recordsTotal << "\n"
+                            << "    filtered: " << stats.recordsFiltered << "\n"
+                            << "    sites added: " << stats.sitesAdded << "\n";
+            if (!P.quant.slamSnpMask.bedOut.empty()) {
+                P.inOut->logMain << "    BED out: " << P.quant.slamSnpMask.bedOut << "\n";
+            }
+            if (!P.quant.slamSnpMask.summaryOut.empty()) {
+                P.inOut->logMain << "    summary out: " << P.quant.slamSnpMask.summaryOut << "\n";
+            }
+
+            if (P.quant.slamSnpMask.buildOnly) {
+                P.inOut->logMain << "Exiting after mask build (--slamSnpMaskOnly)\n" << flush;
+                sysRemoveDir(P.outFileTmp);
+                exit(0);
+            }
+
+            P.quant.slam.snpBed = P.quant.slamSnpMask.bedOut;
+        } else if (hasBuildFastqs && !hasMaskIn) {
             // Build mask from FASTQs
             P.inOut->logMain << timeMonthDayTime() << " ..... starting SNP mask build pre-pass\n" << flush;
             *P.inOut->logStdOut << timeMonthDayTime() << " ..... starting SNP mask build\n" << flush;
@@ -1419,6 +1521,17 @@ int main(int argInN, char *argIn[])
         } else {
             result = run_em(mergedEC.getECTable(), state, params);
         }
+
+        if (P.quant.slam.dumpWeightsMode == 1 && transcriptomeMain->nGe > 0) {
+            vbGenePosterior.assign(transcriptomeMain->nGe, 0.0);
+            for (uint32_t tr = 0; tr < transcriptomeMain->nTr; ++tr) {
+                uint32_t gene = transcriptomeMain->trGene[tr];
+                if (gene < transcriptomeMain->nGe && tr < result.counts.size()) {
+                    vbGenePosterior[gene] += result.counts[tr];
+                }
+            }
+            vbGenePosteriorReady = true;
+        }
         
         *P.inOut->logStdOut << "Quantification converged: " << (result.converged ? "yes" : "no")
                           << ", iterations: " << result.iterations << "\n"
@@ -1557,7 +1670,24 @@ int main(int argInN, char *argIn[])
                 }
             }
             std::string wErr;
-            if (writeSlamWeights(P.quant.slam.dumpWeights, meta, buffers, P.quant.slam.dumpMaxReads, &wErr)) {
+            std::vector<double> overrideWeights;
+            const std::vector<double>* overridePtr = nullptr;
+            if (P.quant.slam.dumpWeightsMode == 1) {
+                if (!vbGenePosteriorReady) {
+                    P.inOut->logMain << "WARNING: vbGene weights requested but TranscriptVB not available; "
+                                     << "falling back to dump weights\n";
+                } else {
+                    if (!buildVbGeneWeights(buffers, vbGenePosterior, P.quant.slam.dumpMaxReads,
+                                            &overrideWeights, &wErr)) {
+                        P.inOut->logMain << "WARNING: failed to build vbGene weights: " << wErr
+                                         << "; falling back to dump weights\n";
+                    } else {
+                        overridePtr = &overrideWeights;
+                    }
+                }
+            }
+            if (writeSlamWeights(P.quant.slam.dumpWeights, meta, buffers, P.quant.slam.dumpMaxReads,
+                                 overridePtr, &wErr)) {
                 P.inOut->logMain << "SLAM weights written to: " << P.quant.slam.dumpWeights << "\n";
             } else {
                 P.inOut->logMain << "WARNING: failed to write SLAM weights: " << wErr << "\n";

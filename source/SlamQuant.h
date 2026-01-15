@@ -17,12 +17,43 @@ class Genome;
 class Transcriptome;
 class SlamCompat;
 
+struct SlamSnpMaskVcfOptions {
+    std::string sample;     // Sample name (optional; required in GT mode for multi-sample VCF)
+    std::string mode;       // "gt" (use genotype) or "any" (ignore genotype)
+    std::string filter;     // "pass" (PASS or .) or "all"
+    std::string bedOut;     // Optional BED output path
+    std::string summaryOut; // Optional summary TSV output path
+};
+
+struct SlamSnpMaskVcfStats {
+    uint64_t recordsTotal = 0;
+    uint64_t recordsFiltered = 0;
+    uint64_t recordsNoSnpAlt = 0;
+    uint64_t recordsNonSnpAlt = 0;
+    uint64_t recordsMissingGt = 0;
+    uint64_t recordsNoAltGt = 0;
+    uint64_t recordsUnknownContig = 0;
+    uint64_t sitesAdded = 0;
+    uint64_t sitesDuplicate = 0;
+};
+
 class SlamSnpMask {
 public:
     bool loadBed(const std::string& path, const Genome& genome, std::string* err);
     bool loadBedWithChrMap(const std::string& path,
                            const std::vector<std::string>& chrNames,
                            const std::vector<uint64_t>& chrStart,
+                           std::string* err);
+    bool loadVcf(const std::string& path,
+                 const Genome& genome,
+                 const SlamSnpMaskVcfOptions& opts,
+                 SlamSnpMaskVcfStats* stats,
+                 std::string* err);
+    bool loadVcfWithChrMap(const std::string& path,
+                           const std::vector<std::string>& chrNames,
+                           const std::vector<uint64_t>& chrStart,
+                           const SlamSnpMaskVcfOptions& opts,
+                           SlamSnpMaskVcfStats* stats,
                            std::string* err);
     bool contains(uint64_t pos) const { return positions_.count(pos) > 0; }
     size_t size() const { return positions_.size(); }

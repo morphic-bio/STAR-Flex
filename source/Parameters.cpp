@@ -11,6 +11,7 @@
 #include "bamRemoveDuplicates.h"
 #include "streamFuns.h"
 #include <fstream>
+#include <cctype>
 
 // Define global atomic counter for processed read groups (matches Salmon's processedReads)
 // Used for pre-burn-in gating: aux params are enabled when this count >= numPreBurninFrags (5000)
@@ -281,6 +282,10 @@ Parameters::Parameters() {//initalize parameters info
     parArray.push_back(new ParameterInfoScalar <uint32> (-1, -1, "trimCutadaptMinLength", &trimCutadaptMinLength));
     parArray.push_back(new ParameterInfoVector <string> (-1, -1, "trimCutadaptAdapter", &trimCutadaptAdapter));
     parArray.push_back(new ParameterInfoScalar <string> (-1, -1, "trimCutadaptCompat", &trimCutadaptCompat));
+    parArray.push_back(new ParameterInfoScalar <string> (-1, -1, "trimQcReport", &trimQcReport));
+    parArray.push_back(new ParameterInfoScalar <string> (-1, -1, "trimQcJson", &trimQcJson));
+    parArray.push_back(new ParameterInfoScalar <string> (-1, -1, "trimQcHtml", &trimQcHtml));
+    parArray.push_back(new ParameterInfoScalar <uint64> (-1, -1, "trimQcMaxReads", &trimQcMaxReads));
 
     //binning, anchors, windows
     parArray.push_back(new ParameterInfoScalar <uint>   (-1, -1, "winBinNbits", &winBinNbits));
@@ -430,9 +435,14 @@ Parameters::Parameters() {//initalize parameters info
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamDumpBinary", &quant.slam.dumpBinary));
     parArray.push_back(new ParameterInfoScalar <uint64_t> (-1, -1, "slamDumpMaxReads", &quant.slam.dumpMaxReads));
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamDumpWeights", &quant.slam.dumpWeights));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamDumpWeightsMode", &quant.slam.dumpWeightsModeStr));
     
     // SLAM SNP mask build parameters
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamSnpMaskIn", &quant.slamSnpMask.maskIn));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamSnpMaskVcfIn", &quant.slamSnpMask.vcfIn));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamSnpMaskVcfSample", &quant.slamSnpMask.vcfSample));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamSnpMaskVcfMode", &quant.slamSnpMask.vcfMode));
+    parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamSnpMaskVcfFilter", &quant.slamSnpMask.vcfFilter));
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamSnpMaskBuildFastqs", &quant.slamSnpMask.buildFastqsFofn));
     parArray.push_back(new ParameterInfoScalar <string>   (-1, -1, "slamSnpMaskBuildBam", &quant.slamSnpMask.buildBam));
     parArray.push_back(new ParameterInfoScalar <int>      (-1, -1, "slamSnpMaskOnly", &quant.slamSnpMask.buildOnlyInt));
@@ -1442,6 +1452,25 @@ void Parameters::inputParameters (int argInN, char* argIn[]) {//input parameters
                    << "Got: " << quant.slam.weightModeStr << "\n";
             exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
         }
+        string dumpWeightsModeLower = quant.slam.dumpWeightsModeStr;
+        if (dumpWeightsModeLower.empty() || dumpWeightsModeLower == "-") {
+            dumpWeightsModeLower = "dump";
+        }
+        for (auto& c : dumpWeightsModeLower) c = std::tolower(c);
+        if (dumpWeightsModeLower == "dump" || dumpWeightsModeLower == "default") {
+            quant.slam.dumpWeightsMode = 0;
+            quant.slam.dumpWeightsModeStr = "dump";
+        } else if (dumpWeightsModeLower == "vbgene" || dumpWeightsModeLower == "vb" ||
+                   dumpWeightsModeLower == "gene") {
+            quant.slam.dumpWeightsMode = 1;
+            quant.slam.dumpWeightsModeStr = "vbGene";
+        } else {
+            ostringstream errOut;
+            errOut << "EXITING because of FATAL PARAMETER ERROR: "
+                   << "--slamDumpWeightsMode must be dump or vbGene\n"
+                   << "Got: " << quant.slam.dumpWeightsModeStr << "\n";
+            exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
+        }
         auto trimLine = [](const std::string& input) -> std::string {
             size_t start = input.find_first_not_of(" \t\r\n");
             if (start == std::string::npos) {
@@ -1666,14 +1695,54 @@ void Parameters::inputParameters (int argInN, char* argIn[]) {//input parameters
         
         // Validate SNP mask build parameters
         bool hasMaskIn = !quant.slamSnpMask.maskIn.empty() && quant.slamSnpMask.maskIn != "-" && quant.slamSnpMask.maskIn != "None";
+        bool hasVcfIn = !quant.slamSnpMask.vcfIn.empty() && quant.slamSnpMask.vcfIn != "-" && quant.slamSnpMask.vcfIn != "None";
         bool hasBuildFastqs = !quant.slamSnpMask.buildFastqsFofn.empty() && quant.slamSnpMask.buildFastqsFofn != "-" && quant.slamSnpMask.buildFastqsFofn != "None";
         
+        if (hasMaskIn && hasVcfIn) {
+            inOut->logMain << "WARNING: --slamSnpMaskIn takes precedence over --slamSnpMaskVcfIn. "
+                           << "Will load existing mask and skip VCF load.\n";
+        }
         if (hasMaskIn && hasBuildFastqs) {
             inOut->logMain << "WARNING: --slamSnpMaskIn takes precedence over --slamSnpMaskBuildFastqs. "
                            << "Will load existing mask and skip build.\n";
         }
+        if (hasVcfIn && hasBuildFastqs) {
+            inOut->logMain << "WARNING: --slamSnpMaskVcfIn takes precedence over --slamSnpMaskBuildFastqs. "
+                           << "Will load VCF mask and skip build.\n";
+        }
+
+        if (hasVcfIn) {
+            if (quant.slamSnpMask.bedOut.empty()) {
+                ostringstream errOut;
+                errOut << "EXITING because of FATAL PARAMETER ERROR: "
+                       << "--slamSnpMaskVcfIn requires --slamSnpMaskBedOut\n";
+                exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
+            }
+            string modeLower = quant.slamSnpMask.vcfMode;
+            for (auto& c : modeLower) c = std::tolower(c);
+            quant.slamSnpMask.vcfMode = modeLower;
+            if (quant.slamSnpMask.vcfMode != "gt" && quant.slamSnpMask.vcfMode != "any") {
+                ostringstream errOut;
+                errOut << "EXITING because of FATAL PARAMETER ERROR: "
+                       << "--slamSnpMaskVcfMode must be 'gt' or 'any'\n";
+                exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
+            }
+            string filterLower = quant.slamSnpMask.vcfFilter;
+            for (auto& c : filterLower) c = std::tolower(c);
+            quant.slamSnpMask.vcfFilter = filterLower;
+            if (quant.slamSnpMask.vcfFilter != "pass" && quant.slamSnpMask.vcfFilter != "all") {
+                ostringstream errOut;
+                errOut << "EXITING because of FATAL PARAMETER ERROR: "
+                       << "--slamSnpMaskVcfFilter must be 'pass' or 'all'\n";
+                exitWithError(errOut.str(), std::cerr, inOut->logMain, EXIT_CODE_PARAMETER, *this);
+            }
+            if (quant.slamSnpMask.vcfSample == "-" || quant.slamSnpMask.vcfSample == "None" ||
+                quant.slamSnpMask.vcfSample == "none") {
+                quant.slamSnpMask.vcfSample.clear();
+            }
+        }
         
-        if (hasBuildFastqs) {
+        if (hasBuildFastqs && !hasMaskIn && !hasVcfIn) {
             if (quant.slamSnpMask.bedOut.empty()) {
                 ostringstream errOut;
                 errOut << "EXITING because of FATAL PARAMETER ERROR: "
@@ -2015,6 +2084,10 @@ void Parameters::inputParameters (int argInN, char* argIn[]) {//input parameters
             inOut->logMain << "NOTICE: --trimCutadaptCompat Cutadapt3 is enabled. Using cutadapt 3.x compatibility mode.\n";
             inOut->logMain << "         This mode reproduces Trim Galore/cutadapt 3.2 behavior for adapter matching.\n";
         }
+
+        trimQcEnabled = (!trimQcReport.empty() && trimQcReport != "-") ||
+                        (!trimQcJson.empty() && trimQcJson != "-") ||
+                        (!trimQcHtml.empty() && trimQcHtml != "-");
 
     //alignEnds
     alignEndsType.ext[0][0]=false;

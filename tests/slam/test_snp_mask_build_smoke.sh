@@ -47,6 +47,7 @@ HELP_OUTPUT=$("$STAR" --help 2>&1)
 
 echo "$HELP_OUTPUT" | grep -q "slamSnpMaskBuildFastqs" && pass "--slamSnpMaskBuildFastqs found" || fail "--slamSnpMaskBuildFastqs missing"
 echo "$HELP_OUTPUT" | grep -q "slamSnpMaskIn" && pass "--slamSnpMaskIn found" || fail "--slamSnpMaskIn missing"
+echo "$HELP_OUTPUT" | grep -q "slamSnpMaskVcfIn" && pass "--slamSnpMaskVcfIn found" || fail "--slamSnpMaskVcfIn missing"
 echo "$HELP_OUTPUT" | grep -q "slamSnpMaskOnly" && pass "--slamSnpMaskOnly found" || fail "--slamSnpMaskOnly missing"
 echo "$HELP_OUTPUT" | grep -q "slamSnpMaskPosterior" && pass "--slamSnpMaskPosterior found" || fail "--slamSnpMaskPosterior missing"
 
@@ -96,9 +97,13 @@ EOF
 echo ""
 echo "Test 4: Default parameter values"
 
-echo "$HELP_OUTPUT" | grep "slamSnpMaskMinCov" | grep -q "20" && pass "Default minCov=20" || fail "Default minCov wrong"
-echo "$HELP_OUTPUT" | grep "slamSnpMaskMinAlt" | grep -q "3" && pass "Default minAlt=3" || fail "Default minAlt wrong"
+echo "$HELP_OUTPUT" | awk '/^slamSnpMaskMinCov/{found=1} found && /Default:/{print; exit}' | grep -q "Default: 20" \
+    && pass "Default minCov=20" || fail "Default minCov wrong"
+echo "$HELP_OUTPUT" | awk '/^slamSnpMaskMinAlt/{found=1} found && /Default:/{print; exit}' | grep -q "Default: 3" \
+    && pass "Default minAlt=3" || fail "Default minAlt wrong"
 echo "$HELP_OUTPUT" | grep "slamSnpMaskPosterior" | grep -q "0.99" && pass "Default posterior=0.99" || fail "Default posterior wrong"
+echo "$HELP_OUTPUT" | grep "slamSnpMaskVcfMode" | grep -q "gt" && pass "Default vcfMode=gt" || fail "Default vcfMode wrong"
+echo "$HELP_OUTPUT" | grep "slamSnpMaskVcfFilter" | grep -q "pass" && pass "Default vcfFilter=pass" || fail "Default vcfFilter wrong"
 
 # Summary
 echo ""

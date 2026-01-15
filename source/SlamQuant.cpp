@@ -5,12 +5,15 @@
 #include "Transcriptome.h"
 #include "htslib/htslib/bgzf.h"
 #include "htslib/htslib/kstring.h"
+#include "htslib/htslib/tbx.h"
+#include "htslib/htslib/vcf.h"
 
 #include <fstream>
 #include <sstream>
 #include <unordered_map>
 #include <map>
 #include <vector>
+#include <tuple>
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -1181,6 +1184,115 @@ void SlamQuant::writeTopMismatches(const Transcriptome& tr, const std::string& r
 }
 
 namespace {
+bool isAcmgBase(char base) {
+    switch (base) {
+        case 'A':
+        case 'C':
+        case 'G':
+        case 'T':
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool isSnpAllele(const char* allele) {
+    if (allele == nullptr) {
+        return false;
+    }
+    return allele[0] != '\0' && allele[1] == '\0' && isAcmgBase(allele[0]);
+}
+
+std::string normalizeContigName(const std::string& contig,
+                                const std::unordered_map<std::string, uint32_t>& chrIndex) {
+    if (chrIndex.find(contig) != chrIndex.end()) {
+        return contig;
+    }
+    if (contig == "M" || contig == "MT") {
+        if (chrIndex.find("chrM") != chrIndex.end()) {
+            return "chrM";
+        }
+        if (chrIndex.find("MT") != chrIndex.end()) {
+            return "MT";
+        }
+    }
+    if (contig.size() > 3 && contig.rfind("chr", 0) == 0) {
+        std::string stripped = contig.substr(3);
+        if (chrIndex.find(stripped) != chrIndex.end()) {
+            return stripped;
+        }
+    } else {
+        std::string prefixed = "chr" + contig;
+        if (chrIndex.find(prefixed) != chrIndex.end()) {
+            return prefixed;
+        }
+    }
+    return "";
+}
+
+bool writeSimpleBed(const std::string& bedPath,
+                    const std::vector<std::tuple<uint32_t, uint64_t, char, std::string>>& entries,
+                    const std::vector<std::string>& chrNames,
+                    std::string* err) {
+    BGZF* bgzf = bgzf_open(bedPath.c_str(), "w");
+    if (!bgzf) {
+        if (err) {
+            *err = "Cannot open BED output file: " + bedPath;
+        }
+        return false;
+    }
+    std::string header = "#chrom\tstart\tend\tref\talt\n";
+    bgzf_write(bgzf, header.c_str(), header.size());
+    for (const auto& entry : entries) {
+        uint32_t chrIdx = std::get<0>(entry);
+        uint64_t pos0 = std::get<1>(entry);
+        char ref = std::get<2>(entry);
+        const std::string& alt = std::get<3>(entry);
+        if (chrIdx >= chrNames.size()) {
+            continue;
+        }
+        std::ostringstream oss;
+        oss << chrNames[chrIdx] << "\t"
+            << pos0 << "\t"
+            << (pos0 + 1) << "\t"
+            << ref << "\t"
+            << (alt.empty() ? "." : alt) << "\n";
+        std::string line = oss.str();
+        bgzf_write(bgzf, line.c_str(), line.size());
+    }
+    bgzf_close(bgzf);
+    int ret = tbx_index_build(bedPath.c_str(), 0, &tbx_conf_bed);
+    if (ret != 0) {
+        if (err) {
+            *err = "Failed to build tabix index for: " + bedPath;
+        }
+        return false;
+    }
+    return true;
+}
+
+bool writeVcfSummary(const std::string& summaryPath,
+                     const SlamSnpMaskVcfStats& stats,
+                     std::string* err) {
+    std::ofstream out(summaryPath.c_str());
+    if (!out.good()) {
+        if (err) {
+            *err = "Cannot open summary output file: " + summaryPath;
+        }
+        return false;
+    }
+    out << "metric\tvalue\n";
+    out << "records_total\t" << stats.recordsTotal << "\n";
+    out << "records_filtered\t" << stats.recordsFiltered << "\n";
+    out << "records_no_snp_alt\t" << stats.recordsNoSnpAlt << "\n";
+    out << "records_non_snp_alt\t" << stats.recordsNonSnpAlt << "\n";
+    out << "records_missing_gt\t" << stats.recordsMissingGt << "\n";
+    out << "records_no_alt_gt\t" << stats.recordsNoAltGt << "\n";
+    out << "records_unknown_contig\t" << stats.recordsUnknownContig << "\n";
+    out << "sites_added\t" << stats.sitesAdded << "\n";
+    out << "sites_duplicate\t" << stats.sitesDuplicate << "\n";
+    return true;
+}
 template <typename T>
 bool loadBedInternal(const std::string& path,
                      const std::vector<std::string>& chrNames,
@@ -1262,6 +1374,238 @@ bool SlamSnpMask::loadBedWithChrMap(const std::string& path,
                                     const std::vector<uint64_t>& chrStart,
                                     std::string* err) {
     return loadBedInternal(path, chrNames, chrStart, positions_, err);
+}
+
+bool SlamSnpMask::loadVcf(const std::string& path,
+                          const Genome& genome,
+                          const SlamSnpMaskVcfOptions& opts,
+                          SlamSnpMaskVcfStats* stats,
+                          std::string* err) {
+    std::vector<uint64_t> chrStart64(genome.chrStart.begin(), genome.chrStart.end());
+    return loadVcfWithChrMap(path, genome.chrName, chrStart64, opts, stats, err);
+}
+
+bool SlamSnpMask::loadVcfWithChrMap(const std::string& path,
+                                    const std::vector<std::string>& chrNames,
+                                    const std::vector<uint64_t>& chrStart,
+                                    const SlamSnpMaskVcfOptions& opts,
+                                    SlamSnpMaskVcfStats* stats,
+                                    std::string* err) {
+    if (stats) {
+        *stats = SlamSnpMaskVcfStats();
+    }
+    std::unordered_map<std::string, uint32_t> chrIndex;
+    chrIndex.reserve(chrNames.size());
+    for (uint32_t i = 0; i < chrNames.size(); ++i) {
+        chrIndex[chrNames[i]] = i;
+    }
+
+    htsFile* fp = hts_open(path.c_str(), "r");
+    if (!fp) {
+        if (err) {
+            *err = "Failed to open VCF: " + path;
+        }
+        return false;
+    }
+    bcf_hdr_t* hdr = bcf_hdr_read(fp);
+    if (!hdr) {
+        if (err) {
+            *err = "Failed to read VCF header: " + path;
+        }
+        hts_close(fp);
+        return false;
+    }
+
+    int nsamples = bcf_hdr_nsamples(hdr);
+    int sampleIndex = 0;
+    if (opts.mode == "gt") {
+        if (!opts.sample.empty()) {
+            sampleIndex = bcf_hdr_id2int(hdr, BCF_DT_SAMPLE, opts.sample.c_str());
+            if (sampleIndex < 0) {
+                if (err) {
+                    *err = "Sample not found in VCF header: " + opts.sample;
+                }
+                bcf_hdr_destroy(hdr);
+                hts_close(fp);
+                return false;
+            }
+        } else {
+            if (nsamples == 1) {
+                sampleIndex = 0;
+            } else {
+                if (err) {
+                    *err = "VCF has multiple samples; specify --slamSnpMaskVcfSample";
+                }
+                bcf_hdr_destroy(hdr);
+                hts_close(fp);
+                return false;
+            }
+        }
+    }
+
+    bcf1_t* rec = bcf_init();
+    int* gt = nullptr;
+    int ngt = 0;
+    std::vector<std::tuple<uint32_t, uint64_t, char, std::string>> bedEntries;
+
+    while (bcf_read(fp, hdr, rec) == 0) {
+        bcf_unpack(rec, BCF_UN_STR | BCF_UN_FLT);
+        if (stats) {
+            stats->recordsTotal++;
+        }
+        if (opts.filter == "pass") {
+            bool pass = (rec->d.n_flt == 0) || (bcf_has_filter(hdr, rec, const_cast<char*>("PASS")) > 0);
+            if (!pass) {
+                if (stats) {
+                    stats->recordsFiltered++;
+                }
+                continue;
+            }
+        }
+
+        if (rec->n_allele <= 1) {
+            if (stats) {
+                stats->recordsNoSnpAlt++;
+            }
+            continue;
+        }
+
+        const char* ref = rec->d.allele[0];
+        if (!isSnpAllele(ref)) {
+            if (stats) {
+                stats->recordsNonSnpAlt++;
+            }
+            continue;
+        }
+
+        std::vector<int> snpAltIdx;
+        std::vector<std::string> snpAltList;
+        for (int a = 1; a < rec->n_allele; ++a) {
+            const char* alt = rec->d.allele[a];
+            if (isSnpAllele(alt) && alt[0] != ref[0]) {
+                snpAltIdx.push_back(a);
+                snpAltList.emplace_back(alt);
+            }
+        }
+        if (snpAltIdx.empty()) {
+            if (stats) {
+                stats->recordsNonSnpAlt++;
+            }
+            continue;
+        }
+
+        if (opts.mode == "gt") {
+            if (nsamples <= 0) {
+                if (stats) {
+                    stats->recordsMissingGt++;
+                }
+                continue;
+            }
+            int ngt_ret = bcf_get_genotypes(hdr, rec, &gt, &ngt);
+            if (ngt_ret <= 0) {
+                if (stats) {
+                    stats->recordsMissingGt++;
+                }
+                continue;
+            }
+            int ploidy = ngt_ret / nsamples;
+            const int* sampleGt = gt + sampleIndex * ploidy;
+            bool missing = false;
+            bool hasAlt = false;
+            bool hasSnpAlt = false;
+            for (int i = 0; i < ploidy; ++i) {
+                if (sampleGt[i] == bcf_gt_missing) {
+                    missing = true;
+                    continue;
+                }
+                int allele = bcf_gt_allele(sampleGt[i]);
+                if (allele > 0) {
+                    hasAlt = true;
+                    if (std::find(snpAltIdx.begin(), snpAltIdx.end(), allele) != snpAltIdx.end()) {
+                        hasSnpAlt = true;
+                    }
+                }
+            }
+            if (missing) {
+                if (stats) {
+                    stats->recordsMissingGt++;
+                }
+                continue;
+            }
+            if (!hasAlt || !hasSnpAlt) {
+                if (stats) {
+                    stats->recordsNoAltGt++;
+                }
+                continue;
+            }
+        }
+
+        const char* contig = bcf_hdr_id2name(hdr, rec->rid);
+        std::string normContig = normalizeContigName(contig ? contig : "", chrIndex);
+        if (normContig.empty()) {
+            if (stats) {
+                stats->recordsUnknownContig++;
+            }
+            continue;
+        }
+        uint32_t chrIdx = chrIndex[normContig];
+        if (chrIdx >= chrStart.size()) {
+            if (stats) {
+                stats->recordsUnknownContig++;
+            }
+            continue;
+        }
+        if (rec->pos < 0) {
+            continue;
+        }
+        uint64_t pos0 = static_cast<uint64_t>(rec->pos);
+        uint64_t gpos = chrStart[chrIdx] + pos0;
+        auto inserted = positions_.insert(gpos);
+        if (!inserted.second) {
+            if (stats) {
+                stats->sitesDuplicate++;
+            }
+            continue;
+        }
+        if (stats) {
+            stats->sitesAdded++;
+        }
+        std::string altJoined;
+        for (size_t i = 0; i < snpAltList.size(); ++i) {
+            if (i > 0) {
+                altJoined += ",";
+            }
+            altJoined += snpAltList[i];
+        }
+        bedEntries.emplace_back(chrIdx, pos0, ref[0], altJoined);
+    }
+
+    if (gt) {
+        free(gt);
+    }
+    bcf_destroy(rec);
+    bcf_hdr_destroy(hdr);
+    hts_close(fp);
+
+    if (!opts.bedOut.empty()) {
+        std::sort(bedEntries.begin(), bedEntries.end(),
+                  [](const std::tuple<uint32_t, uint64_t, char, std::string>& a,
+                     const std::tuple<uint32_t, uint64_t, char, std::string>& b) {
+                      if (std::get<0>(a) != std::get<0>(b)) {
+                          return std::get<0>(a) < std::get<0>(b);
+                      }
+                      return std::get<1>(a) < std::get<1>(b);
+                  });
+        if (!writeSimpleBed(opts.bedOut, bedEntries, chrNames, err)) {
+            return false;
+        }
+    }
+    if (!opts.summaryOut.empty() && stats) {
+        if (!writeVcfSummary(opts.summaryOut, *stats, err)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 // Read buffer methods for auto-trim replay

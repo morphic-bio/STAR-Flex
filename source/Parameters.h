@@ -105,6 +105,13 @@ class Parameters {
         vector <string> trimCutadaptAdapter;
         string trimCutadaptCompat;  // Compatibility mode: "-"/"Off" (default) or "Cutadapt3"
 
+        // trim QC output (FastQC-like)
+        string trimQcReport;
+        string trimQcJson;
+        string trimQcHtml;
+        uint64 trimQcMaxReads = 0;
+        bool trimQcEnabled = false;
+
         //align parameters
         uint alignSJoverhangMin,alignSJDBoverhangMin,alignSplicedMateMapLmin; //min SJ donor/acceptor length
         double alignSplicedMateMapLminOverLmate;
@@ -454,11 +461,17 @@ class Parameters {
                 string dumpBinary;                       // --slamDumpBinary (path to dump)
                 uint64_t dumpMaxReads = 1000000;         // --slamDumpMaxReads (max reads to dump)
                 string dumpWeights;                      // --slamDumpWeights (path to weight sidecar)
+                string dumpWeightsModeStr = "dump";      // --slamDumpWeightsMode (dump|vbGene)
+                uint8_t dumpWeightsMode = 0;             // 0=dump, 1=vbGene
             } slam;
 
             struct {
-                // Mask source flags (precedence: maskIn > buildFastqs)
+                // Mask source flags (precedence: maskIn > vcfIn > buildFastqs)
                 string maskIn;                // --slamSnpMaskIn (existing mask, highest priority)
+                string vcfIn;                 // --slamSnpMaskVcfIn (VCF/gVCF SNP mask input)
+                string vcfSample;             // --slamSnpMaskVcfSample (sample name for GT mode)
+                string vcfMode = "gt";        // --slamSnpMaskVcfMode (gt|any)
+                string vcfFilter = "pass";    // --slamSnpMaskVcfFilter (pass|all)
                 string buildFastqsFofn;      // --slamSnpMaskBuildFastqs (FOFN for pre-pass)
                 string buildBam;              // --slamSnpMaskBuildBam (BAM for pre-pass, alternative to FASTQ)
                 int buildOnlyInt = 0;         // --slamSnpMaskOnly (int for parsing)
