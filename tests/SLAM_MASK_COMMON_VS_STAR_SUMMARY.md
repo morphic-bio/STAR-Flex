@@ -69,6 +69,23 @@ for the intersection of STAR and GEDI genes, using readcount thresholds.
 common mask, supporting the hypothesis that **mask differences mostly shift
 absolute 0h levels** but **do not materially affect 6h–0h deltas**.
 
+### VB-Weighted Requant Note (Dump Cap)
+When using `slam_requant`, the STAR dump is **capped by default** at
+`--slamDumpMaxReads 1000000`. This can **artificially depress** both
+NTR parity and delta correlations versus GEDI because GEDI processes the
+full BAM while `slam_requant` sees a subsample.
+
+Observed with dump cap (1M):
+- Delta Pearson (>=20): **~0.81**
+- Delta Pearson (>=100): **~0.89**
+
+Control check using **full STAR outputs** (no dump cap) on the same run:
+- Delta Pearson (>=20): **0.939079**
+- Delta Pearson (>=100): **0.957033**
+
+**Action**: For parity runs, set `--dump-max` high enough to cover all reads
+(or skip `slam_requant` and compare GEDI against STAR full outputs).
+
 ### Notes
 - GEDI `.tsv.gz` outputs used for comparison **do not include Conversions/Coverage**,
   so the correlation summary here focuses on NTR (MAP).
